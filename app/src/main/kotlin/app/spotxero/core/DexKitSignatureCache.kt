@@ -117,4 +117,27 @@ object DexKitSignatureCache {
                 .let { file.writeText(it.toString()) }
         }
     }
+
+    fun loadFromFile(appInfo: android.content.pm.ApplicationInfo, versionCode: Long): Map<String, String>? {
+        cachedSignatures?.takeIf { it.versionCode == versionCode }?.let { return it.values }
+
+        val cacheFile = cacheFileFor(appInfo)
+        val loaded = loadFromDisk(cacheFile, versionCode)
+        if (loaded != null) {
+            cachedSignatures = CachedSignatures(versionCode, loaded)
+        }
+        return loaded
+    }
+
+    fun saveToFile(appInfo: android.content.pm.ApplicationInfo, versionCode: Long, signatures: Map<String, String>) {
+        val values = signatures.toMap()
+        cachedSignatures = CachedSignatures(versionCode, values)
+        saveToDisk(cacheFileFor(appInfo), versionCode, values)
+    }
+
+    private fun cacheFileFor(appInfo: android.content.pm.ApplicationInfo): File {
+        val cacheDir = File(appInfo.dataDir, "spotxero_cache").apply { mkdirs() }
+        return File(cacheDir, CACHE_FILE_NAME)
+    }
 }
+

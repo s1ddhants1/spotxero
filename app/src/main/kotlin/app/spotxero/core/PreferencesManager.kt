@@ -27,6 +27,11 @@ object PreferencesManager {
     var isPremiumEnabled: Boolean = true
     var isCleanSharingEnabled: Boolean = true
     var isSpotifyAmoledEnabled: Boolean = false
+    var isHidePremiumTabEnabled: Boolean = false
+    var isBlockAdsEnabled: Boolean = true
+    var isHideBrandAdsEnabled: Boolean = true
+    var isHidePlayerAdsEnabled: Boolean = true
+    var isHidePodcastsEnabled: Boolean = false
 
     var onPreferenceChangedListener: (() -> Unit)? = null
 
@@ -161,6 +166,16 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_CLEAN_SHARING] = isCleanSharingEnabled
         isSpotifyAmoledEnabled = prefs.getBoolean(PrefKeys.KEY_SPOTIFY_AMOLED, false)
         inMemoryBooleans[PrefKeys.KEY_SPOTIFY_AMOLED] = isSpotifyAmoledEnabled
+        isHidePremiumTabEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PREMIUM_TAB, false)
+        inMemoryBooleans[PrefKeys.KEY_HIDE_PREMIUM_TAB] = isHidePremiumTabEnabled
+        isBlockAdsEnabled = prefs.getBoolean(PrefKeys.KEY_BLOCK_ADS, true)
+        inMemoryBooleans[PrefKeys.KEY_BLOCK_ADS] = isBlockAdsEnabled
+        isHideBrandAdsEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_BRAND_ADS, true)
+        inMemoryBooleans[PrefKeys.KEY_HIDE_BRAND_ADS] = isHideBrandAdsEnabled
+        isHidePlayerAdsEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PLAYER_ADS, true)
+        inMemoryBooleans[PrefKeys.KEY_HIDE_PLAYER_ADS] = isHidePlayerAdsEnabled
+        isHidePodcastsEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PODCASTS, false)
+        inMemoryBooleans[PrefKeys.KEY_HIDE_PODCASTS] = isHidePodcastsEnabled
         isLauncherIconHidden = prefs.getBoolean(KEY_HIDE_LAUNCHER_ICON, false)
         inMemoryBooleans[KEY_HIDE_LAUNCHER_ICON] = isLauncherIconHidden
     }
@@ -236,6 +251,11 @@ object PreferencesManager {
             PrefKeys.KEY_ENABLE_PREMIUM -> isPremiumEnabled = value
             PrefKeys.KEY_CLEAN_SHARING -> isCleanSharingEnabled = value
             PrefKeys.KEY_SPOTIFY_AMOLED -> isSpotifyAmoledEnabled = value
+            PrefKeys.KEY_HIDE_PREMIUM_TAB -> isHidePremiumTabEnabled = value
+            PrefKeys.KEY_BLOCK_ADS -> isBlockAdsEnabled = value
+            PrefKeys.KEY_HIDE_BRAND_ADS -> isHideBrandAdsEnabled = value
+            PrefKeys.KEY_HIDE_PLAYER_ADS -> isHidePlayerAdsEnabled = value
+            PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = value
             KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = value
             KEY_APP_AMOLED_THEME -> isAppAmoledEnabled = value
             KEY_HIDE_LAUNCHER_ICON -> isLauncherIconHidden = value
@@ -252,6 +272,11 @@ object PreferencesManager {
                         PrefKeys.KEY_ENABLE_PREMIUM -> isPremiumEnabled = v
                         PrefKeys.KEY_CLEAN_SHARING -> isCleanSharingEnabled = v
                         PrefKeys.KEY_SPOTIFY_AMOLED -> isSpotifyAmoledEnabled = v
+                        PrefKeys.KEY_HIDE_PREMIUM_TAB -> isHidePremiumTabEnabled = v
+                        PrefKeys.KEY_BLOCK_ADS -> isBlockAdsEnabled = v
+                        PrefKeys.KEY_HIDE_BRAND_ADS -> isHideBrandAdsEnabled = v
+                        PrefKeys.KEY_HIDE_PLAYER_ADS -> isHidePlayerAdsEnabled = v
+                        PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = v
                         KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = v
                         KEY_APP_AMOLED_THEME -> isAppAmoledEnabled = v
                         KEY_HIDE_LAUNCHER_ICON -> isLauncherIconHidden = v

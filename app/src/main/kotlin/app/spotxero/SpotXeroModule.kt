@@ -2,6 +2,7 @@ package app.spotxero
 
 import android.content.SharedPreferences
 import android.util.Log
+import app.spotxero.core.HookRegistry
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
 import app.spotxero.utils.core.CommonUtils
@@ -39,6 +40,16 @@ class SpotXeroModule : XposedModule() {
             remotePrefs.registerOnSharedPreferenceChangeListener(forceStopListener)
         }.onFailure {
             log(Log.ERROR, TAG, "Failed initializing remote preferences: ${it.message}", it)
+        }
+
+        runCatching {
+            HookRegistry.resolveAndInstall(
+                module = this,
+                appInfo = param.applicationInfo,
+                classLoader = param.classLoader
+            )
+        }.onFailure {
+            log(Log.ERROR, TAG, "Failed installing hooks: ${it.message}", it)
         }
     }
 }

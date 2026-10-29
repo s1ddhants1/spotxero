@@ -43,6 +43,11 @@ fun HomeDashboard(
     onTogglePremium: (Boolean) -> Unit,
     onCleanSharingToggle: (Boolean) -> Unit,
     onSpotifyAmoledToggle: (Boolean) -> Unit,
+    onBlockAdsToggle: (Boolean) -> Unit = {},
+    onHidePremiumTabToggle: (Boolean) -> Unit = {},
+    onHideBrandAdsToggle: (Boolean) -> Unit = {},
+    onHidePlayerAdsToggle: (Boolean) -> Unit = {},
+    onHidePodcastsToggle: (Boolean) -> Unit = {},
     onRequestScope: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -71,11 +76,51 @@ fun HomeDashboard(
         }
 
         FeatureModuleCard(
+            icon = AppIcons.CheckCircle,
+            title = stringResource(R.string.feature_block_ads_title),
+            checked = uiState.isBlockAdsEnabled,
+            enabled = true,
+            onCheckedChange = onBlockAdsToggle
+        )
+
+        FeatureModuleCard(
             icon = AppIcons.Share,
             title = stringResource(R.string.feature_clean_sharing_title),
             checked = uiState.isCleanSharingEnabled,
             enabled = true,
             onCheckedChange = onCleanSharingToggle
+        )
+
+        FeatureModuleCard(
+            icon = AppIcons.VisibilityOff,
+            title = stringResource(R.string.feature_hide_premium_tab_title),
+            checked = uiState.isHidePremiumTabEnabled,
+            enabled = true,
+            onCheckedChange = onHidePremiumTabToggle
+        )
+
+        FeatureModuleCard(
+            icon = AppIcons.VisibilityOff,
+            title = stringResource(R.string.feature_hide_brand_ads_title),
+            checked = uiState.isHideBrandAdsEnabled,
+            enabled = true,
+            onCheckedChange = onHideBrandAdsToggle
+        )
+
+        FeatureModuleCard(
+            icon = AppIcons.VisibilityOff,
+            title = stringResource(R.string.feature_hide_player_ads_title),
+            checked = uiState.isHidePlayerAdsEnabled,
+            enabled = true,
+            onCheckedChange = onHidePlayerAdsToggle
+        )
+
+        FeatureModuleCard(
+            icon = AppIcons.VisibilityOff,
+            title = stringResource(R.string.feature_hide_podcasts_title),
+            checked = uiState.isHidePodcastsEnabled,
+            enabled = true,
+            onCheckedChange = onHidePodcastsToggle
         )
 
         FeatureModuleCard(
