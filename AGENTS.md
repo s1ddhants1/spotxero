@@ -39,3 +39,10 @@ When refactoring or superseding existing logic, cover all bases and completely e
 - **Clean resolver signatures and cache**: Remove unused signature keys (`KEY_*`) and search routines from `DexKitResolver`. Ensure no obsolete cache entries or invalid fallback signatures linger.
 - **Prune UI, prefs, and registrations**: If a toggle or feature is retired, remove its entry from `HookRegistry`, `PrefKeys`, settings screens, and `strings.xml`.
 - **Audit all reference sites**: Grep for all usages of touched classes, methods, and constants before completing the task to ensure no orphaned references or dead imports remain.
+
+## 5. Standard Spotify Behavior and Runtime Verification
+
+- **Preserve normal Spotify behavior**: All pages and screens must load and respond correctly; navigation, search, library, queue, playback controls, and track changes must behave normally. Content failing to load or populate, "Something went wrong" errors, and unexpectedly empty playlists or screens are unacceptable and must be treated as highest-priority regressions.
+- **Protect playback quality**: Tracks must start and continue playing without stalls, unintended skips, or stutter introduced by SpotXero hooks.
+- **Verify on a real runtime**: For hook or playback-related changes, exercise the affected flows on an ADB-connected device with SpotXero active. Check representative screens and sustained playback, and inspect runtime logs for crashes, hook failures, or repeated errors.
+- **Be evidence-based**: Do not claim full compatibility or successful playback verification unless those behaviors were actually exercised. State device, app version, tested flows, and any coverage limitations; report failures rather than weakening checks or hiding them.

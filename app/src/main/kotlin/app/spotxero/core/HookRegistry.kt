@@ -46,6 +46,7 @@ object HookRegistry {
 
         val startTime = System.currentTimeMillis()
 
+        System.loadLibrary("dexkit")
         DexKitBridge.create(apkPath).use { dexKit ->
             module.log(Log.INFO, TAG, "DexKit bridge created in ${System.currentTimeMillis() - startTime}ms")
 

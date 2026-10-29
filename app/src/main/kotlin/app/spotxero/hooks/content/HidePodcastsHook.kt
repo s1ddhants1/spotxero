@@ -44,7 +44,7 @@ object HidePodcastsHook {
                     return@intercept result
                 }
                 val list = result as? List<*> ?: return@intercept result
-                list.filter { section -> !PodcastDetector.isPodcastSection(section) }
+                PodcastDetector.filterPodcastSections(list)
             }
         module.log(Log.INFO, TAG, "Hooked home sections for podcasts: ${method.declaringClass.name}#${method.name}")
     }

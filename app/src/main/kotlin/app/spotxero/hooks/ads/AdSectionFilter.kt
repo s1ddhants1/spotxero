@@ -1,5 +1,6 @@
 package app.spotxero.hooks.ads
 
+import app.spotxero.core.ProtoLists
 import java.lang.reflect.Field
 import java.util.concurrent.ConcurrentHashMap
 
@@ -17,7 +18,8 @@ object AdSectionFilter {
         return filter(sections, "com.spotify.browsita.v1.resolved.Section", "sectionTypeCase_", setOf(6))
     }
 
-    private fun filter(sections: List<*>, expectedClassName: String, fieldName: String, adKinds: Set<Int>): List<*> {
+    private fun filter(sections: List<*>?, expectedClassName: String, fieldName: String, adKinds: Set<Int>): List<*>? {
+        if (sections.isNullOrEmpty()) return sections
         val first = sections.firstOrNull() ?: return sections
         if (first.javaClass.name != expectedClassName) return sections
 
@@ -25,13 +27,8 @@ object AdSectionFilter {
             clazz.getDeclaredField(fieldName).apply { isAccessible = true }
         }
 
-        val hasAds = sections.any { item ->
-            item != null && runCatching { field.getInt(item) in adKinds }.getOrDefault(false)
-        }
-        if (!hasAds) return sections
-
-        return sections.filter { item ->
-            item != null && runCatching { field.getInt(item) !in adKinds }.getOrDefault(true)
+        return ProtoLists.filter(sections) { item ->
+            runCatching { field.getInt(item) }.getOrDefault(-1) !in adKinds
         }
     }
 }
