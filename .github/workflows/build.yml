@@ -1,0 +1,223 @@
+name: Build APKs
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["master"]
+    paths-ignore:
+      - "README.md"
+      - "art/**"
+      - ".github/**/*.md"
+      - ".github/FUNDING.yml"
+      - ".github/ISSUE_TEMPLATE/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_release:
+    name: Build Release APK
+    if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          java-version: "25"
+          distribution: "temurin"
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_CACHE_KEY }}
+          cache-cleanup: on-success
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Setup Release Keystore
+        id: setup_keystore
+        run: |
+          if [ -n "${{ secrets.KEYSTORE }}" ]; then
+            echo "Configuring release keystore from secrets"
+            echo "${{ secrets.KEYSTORE }}" | base64 -d > spotxero.keystore
+            cat <<EOF > keystore.properties
+KEYSTORE_FILE=spotxero.keystore
+KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
+KEY_ALIAS=${{ secrets.KEY_ALIAS }}
+KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+EOF
+          else
+            echo "Custom keystore not provided; fallback will be used"
+          fi
+
+      - name: Restore Nightly Fallback Keystore
+        if: secrets.KEYSTORE == ''
+        id: fallback_keystore_cache
+        uses: actions/cache/restore@v6
+        with:
+          path: app/build/keystore/nightly-fallback.keystore
+          key: spotxero-nightly-fallback-keystore
+
+      - name: Generate Fallback Keystore if not cached
+        if: secrets.KEYSTORE == '' && steps.fallback_keystore_cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p app/build/keystore
+          keytool -genkeypair -v \
+            -keystore app/build/keystore/nightly-fallback.keystore \
+            -storepass android \
+            -alias spotxeronightly \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=SpotXero Nightly,O=SpotXero,C=US"
+
+      - name: Save Fallback Keystore to cache
+        if: secrets.KEYSTORE == '' && steps.fallback_keystore_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: app/build/keystore/nightly-fallback.keystore
+          key: spotxero-nightly-fallback-keystore
+
+      - name: Configure Fallback Keystore Properties
+        if: secrets.KEYSTORE == ''
+        run: |
+          cat <<EOF > keystore.properties
+KEYSTORE_FILE=app/build/keystore/nightly-fallback.keystore
+KEYSTORE_PASSWORD=android
+KEY_ALIAS=spotxeronightly
+KEY_PASSWORD=android
+EOF
+
+      - name: Build Release APK
+        run: ./gradlew --console=plain assembleRelease --warning-mode summary
+        env:
+          BUILD_COMMIT: ${{ github.sha }}
+          PULL_REQUEST: "false"
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+
+      - name: Move and prepare Release APK
+        run: |
+          OUTPUT_DIR="app/build/outputs/apk/release"
+          mkdir -p "$OUTPUT_DIR/out"
+          if [ -f "$OUTPUT_DIR/app-release.apk" ]; then
+            cp "$OUTPUT_DIR/app-release.apk" "$OUTPUT_DIR/out/spotxero-release.apk"
+            if [ -f "$OUTPUT_DIR/app-release.apk.idsig" ]; then
+              cp "$OUTPUT_DIR/app-release.apk.idsig" "$OUTPUT_DIR/out/spotxero-release.apk.idsig"
+            fi
+          else
+            echo "::error::Release APK not found in $OUTPUT_DIR!"
+            exit 1
+          fi
+
+      - name: Verify APK Signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
+          echo "Verifying APK signature using $APKSIGNER"
+          "$APKSIGNER" verify --verbose app/build/outputs/apk/release/out/spotxero-release.apk
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: spotxero-release
+          path: app/build/outputs/apk/release/out/*
+
+  build_debug:
+    name: Build Debug APK
+    if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          java-version: "25"
+          distribution: "temurin"
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_CACHE_KEY }}
+          cache-cleanup: on-success
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Restore Persistent Keystore
+        env:
+          DEBUG_KEYSTORE: ${{ secrets.DEBUG_KEYSTORE }}
+        if: env.DEBUG_KEYSTORE != ''
+        run: |
+          echo "$DEBUG_KEYSTORE" | base64 -d > ./app/persistent-debug.keystore
+
+      - name: Build Debug APK
+        run: ./gradlew --console=plain assembleDebug --warning-mode summary
+        env:
+          BUILD_COMMIT: ${{ github.sha }}
+          PULL_REQUEST: "false"
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: spotxero-debug
+          path: app/build/outputs/apk/debug/*.apk
+
+  publish_nightly:
+    name: Publish Nightly Release
+    if: github.event_name == 'push'
+    needs: [build_release, build_debug]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Download Release APK
+        uses: actions/download-artifact@v8
+        with:
+          name: spotxero-release
+          path: nightly
+
+      - name: Publish Nightly Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mv nightly/spotxero-release.apk nightly/SpotXero-Nightly.apk
+
+          PREVIOUS_NIGHTLY_SHA=$(gh release view nightly --json targetCommitish --jq .targetCommitish 2>/dev/null || true)
+          {
+            echo "Automated prerelease built from master at commit $GITHUB_SHA. It may be unstable."
+            if [ -n "$PREVIOUS_NIGHTLY_SHA" ] && [ "$PREVIOUS_NIGHTLY_SHA" != "$GITHUB_SHA" ]; then
+              echo
+              echo "## Changes since previous nightly"
+              gh api "repos/$GITHUB_REPOSITORY/compare/$PREVIOUS_NIGHTLY_SHA...$GITHUB_SHA" \
+                --jq '.commits[] | "* \(.commit.message | split("\n")[0]) (\(.sha[0:7]))"' || true
+            fi
+          } > nightly-notes.md
+
+          if gh release view nightly > /dev/null 2>&1; then
+            gh release delete nightly --yes --cleanup-tag
+          elif gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/nightly" > /dev/null 2>&1; then
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/nightly" > /dev/null 2>&1 || true
+          fi
+
+          gh release create nightly \
+            nightly/SpotXero-Nightly.apk \
+            --target "$GITHUB_SHA" \
+            --title "SpotXero Nightly" \
+            --notes-file nightly-notes.md \
+            --generate-notes \
+            --prerelease \
+            --latest=false
