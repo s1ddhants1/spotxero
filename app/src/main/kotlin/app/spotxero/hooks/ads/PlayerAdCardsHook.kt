@@ -11,14 +11,21 @@ import java.lang.reflect.Method
 object PlayerAdCardsHook {
 
     private const val TAG = "SpotXero.PlayerAdCards"
+    private const val PLAYER_SECTION = "com.spotify.scrollsita.v1.Section"
 
     fun install(module: XposedModule) {
-        hookImageAdFlag(module)
-        hookEmbeddedAdPredicate(module)
-    }
+        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_IMAGE_AD_PREDICATE)
+        if (method == null ||
+            method.declaringClass.name != PLAYER_SECTION ||
+            method.parameterCount != 0 ||
+            method.returnType != Boolean::class.javaPrimitiveType
+        ) {
+            module.log(Log.WARN, TAG, "Image brand ad predicate not resolved, skipping")
+            return
+        }
 
-    private fun hookImageAdFlag(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_IMAGE_AD_FLAG) ?: return
+        module.deoptimize(method)
+
         module.hook(method)
             .setId("hide_player_image_ad")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
@@ -29,21 +36,7 @@ object PlayerAdCardsHook {
                     chain.proceed()
                 }
             }
-        module.log(Log.INFO, TAG, "Hooked player image ad flag: ${method.declaringClass.name}#${method.name}")
-    }
 
-    private fun hookEmbeddedAdPredicate(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_EMBEDDED_AD_PREDICATE) ?: return
-        module.hook(method)
-            .setId("hide_player_embedded_ad")
-            .setExceptionMode(ExceptionMode.PROTECTIVE)
-            .intercept { chain ->
-                if (PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_PLAYER_ADS, true)) {
-                    false
-                } else {
-                    chain.proceed()
-                }
-            }
-        module.log(Log.INFO, TAG, "Hooked embedded ad predicate: ${method.declaringClass.name}#${method.name}")
+        module.log(Log.INFO, TAG, "Hooked player image ad predicate: ${method.declaringClass.name}#${method.name}")
     }
 }

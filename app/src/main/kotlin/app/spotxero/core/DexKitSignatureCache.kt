@@ -8,7 +8,7 @@ import java.io.File
 object DexKitSignatureCache {
     private const val CACHE_FILE_NAME = "spotify_dexkit_cache.json"
     private const val PREFS_NAME = "spotxero_dexkit_cache"
-    private const val CACHE_VERSION = 22
+    private const val CACHE_VERSION = 23
 
     private data class CachedSignatures(
         val versionCode: Long,

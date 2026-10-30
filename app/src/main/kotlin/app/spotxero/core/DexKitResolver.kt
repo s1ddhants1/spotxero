@@ -2,7 +2,7 @@ package app.spotxero.core
 
 import android.util.Log
 import org.luckypray.dexkit.DexKitBridge
-import java.lang.reflect.Constructor
+import org.luckypray.dexkit.query.enums.StringMatchType
 import java.lang.reflect.Method
 
 object DexKitResolver {
@@ -10,16 +10,33 @@ object DexKitResolver {
     private const val TAG = "SpotXero.Resolver"
 
     const val KEY_SHARE_URL_BUILDER = "share_url_builder"
-    const val KEY_SHARE_RESULT_CTOR = "share_result_ctor"
+    const val KEY_SHARE_RESPONSE_URLS = "share_response_urls"
+    const val KEY_GET_ADS_WRAPPER = "get_ads_wrapper"
+    const val KEY_EMPTY_ADS_RESPONSE = "empty_ads_response"
     const val KEY_PREMIUM_TAB_FLAG = "premium_tab_flag"
-    const val KEY_PRODUCT_STATE_GET = "product_state_get_value"
-    const val KEY_AD_MANAGER_IS_ENABLED = "ad_manager_is_enabled"
     const val KEY_IS_ADVERTISEMENT_CHECK = "is_advertisement_check"
     const val KEY_HOME_SECTION_LIST = "home_section_list_getter"
     const val KEY_BROWSE_SECTION_LIST = "browse_section_list_getter"
-    const val KEY_IMAGE_AD_FLAG = "scrollsita_section_is_ad"
-    const val KEY_EMBEDDED_AD_PREDICATE = "embedded_ad_predicate"
+    const val KEY_IMAGE_AD_PREDICATE = "scrollsita_image_ad_predicate"
     const val KEY_PROVIDED_ITEMS_LIST = "provided_items_list_getter"
+
+    private const val GENERATE_URL_RESPONSE = "com.spotify.share.linkgeneration.api.proto.GenerateUrlResponse"
+    private const val GET_ADS_REQUEST = "com.spotify.ads.esperanto.proto.GetAdsRequest"
+    private const val GET_ADS_RESPONSE = "com.spotify.ads.esperanto.proto.GetAdsResponse"
+    private val GET_ADS_CALL = listOf("spotify.ads.esperanto.proto.Ads", "GetAds")
+    private const val HOME_STRUCTURE = "com.spotify.casita.v1.resolved.HomeStructure"
+    private const val BROWSE_STRUCTURE = "com.spotify.browsita.v1.resolved.BrowseStructure"
+    private const val PROVIDED = "com.spotify.casita.v1.resolved.Provided"
+    private const val PLAYER_SECTION = "com.spotify.scrollsita.v1.Section"
+    private const val CONTEXT_TRACK = "com.spotify.player.model.ContextTrack"
+
+    private const val IMAGE_BRAND_AD_FIELD = "IMAGE_BRAND_AD_FIELD_NUMBER"
+    private const val SHARE_RESPONSE_URL_COUNT = 4
+    private val PREMIUM_KEYS = listOf(
+        "premium_tab_enabled",
+        "premium_tab_shows_on_tablets",
+        "premium_tab_title"
+    )
 
     @Volatile
     private var resolved: Map<String, Any> = emptyMap()
@@ -34,16 +51,14 @@ object DexKitResolver {
         val members = mutableMapOf<String, Any>()
 
         resolveShareUrlBuilder(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolveShareResultCtor(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveShareResponseUrls(classLoader, cachedSignatures, signatures, members)
+        resolveGetAds(dexKit, classLoader, cachedSignatures, signatures, members)
         resolvePremiumTabFlag(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolveProductStateGet(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolveAdManagerIsEnabled(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveIsAdvertisementCheck(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolveHomeSectionList(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolveBrowseSectionList(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolveImageAdFlag(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolveEmbeddedAdPredicate(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolveProvidedItemsList(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveSectionList(KEY_HOME_SECTION_LIST, HOME_STRUCTURE, classLoader, cachedSignatures, signatures, members)
+        resolveSectionList(KEY_BROWSE_SECTION_LIST, BROWSE_STRUCTURE, classLoader, cachedSignatures, signatures, members)
+        resolveSectionList(KEY_PROVIDED_ITEMS_LIST, PROVIDED, classLoader, cachedSignatures, signatures, members)
+        resolveImageAdPredicate(dexKit, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -61,93 +76,66 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        try {
-            val cachedSig = cached?.get(KEY_SHARE_URL_BUILDER)
-            if (cachedSig != null) {
-                val (className, methodName) = cachedSig.split("#")
-                val clazz = Class.forName(className, false, classLoader)
-                val method = clazz.declaredMethods.firstOrNull { it.name == methodName }
-                if (method != null) {
-                    members[KEY_SHARE_URL_BUILDER] = method
-                    sigs[KEY_SHARE_URL_BUILDER] = cachedSig
-                    return
-                }
-            }
-
-            val results = dexKit.findMethod {
-                matcher {
-                    usingStrings("si", "utm_source", "Invalid uri ")
-                }
-            }
-            val methodData = results.singleOrNull() ?: run {
-                Log.w(TAG, "$KEY_SHARE_URL_BUILDER: found ${results.size} matches, expected 1")
-                return
-            }
-            val method = methodData.getMethodInstance(classLoader)
-            val sig = "${method.declaringClass.name}#${method.name}"
-            members[KEY_SHARE_URL_BUILDER] = method
-            sigs[KEY_SHARE_URL_BUILDER] = sig
-        } catch (t: Throwable) {
-            Log.w(TAG, "Failed resolving $KEY_SHARE_URL_BUILDER: ${t.message}")
-        }
+        val method = cachedMethod(cached, KEY_SHARE_URL_BUILDER, classLoader, ::isShareUrlBuilder)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("si", "utm_source", "Invalid uri "), StringMatchType.Equals)
+                        paramCount(4)
+                    }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isShareUrlBuilder)
+        store(KEY_SHARE_URL_BUILDER, method, sigs, members)
     }
 
-    private fun resolveShareResultCtor(
+    private fun resolveShareResponseUrls(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val methods = cached?.get(KEY_SHARE_RESPONSE_URLS)
+            ?.split('|')
+            ?.mapNotNull { cachedMethod(classLoader, it, ::isShareResponseUrl) }
+            ?.takeIf { it.size == SHARE_RESPONSE_URL_COUNT }
+            ?: runCatching {
+                Class.forName(GENERATE_URL_RESPONSE, false, classLoader)
+                    .declaredMethods
+                    .filter { isShareResponseUrl(it) }
+            }.getOrNull()?.takeIf { it.size == SHARE_RESPONSE_URL_COUNT }
+        if (methods.isNullOrEmpty()) {
+            Log.w(TAG, "$KEY_SHARE_RESPONSE_URLS: no validated match")
+            return
+        }
+        members[KEY_SHARE_RESPONSE_URLS] = methods
+        sigs[KEY_SHARE_RESPONSE_URLS] = methods.joinToString("|") { signatureOf(it) }
+    }
+
+    private fun resolveGetAds(
         dexKit: DexKitBridge,
         classLoader: ClassLoader,
         cached: Map<String, String>?,
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        try {
-            val cachedSig = cached?.get(KEY_SHARE_RESULT_CTOR)
-            if (cachedSig != null) {
-                val clazz = Class.forName(cachedSig, false, classLoader)
-                val ctor = clazz.declaredConstructors.firstOrNull {
-                    it.parameterTypes.size == 4 &&
-                        it.parameterTypes.all { p -> p == String::class.java }
-                }
-                if (ctor != null) {
-                    members[KEY_SHARE_RESULT_CTOR] = ctor
-                    sigs[KEY_SHARE_RESULT_CTOR] = cachedSig
-                    return
-                }
-            }
-
-            val responseClassName = "com.spotify.share.linkgeneration.api.proto.GenerateUrlResponse"
-            runCatching { Class.forName(responseClassName, false, classLoader) }.getOrNull() ?: run {
-                Log.w(TAG, "$KEY_SHARE_RESULT_CTOR: GenerateUrlResponse not found")
-                return
-            }
-
-            val results = dexKit.findMethod {
-                matcher {
-                    name("<init>")
-                    paramTypes(
-                        "java.lang.String",
-                        "java.lang.String",
-                        "java.lang.String",
-                        "java.lang.String"
-                    )
-                }
-                searchInClass(
-                    dexKit.findClass {
-                        matcher {
-                            usingStrings("shareableUrl_", "fullUrl_")
-                        }
+        val wrapper = cachedMethod(cached, KEY_GET_ADS_WRAPPER, classLoader, ::isGetAdsWrapper)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(GET_ADS_CALL, StringMatchType.Equals)
+                        paramCount(2)
                     }
-                )
-            }
-            val methodData = results.firstOrNull() ?: run {
-                Log.w(TAG, "$KEY_SHARE_RESULT_CTOR: no matching constructor found")
-                return
-            }
-            val ctor = methodData.getConstructorInstance(classLoader)
-            members[KEY_SHARE_RESULT_CTOR] = ctor
-            sigs[KEY_SHARE_RESULT_CTOR] = ctor.declaringClass.name
-        } catch (t: Throwable) {
-            Log.w(TAG, "Failed resolving $KEY_SHARE_RESULT_CTOR: ${t.message}")
-        }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isGetAdsWrapper)
+        store(KEY_GET_ADS_WRAPPER, wrapper, sigs, members)
+
+        val emptyResponse = cachedMethod(cached, KEY_EMPTY_ADS_RESPONSE, classLoader, ::isEmptyAdsResponse)
+            ?: runCatching {
+                Class.forName(GET_ADS_RESPONSE, false, classLoader)
+                    .declaredMethods
+                    .single { isEmptyAdsResponse(it) }
+            }.getOrNull()?.takeIf(::isEmptyAdsResponse)
+        store(KEY_EMPTY_ADS_RESPONSE, emptyResponse, sigs, members)
     }
 
     private fun resolvePremiumTabFlag(
@@ -157,170 +145,9 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        try {
-            val cachedSig = cached?.get(KEY_PREMIUM_TAB_FLAG)
-            if (cachedSig != null) {
-                val (className, methodName) = cachedSig.split("#")
-                val clazz = Class.forName(className, false, classLoader)
-                val method = clazz.declaredMethods.firstOrNull {
-                    it.name == methodName &&
-                        it.parameterTypes.isEmpty() &&
-                        it.returnType == Boolean::class.javaPrimitiveType
-                }
-                if (method != null) {
-                    members[KEY_PREMIUM_TAB_FLAG] = method
-                    sigs[KEY_PREMIUM_TAB_FLAG] = cachedSig
-                    return
-                }
-            }
-
-            val results = dexKit.findMethod {
-                matcher {
-                    usingStrings("premium_tab", "premium")
-                    returnType("boolean")
-                    paramCount(0)
-                }
-            }
-            if (results.isEmpty()) {
-                val altResults = dexKit.findMethod {
-                    matcher {
-                        usingStrings("showPremiumTab", "isPremiumTabEnabled")
-                        returnType("boolean")
-                    }
-                }
-                val methodData = altResults.firstOrNull() ?: run {
-                    Log.w(TAG, "$KEY_PREMIUM_TAB_FLAG: no matches found")
-                    return
-                }
-                val method = methodData.getMethodInstance(classLoader)
-                val sig = "${method.declaringClass.name}#${method.name}"
-                members[KEY_PREMIUM_TAB_FLAG] = method
-                sigs[KEY_PREMIUM_TAB_FLAG] = sig
-                return
-            }
-            val methodData = results.first()
-            val method = methodData.getMethodInstance(classLoader)
-            val sig = "${method.declaringClass.name}#${method.name}"
-            members[KEY_PREMIUM_TAB_FLAG] = method
-            sigs[KEY_PREMIUM_TAB_FLAG] = sig
-        } catch (t: Throwable) {
-            Log.w(TAG, "Failed resolving $KEY_PREMIUM_TAB_FLAG: ${t.message}")
-        }
-    }
-
-    private fun resolveProductStateGet(
-        dexKit: DexKitBridge,
-        classLoader: ClassLoader,
-        cached: Map<String, String>?,
-        sigs: MutableMap<String, String>,
-        members: MutableMap<String, Any>
-    ) {
-        try {
-            val cachedSig = cached?.get(KEY_PRODUCT_STATE_GET)
-            if (cachedSig != null) {
-                val (className, methodName) = cachedSig.split("#")
-                val clazz = Class.forName(className, false, classLoader)
-                val method = clazz.declaredMethods.firstOrNull {
-                    it.name == methodName &&
-                        it.parameterTypes.size == 1 &&
-                        it.parameterTypes[0] == String::class.java &&
-                        it.returnType == String::class.java
-                }
-                if (method != null) {
-                    members[KEY_PRODUCT_STATE_GET] = method
-                    sigs[KEY_PRODUCT_STATE_GET] = cachedSig
-                    return
-                }
-            }
-
-            val results = dexKit.findMethod {
-                matcher {
-                    usingStrings("ads", "catalogue", "product")
-                    paramTypes("java.lang.String")
-                    returnType("java.lang.String")
-                }
-            }
-            val methodData = results.firstOrNull() ?: run {
-                val altResults = dexKit.findMethod {
-                    matcher {
-                        usingStrings("product_state")
-                        paramTypes("java.lang.String")
-                        returnType("java.lang.String")
-                    }
-                }
-                altResults.firstOrNull() ?: run {
-                    Log.w(TAG, "$KEY_PRODUCT_STATE_GET: no matches found")
-                    return
-                }
-            }
-            val method = methodData.getMethodInstance(classLoader)
-            val sig = "${method.declaringClass.name}#${method.name}"
-            members[KEY_PRODUCT_STATE_GET] = method
-            sigs[KEY_PRODUCT_STATE_GET] = sig
-        } catch (t: Throwable) {
-            Log.w(TAG, "Failed resolving $KEY_PRODUCT_STATE_GET: ${t.message}")
-        }
-    }
-
-    private fun resolveAdManagerIsEnabled(
-        dexKit: DexKitBridge,
-        classLoader: ClassLoader,
-        cached: Map<String, String>?,
-        sigs: MutableMap<String, String>,
-        members: MutableMap<String, Any>
-    ) {
-        try {
-            val cachedSig = cached?.get(KEY_AD_MANAGER_IS_ENABLED)
-            if (cachedSig != null) {
-                val (className, methodName) = cachedSig.split("#")
-                val clazz = Class.forName(className, false, classLoader)
-                val method = clazz.declaredMethods.firstOrNull {
-                    it.name == methodName &&
-                        it.parameterTypes.isEmpty() &&
-                        it.returnType == Boolean::class.javaPrimitiveType
-                }
-                if (method != null) {
-                    members[KEY_AD_MANAGER_IS_ENABLED] = method
-                    sigs[KEY_AD_MANAGER_IS_ENABLED] = cachedSig
-                    return
-                }
-            }
-
-            val adManagerClasses = dexKit.findClass {
-                matcher {
-                    usingStrings("spotify.ads.esperanto.slots.proto.Slots")
-                }
-            }
-            if (adManagerClasses.isEmpty()) {
-                Log.w(TAG, "$KEY_AD_MANAGER_IS_ENABLED: ad manager container not found")
-                return
-            }
-
-            val enabledMethods = mutableListOf<Method>()
-            for (classData in adManagerClasses) {
-                val clazz = classData.getInstance(classLoader)
-                for (m in clazz.declaredMethods) {
-                    if (m.parameterTypes.isEmpty() &&
-                        m.returnType == Boolean::class.javaPrimitiveType &&
-                        (m.name.contains("isEnabled", ignoreCase = true) ||
-                            m.name.contains("enabled", ignoreCase = true) ||
-                            m.name.length <= 2)
-                    ) {
-                        enabledMethods.add(m)
-                    }
-                }
-            }
-
-            val method = enabledMethods.firstOrNull() ?: run {
-                Log.w(TAG, "$KEY_AD_MANAGER_IS_ENABLED: no isEnabled-like method found")
-                return
-            }
-            val sig = "${method.declaringClass.name}#${method.name}"
-            members[KEY_AD_MANAGER_IS_ENABLED] = method
-            sigs[KEY_AD_MANAGER_IS_ENABLED] = sig
-        } catch (t: Throwable) {
-            Log.w(TAG, "Failed resolving $KEY_AD_MANAGER_IS_ENABLED: ${t.message}")
-        }
+        val method = cachedMethod(cached, KEY_PREMIUM_TAB_FLAG, classLoader, ::isPremiumTabFlag)
+            ?: runCatching { findPremiumTabFlag(dexKit, classLoader) }.getOrNull()?.takeIf(::isPremiumTabFlag)
+        store(KEY_PREMIUM_TAB_FLAG, method, sigs, members)
     }
 
     private fun resolveIsAdvertisementCheck(
@@ -330,286 +157,201 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        try {
-            val cachedSig = cached?.get(KEY_IS_ADVERTISEMENT_CHECK)
-            if (cachedSig != null) {
-                val (className, methodName) = cachedSig.split("#")
-                val clazz = Class.forName(className, false, classLoader)
-                val method = clazz.declaredMethods.firstOrNull { it.name == methodName }
-                if (method != null) {
-                    members[KEY_IS_ADVERTISEMENT_CHECK] = method
-                    sigs[KEY_IS_ADVERTISEMENT_CHECK] = cachedSig
-                    return
-                }
-            }
-
-            val results = dexKit.findMethod {
-                matcher {
-                    usingStrings("is_advertisement", "true")
-                    returnType("boolean")
-                }
-            }
-            val methodData = results.firstOrNull() ?: run {
-                val altResults = dexKit.findMethod {
+        val method = cachedMethod(cached, KEY_IS_ADVERTISEMENT_CHECK, classLoader, ::isAdvertisementCheck)
+            ?: runCatching {
+                dexKit.findMethod {
                     matcher {
-                        usingStrings("is_advertisement")
+                        usingStrings(listOf("is_advertisement"), StringMatchType.Equals)
+                        paramTypes(CONTEXT_TRACK)
+                        returnType("boolean")
                     }
-                }
-                altResults.firstOrNull() ?: run {
-                    Log.w(TAG, "$KEY_IS_ADVERTISEMENT_CHECK: no matches found")
-                    return
-                }
-            }
-            val method = methodData.getMethodInstance(classLoader)
-            val sig = "${method.declaringClass.name}#${method.name}"
-            members[KEY_IS_ADVERTISEMENT_CHECK] = method
-            sigs[KEY_IS_ADVERTISEMENT_CHECK] = sig
-        } catch (t: Throwable) {
-            Log.w(TAG, "Failed resolving $KEY_IS_ADVERTISEMENT_CHECK: ${t.message}")
-        }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isAdvertisementCheck)
+        store(KEY_IS_ADVERTISEMENT_CHECK, method, sigs, members)
     }
 
-    private fun resolveHomeSectionList(
+    private fun resolveSectionList(
+        key: String,
+        className: String,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, key, classLoader) { isListGetter(it, className) }
+            ?: runCatching {
+                Class.forName(className, false, classLoader)
+                    .declaredMethods
+                    .filter { it.parameterCount == 0 && List::class.java.isAssignableFrom(it.returnType) }
+                    .singleOrNull()
+            }.getOrNull()?.takeIf { isListGetter(it, className) }
+        store(key, method, sigs, members)
+    }
+
+    private fun resolveImageAdPredicate(
         dexKit: DexKitBridge,
         classLoader: ClassLoader,
         cached: Map<String, String>?,
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        try {
-            val cachedSig = cached?.get(KEY_HOME_SECTION_LIST)
-            if (cachedSig != null) {
-                val (className, methodName) = cachedSig.split("#")
-                val clazz = Class.forName(className, false, classLoader)
-                val method = clazz.declaredMethods.firstOrNull { it.name == methodName }
-                if (method != null) {
-                    members[KEY_HOME_SECTION_LIST] = method
-                    sigs[KEY_HOME_SECTION_LIST] = cachedSig
-                    return
-                }
-            }
+        val method = cachedMethod(cached, KEY_IMAGE_AD_PREDICATE, classLoader, ::isImageAdPredicate)
+            ?: runCatching {
+                val sectionClass = Class.forName(PLAYER_SECTION, false, classLoader)
+                val fieldNumber = sectionClass.getField(IMAGE_BRAND_AD_FIELD).getInt(null)
+                dexKit.findMethod {
+                    matcher {
+                        declaredClass(PLAYER_SECTION)
+                        paramCount(0)
+                        returnType("boolean")
+                        usingNumbers(fieldNumber)
+                    }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isImageAdPredicate)
+        store(KEY_IMAGE_AD_PREDICATE, method, sigs, members)
+    }
 
-            val homeStructureClass = runCatching {
-                Class.forName("com.spotify.casita.v1.resolved.HomeStructure", false, classLoader)
-            }.getOrNull()
-            if (homeStructureClass != null) {
-                val method = homeStructureClass.declaredMethods.firstOrNull {
-                    it.parameterTypes.isEmpty() && List::class.java.isAssignableFrom(it.returnType)
-                }
-                if (method != null) {
-                    val sig = "${method.declaringClass.name}#${method.name}"
-                    members[KEY_HOME_SECTION_LIST] = method
-                    sigs[KEY_HOME_SECTION_LIST] = sig
-                    return
-                }
+    private fun findPremiumTabFlag(dexKit: DexKitBridge, classLoader: ClassLoader): Method? {
+        val record = dexKit.findMethod {
+            matcher {
+                usingStrings(PREMIUM_KEYS, StringMatchType.Equals)
+                paramCount(0)
+                returnType("java.util.List")
             }
+        }.singleOrNull() ?: return null
+        val recordClass = record.declaredClass?.getInstance(classLoader) ?: return null
+        if (recordClass.declaredMethods.count { isBooleanGetter(it) } != 3) return null
+        val invoked = record.invokes.mapNotNull { data ->
+            runCatching { data.getMethodInstance(classLoader) }.getOrNull()
+        }.filter { it.declaringClass == recordClass && isBooleanGetter(it) }
+            .distinctBy { it.name }
+        return invoked.takeIf { it.size == 3 }?.get(1)
+    }
 
-            val results = dexKit.findMethod {
-                matcher {
-                    declaredClass("com.spotify.casita.v1.resolved.HomeStructure")
-                    paramCount(0)
-                    returnType("java.util.List")
-                }
-            }
-            val methodData = results.firstOrNull() ?: return
-            val method = methodData.getMethodInstance(classLoader)
-            val sig = "${method.declaringClass.name}#${method.name}"
-            members[KEY_HOME_SECTION_LIST] = method
-            sigs[KEY_HOME_SECTION_LIST] = sig
-        } catch (t: Throwable) {
-            Log.w(TAG, "Failed resolving $KEY_HOME_SECTION_LIST: ${t.message}")
+    private fun isShareResponseUrl(method: Method): Boolean =
+        method.declaringClass.name == GENERATE_URL_RESPONSE &&
+            method.parameterCount == 0 &&
+            method.returnType == String::class.java
+
+    private fun isGetAdsWrapper(method: Method): Boolean =
+        method.parameterCount == 2 &&
+            method.parameterTypes[0].name == GET_ADS_REQUEST &&
+            method.returnType == Any::class.java
+
+    private fun isEmptyAdsResponse(method: Method): Boolean =
+        method.declaringClass.name == GET_ADS_RESPONSE &&
+            java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterTypes.size == 1 &&
+            method.parameterTypes[0] == ByteArray::class.java &&
+            method.returnType.name == GET_ADS_RESPONSE
+
+    private fun isShareUrlBuilder(method: Method): Boolean {
+        if (method.parameterCount != 4) return false
+        if (method.parameterTypes[0] != String::class.java) return false
+        if (method.parameterTypes[1] != String::class.java) return false
+        if (!Map::class.java.isAssignableFrom(method.parameterTypes[3])) return false
+        val returnType = method.returnType
+        if (returnType == String::class.java) return true
+        val pairFields = returnType.declaredFields.count { it.type == Any::class.java }
+        val pairConstructor = returnType.declaredConstructors.any { constructor ->
+            constructor.parameterCount == 2 && constructor.parameterTypes.all { it == Any::class.java }
+        }
+        return pairFields == 2 && pairConstructor
+    }
+
+    private fun isPremiumTabFlag(method: Method): Boolean {
+        if (!isBooleanGetter(method)) return false
+        val recordClass = method.declaringClass
+        if (recordClass.declaredMethods.count { isBooleanGetter(it) } != 3) return false
+        if (recordClass.declaredMethods.none { it.parameterCount == 0 && List::class.java.isAssignableFrom(it.returnType) }) {
+            return false
+        }
+        return recordClass.declaredConstructors.any { constructor ->
+            constructor.parameterCount >= 4 &&
+                constructor.parameterTypes.take(3).all { it == Boolean::class.javaPrimitiveType }
         }
     }
 
-    private fun resolveBrowseSectionList(
-        dexKit: DexKitBridge,
-        classLoader: ClassLoader,
-        cached: Map<String, String>?,
+    private fun isAdvertisementCheck(method: Method): Boolean =
+        method.parameterCount == 1 &&
+            method.parameterTypes[0].name == CONTEXT_TRACK &&
+            method.returnType == Boolean::class.javaPrimitiveType
+
+    private fun isImageAdPredicate(method: Method): Boolean =
+        method.declaringClass.name == PLAYER_SECTION && isBooleanGetter(method)
+
+    private fun isBooleanGetter(method: Method): Boolean =
+        method.parameterCount == 0 && method.returnType == Boolean::class.javaPrimitiveType
+
+    private fun isListGetter(method: Method, className: String): Boolean =
+        method.declaringClass.name == className &&
+            method.parameterCount == 0 &&
+            List::class.java.isAssignableFrom(method.returnType)
+
+    private fun store(
+        key: String,
+        method: Method?,
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        try {
-            val cachedSig = cached?.get(KEY_BROWSE_SECTION_LIST)
-            if (cachedSig != null) {
-                val (className, methodName) = cachedSig.split("#")
-                val clazz = Class.forName(className, false, classLoader)
-                val method = clazz.declaredMethods.firstOrNull { it.name == methodName }
-                if (method != null) {
-                    members[KEY_BROWSE_SECTION_LIST] = method
-                    sigs[KEY_BROWSE_SECTION_LIST] = cachedSig
-                    return
-                }
-            }
-
-            val browseStructureClass = runCatching {
-                Class.forName("com.spotify.browsita.v1.resolved.BrowseStructure", false, classLoader)
-            }.getOrNull()
-            if (browseStructureClass != null) {
-                val method = browseStructureClass.declaredMethods.firstOrNull {
-                    it.parameterTypes.isEmpty() && List::class.java.isAssignableFrom(it.returnType)
-                }
-                if (method != null) {
-                    val sig = "${method.declaringClass.name}#${method.name}"
-                    members[KEY_BROWSE_SECTION_LIST] = method
-                    sigs[KEY_BROWSE_SECTION_LIST] = sig
-                    return
-                }
-            }
-
-            val results = dexKit.findMethod {
-                matcher {
-                    declaredClass("com.spotify.browsita.v1.resolved.BrowseStructure")
-                    paramCount(0)
-                    returnType("java.util.List")
-                }
-            }
-            val methodData = results.firstOrNull() ?: return
-            val method = methodData.getMethodInstance(classLoader)
-            val sig = "${method.declaringClass.name}#${method.name}"
-            members[KEY_BROWSE_SECTION_LIST] = method
-            sigs[KEY_BROWSE_SECTION_LIST] = sig
-        } catch (t: Throwable) {
-            Log.w(TAG, "Failed resolving $KEY_BROWSE_SECTION_LIST: ${t.message}")
+        if (method == null) {
+            Log.w(TAG, "$key: no validated match")
+            return
         }
+        members[key] = method
+        sigs[key] = signatureOf(method)
     }
 
-    private fun resolveImageAdFlag(
-        dexKit: DexKitBridge,
-        classLoader: ClassLoader,
+    private fun cachedMethod(
         cached: Map<String, String>?,
-        sigs: MutableMap<String, String>,
-        members: MutableMap<String, Any>
-    ) {
-        try {
-            val cachedSig = cached?.get(KEY_IMAGE_AD_FLAG)
-            if (cachedSig != null) {
-                val (className, methodName) = cachedSig.split("#")
-                val clazz = Class.forName(className, false, classLoader)
-                val method = clazz.declaredMethods.firstOrNull { it.name == methodName }
-                if (method != null) {
-                    members[KEY_IMAGE_AD_FLAG] = method
-                    sigs[KEY_IMAGE_AD_FLAG] = cachedSig
-                    return
-                }
-            }
-
-            val sectionClass = runCatching {
-                Class.forName("com.spotify.scrollsita.v1.Section", false, classLoader)
-            }.getOrNull()
-            if (sectionClass != null) {
-                val method = sectionClass.declaredMethods.firstOrNull {
-                    it.parameterTypes.isEmpty() && it.returnType == Boolean::class.javaPrimitiveType
-                }
-                if (method != null) {
-                    val sig = "${method.declaringClass.name}#${method.name}"
-                    members[KEY_IMAGE_AD_FLAG] = method
-                    sigs[KEY_IMAGE_AD_FLAG] = sig
-                    return
-                }
-            }
-
-            val results = dexKit.findMethod {
-                matcher {
-                    declaredClass("com.spotify.scrollsita.v1.Section")
-                    paramCount(0)
-                    returnType("boolean")
-                }
-            }
-            val methodData = results.firstOrNull() ?: return
-            val method = methodData.getMethodInstance(classLoader)
-            val sig = "${method.declaringClass.name}#${method.name}"
-            members[KEY_IMAGE_AD_FLAG] = method
-            sigs[KEY_IMAGE_AD_FLAG] = sig
-        } catch (t: Throwable) {
-            Log.w(TAG, "Failed resolving $KEY_IMAGE_AD_FLAG: ${t.message}")
-        }
+        key: String,
+        classLoader: ClassLoader,
+        validate: (Method) -> Boolean
+    ): Method? {
+        val entry = cached?.get(key) ?: return null
+        val parts = entry.split("#")
+        if (parts.size != 3) return null
+        return runCatching {
+            Class.forName(parts[0], false, classLoader)
+                .declaredMethods
+                .firstOrNull { it.name == parts[1] && descriptorOf(it) == parts[2] }
+        }.getOrNull()?.takeIf(validate)
     }
 
-    private fun resolveEmbeddedAdPredicate(
-        dexKit: DexKitBridge,
-        classLoader: ClassLoader,
-        cached: Map<String, String>?,
-        sigs: MutableMap<String, String>,
-        members: MutableMap<String, Any>
-    ) {
-        try {
-            val cachedSig = cached?.get(KEY_EMBEDDED_AD_PREDICATE)
-            if (cachedSig != null) {
-                val (className, methodName) = cachedSig.split("#")
-                val clazz = Class.forName(className, false, classLoader)
-                val method = clazz.declaredMethods.firstOrNull { it.name == methodName }
-                if (method != null) {
-                    members[KEY_EMBEDDED_AD_PREDICATE] = method
-                    sigs[KEY_EMBEDDED_AD_PREDICATE] = cachedSig
-                    return
-                }
-            }
-
-            val results = dexKit.findMethod {
-                matcher {
-                    paramTypes("com.spotify.player.model.ContextTrack")
-                    returnType("boolean")
-                }
-            }
-            val methodData = results.firstOrNull() ?: return
-            val method = methodData.getMethodInstance(classLoader)
-            val sig = "${method.declaringClass.name}#${method.name}"
-            members[KEY_EMBEDDED_AD_PREDICATE] = method
-            sigs[KEY_EMBEDDED_AD_PREDICATE] = sig
-        } catch (t: Throwable) {
-            Log.w(TAG, "Failed resolving $KEY_EMBEDDED_AD_PREDICATE: ${t.message}")
-        }
+    private fun cachedMethod(classLoader: ClassLoader, entry: String, validate: (Method) -> Boolean): Method? {
+        val parts = entry.split("#")
+        if (parts.size != 3) return null
+        return runCatching {
+            Class.forName(parts[0], false, classLoader)
+                .declaredMethods
+                .firstOrNull { it.name == parts[1] && descriptorOf(it) == parts[2] }
+        }.getOrNull()?.takeIf(validate)
     }
 
-    private fun resolveProvidedItemsList(
-        dexKit: DexKitBridge,
-        classLoader: ClassLoader,
-        cached: Map<String, String>?,
-        sigs: MutableMap<String, String>,
-        members: MutableMap<String, Any>
-    ) {
-        try {
-            val cachedSig = cached?.get(KEY_PROVIDED_ITEMS_LIST)
-            if (cachedSig != null) {
-                val (className, methodName) = cachedSig.split("#")
-                val clazz = Class.forName(className, false, classLoader)
-                val method = clazz.declaredMethods.firstOrNull { it.name == methodName }
-                if (method != null) {
-                    members[KEY_PROVIDED_ITEMS_LIST] = method
-                    sigs[KEY_PROVIDED_ITEMS_LIST] = cachedSig
-                    return
-                }
-            }
+    private fun signatureOf(method: Method): String =
+        "${method.declaringClass.name}#${method.name}#${descriptorOf(method)}"
 
-            val providedClass = runCatching {
-                Class.forName("com.spotify.casita.v1.resolved.Provided", false, classLoader)
-            }.getOrNull()
-            if (providedClass != null) {
-                val method = providedClass.declaredMethods.firstOrNull {
-                    it.parameterTypes.isEmpty() && List::class.java.isAssignableFrom(it.returnType)
-                }
-                if (method != null) {
-                    val sig = "${method.declaringClass.name}#${method.name}"
-                    members[KEY_PROVIDED_ITEMS_LIST] = method
-                    sigs[KEY_PROVIDED_ITEMS_LIST] = sig
-                    return
-                }
-            }
+    private fun descriptorOf(method: Method): String = buildString {
+        append('(')
+        method.parameterTypes.forEach { append(descriptorOf(it)) }
+        append(')')
+        append(descriptorOf(method.returnType))
+    }
 
-            val results = dexKit.findMethod {
-                matcher {
-                    declaredClass("com.spotify.casita.v1.resolved.Provided")
-                    paramCount(0)
-                    returnType("java.util.List")
-                }
-            }
-            val methodData = results.firstOrNull() ?: return
-            val method = methodData.getMethodInstance(classLoader)
-            val sig = "${method.declaringClass.name}#${method.name}"
-            members[KEY_PROVIDED_ITEMS_LIST] = method
-            sigs[KEY_PROVIDED_ITEMS_LIST] = sig
-        } catch (t: Throwable) {
-            Log.w(TAG, "Failed resolving $KEY_PROVIDED_ITEMS_LIST: ${t.message}")
+    private fun descriptorOf(type: Class<*>): String = when (type) {
+        Boolean::class.javaPrimitiveType -> "Z"
+        Byte::class.javaPrimitiveType -> "B"
+        Char::class.javaPrimitiveType -> "C"
+        Short::class.javaPrimitiveType -> "S"
+        Int::class.javaPrimitiveType -> "I"
+        Long::class.javaPrimitiveType -> "J"
+        Float::class.javaPrimitiveType -> "F"
+        Double::class.javaPrimitiveType -> "D"
+        Void.TYPE -> "V"
+        else -> if (type.isArray) {
+            "[" + descriptorOf(type.componentType ?: Any::class.java)
+        } else {
+            "L" + type.name.replace('.', '/') + ";"
         }
     }
 }

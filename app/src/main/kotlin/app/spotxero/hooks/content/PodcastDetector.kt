@@ -30,31 +30,50 @@ object PodcastDetector {
     fun isPodcastSection(section: Any?): Boolean {
         if (section == null) return false
         val expected = podcastSectionType(section.javaClass)
+        if (expected < 0) return false
         val actual = getFieldValue(section, SECTION_TYPE_FIELD) as? Int ?: return false
-        return expected >= 0 && actual == expected
+        return actual == expected
     }
 
-    fun filterPodcastSections(sections: List<*>?): List<*>? =
-        ProtoLists.filter(sections) { section -> !isPodcastSection(section) }
+    fun filterPodcastSections(sections: List<*>?): List<*>? {
+        if (sections.isNullOrEmpty()) return sections
+        val sectionClass = sections.first()?.javaClass ?: return sections
+        if (!hasField(sectionClass, SECTION_TYPE_FIELD)) {
+            Log.w(TAG, "Section type field unresolved for ${sectionClass.name}")
+            return sections
+        }
+        return ProtoLists.filter(sections) { section -> !isPodcastSection(section) }
+    }
 
-    fun filterPodcastItems(items: List<*>?): List<*>? =
-        ProtoLists.filter(items) { item ->
+    fun filterPodcastItems(items: List<*>?): List<*>? {
+        if (items.isNullOrEmpty()) return items
+        val itemClass = items.first()?.javaClass ?: return items
+        if (!hasField(itemClass, ITEM_IDENTIFIER_FIELD)) {
+            Log.w(TAG, "Item identifier unresolved for ${itemClass.name}")
+            return items
+        }
+        return ProtoLists.filter(items) { item ->
             !isPodcastUri(getFieldValue(item, ITEM_IDENTIFIER_FIELD) as? String)
         }
+    }
 
     private fun podcastSectionType(clazz: Class<*>): Int = sectionTypes.computeIfAbsent(clazz) { type ->
-        runCatching { type.getField(PODCAST_SECTION_CONSTANT).getInt(null) }
-            .onFailure { Log.w(TAG, "Podcast section type unresolved for ${type.name}: ${it.message}") }
-            .getOrDefault(-1)
+        val value = runCatching { type.getField(PODCAST_SECTION_CONSTANT).getInt(null) }.getOrNull()
+        if (value == null) {
+            Log.w(TAG, "Podcast section type unresolved for ${type.name}")
+            -1
+        } else {
+            value
+        }
     }
 
-    private fun getFieldValue(target: Any, fieldName: String): Any? {
-        return runCatching {
-            val key = target.javaClass to fieldName
-            val field = fieldCache.computeIfAbsent(key) { (clazz, name) ->
-                clazz.getDeclaredField(name).apply { isAccessible = true }
-            }
-            field.get(target)
-        }.getOrNull()
-    }
+    private fun hasField(clazz: Class<*>, fieldName: String): Boolean =
+        clazz.declaredFields.any { it.name == fieldName }
+
+    private fun getFieldValue(target: Any, fieldName: String): Any? = runCatching {
+        val field = fieldCache.computeIfAbsent(target.javaClass to fieldName) { (clazz, name) ->
+            clazz.getDeclaredField(name).apply { isAccessible = true }
+        }
+        field.get(target)
+    }.getOrNull()
 }

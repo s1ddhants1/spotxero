@@ -14,7 +14,10 @@ object HidePremiumTabHook {
 
     fun install(module: XposedModule) {
         val method = DexKitResolver.get<Method>(DexKitResolver.KEY_PREMIUM_TAB_FLAG)
-        if (method == null) {
+        if (method == null ||
+            method.parameterCount != 0 ||
+            method.returnType != Boolean::class.javaPrimitiveType
+        ) {
             module.log(Log.WARN, TAG, "Premium tab flag not resolved, skipping")
             return
         }

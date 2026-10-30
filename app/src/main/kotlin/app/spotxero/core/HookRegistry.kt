@@ -2,11 +2,10 @@ package app.spotxero.core
 
 import android.content.pm.ApplicationInfo
 import android.util.Log
-import app.spotxero.hooks.ads.AdManagerHook
+import app.spotxero.hooks.ads.AdResponseHook
 import app.spotxero.hooks.ads.AdSkipHook
 import app.spotxero.hooks.ads.BrandAdsHook
 import app.spotxero.hooks.ads.PlayerAdCardsHook
-import app.spotxero.hooks.ads.ProductStateOverrideHook
 import app.spotxero.hooks.content.HidePodcastsHook
 import app.spotxero.hooks.navigation.HidePremiumTabHook
 import app.spotxero.hooks.sharing.CleanSharingHook
@@ -67,9 +66,8 @@ object HookRegistry {
         val hooks = listOf(
             "CleanSharing" to { CleanSharingHook.install(module) },
             "HidePremiumTab" to { HidePremiumTabHook.install(module) },
-            "ProductStateOverride" to { ProductStateOverrideHook.install(module) },
-            "AdManager" to { AdManagerHook.install(module) },
             "AdSkip" to { AdSkipHook.install(module) },
+            "AdResponse" to { AdResponseHook.install(module) },
             "BrandAds" to { BrandAdsHook.install(module) },
             "PlayerAdCards" to { PlayerAdCardsHook.install(module) },
             "HidePodcasts" to { HidePodcastsHook.install(module) },

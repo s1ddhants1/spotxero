@@ -1,6 +1,8 @@
 package app.spotxero.hooks.sharing
 
 import android.net.Uri
+import java.lang.reflect.Field
+import java.util.concurrent.ConcurrentHashMap
 
 object SharingLinksUtil {
 
@@ -8,6 +10,14 @@ object SharingLinksUtil {
         "si", "pi", "utm_source", "utm_medium", "utm_campaign",
         "utm_content", "utm_term", "utm_id", "context", "nd"
     )
+
+    private val holderFields = ConcurrentHashMap<Class<*>, List<Field>>()
+
+    fun sanitizeResult(result: Any?): Any? {
+        if (result is String) return sanitizeUrl(result) ?: result
+        if (result == null) return null
+        return runCatching { sanitizeFields(result) }.getOrDefault(result)
+    }
 
     fun sanitizeUrl(url: String?): String? {
         if (url.isNullOrEmpty()) return url
@@ -28,5 +38,21 @@ object SharingLinksUtil {
             }
         }
         return builder.build().toString()
+    }
+
+    private fun sanitizeFields(holder: Any): Any {
+        val fields = holderFields.computeIfAbsent(holder.javaClass) { type ->
+            type.declaredFields
+                .filter { it.type == Any::class.java }
+                .onEach { it.isAccessible = true }
+        }
+        for (field in fields) {
+            val value = field.get(holder) as? String ?: continue
+            val sanitized = sanitizeUrl(value) ?: continue
+            if (sanitized != value) {
+                runCatching { field.set(holder, sanitized) }
+            }
+        }
+        return holder
     }
 }
