@@ -150,7 +150,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isBlockAdsEnabled = PreferencesManager.isBlockAdsEnabled,
                 isHideBrandAdsEnabled = PreferencesManager.isHideBrandAdsEnabled,
                 isHidePlayerAdsEnabled = PreferencesManager.isHidePlayerAdsEnabled,
-                isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled
+                isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled,
+                isDisableSmartShuffleEnabled = PreferencesManager.isDisableSmartShuffleEnabled
             )
         }
     }
@@ -286,6 +287,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         PreferencesManager.setBoolean(app, PrefKeys.KEY_HIDE_PODCASTS, enabled)
         PreferencesManager.isHidePodcastsEnabled = enabled
         _uiState.update { it.copy(isHidePodcastsEnabled = enabled) }
+    }
+
+    fun setDisableSmartShuffle(enabled: Boolean) {
+        val app = getApplication<Application>()
+        PreferencesManager.setBoolean(app, PrefKeys.KEY_DISABLE_SMART_SHUFFLE, enabled)
+        PreferencesManager.isDisableSmartShuffleEnabled = enabled
+        _uiState.update { it.copy(isDisableSmartShuffleEnabled = enabled) }
     }
 
     fun showSettingsScreen() {

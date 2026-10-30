@@ -8,6 +8,8 @@ import app.spotxero.hooks.ads.BrandAdsHook
 import app.spotxero.hooks.ads.PlayerAdCardsHook
 import app.spotxero.hooks.content.HidePodcastsHook
 import app.spotxero.hooks.navigation.HidePremiumTabHook
+import app.spotxero.hooks.player.DisableSmartShuffleHook
+import app.spotxero.hooks.player.ProductStateHook
 import app.spotxero.hooks.sharing.CleanSharingHook
 import app.spotxero.hooks.theme.SpotifyAmoledHook
 import io.github.libxposed.api.XposedModule
@@ -72,6 +74,8 @@ object HookRegistry {
             "PlayerAdCards" to { PlayerAdCardsHook.install(module) },
             "HidePodcasts" to { HidePodcastsHook.install(module) },
             "SpotifyAmoled" to { SpotifyAmoledHook.install(module) },
+            "DisableSmartShuffle" to { DisableSmartShuffleHook.install(module) },
+            "ProductState" to { ProductStateHook.install(module) },
         )
 
         var installed = 0

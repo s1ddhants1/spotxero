@@ -32,6 +32,7 @@ object PreferencesManager {
     var isHideBrandAdsEnabled: Boolean = true
     var isHidePlayerAdsEnabled: Boolean = true
     var isHidePodcastsEnabled: Boolean = false
+    var isDisableSmartShuffleEnabled: Boolean = true
 
     var onPreferenceChangedListener: (() -> Unit)? = null
 
@@ -176,6 +177,8 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_HIDE_PLAYER_ADS] = isHidePlayerAdsEnabled
         isHidePodcastsEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PODCASTS, false)
         inMemoryBooleans[PrefKeys.KEY_HIDE_PODCASTS] = isHidePodcastsEnabled
+        isDisableSmartShuffleEnabled = prefs.getBoolean(PrefKeys.KEY_DISABLE_SMART_SHUFFLE, true)
+        inMemoryBooleans[PrefKeys.KEY_DISABLE_SMART_SHUFFLE] = isDisableSmartShuffleEnabled
         isLauncherIconHidden = prefs.getBoolean(KEY_HIDE_LAUNCHER_ICON, false)
         inMemoryBooleans[KEY_HIDE_LAUNCHER_ICON] = isLauncherIconHidden
     }

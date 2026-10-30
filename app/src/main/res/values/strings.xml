@@ -22,6 +22,7 @@
     <string name="feature_hide_brand_ads_title">Hide Home &amp; Browse Ads</string>
     <string name="feature_hide_player_ads_title">Hide Player Ad Cards</string>
     <string name="feature_hide_podcasts_title">Hide Podcasts &amp; Audiobooks</string>
+    <string name="feature_disable_smart_shuffle_title">Disable Smart Shuffle Default</string>
     <string name="title_appearance">Appearance</string>
     <string name="title_about">About</string>
     <string name="appearance_category_desc">Customize App Theme</string>

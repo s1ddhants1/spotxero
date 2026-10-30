@@ -48,6 +48,7 @@ fun HomeDashboard(
     onHideBrandAdsToggle: (Boolean) -> Unit = {},
     onHidePlayerAdsToggle: (Boolean) -> Unit = {},
     onHidePodcastsToggle: (Boolean) -> Unit = {},
+    onDisableSmartShuffleToggle: (Boolean) -> Unit = {},
     onRequestScope: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -89,6 +90,14 @@ fun HomeDashboard(
             checked = uiState.isCleanSharingEnabled,
             enabled = true,
             onCheckedChange = onCleanSharingToggle
+        )
+
+        FeatureModuleCard(
+            icon = AppIcons.VisibilityOff,
+            title = stringResource(R.string.feature_disable_smart_shuffle_title),
+            checked = uiState.isDisableSmartShuffleEnabled,
+            enabled = true,
+            onCheckedChange = onDisableSmartShuffleToggle
         )
 
         FeatureModuleCard(

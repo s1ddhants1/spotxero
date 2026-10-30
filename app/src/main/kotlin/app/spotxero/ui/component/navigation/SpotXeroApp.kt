@@ -133,6 +133,7 @@ fun SpotXeroApp(
                                 onHideBrandAdsToggle = { viewModel.setHideBrandAds(it) },
                                 onHidePlayerAdsToggle = { viewModel.setHidePlayerAds(it) },
                                 onHidePodcastsToggle = { viewModel.setHidePodcasts(it) },
+                                onDisableSmartShuffleToggle = { viewModel.setDisableSmartShuffle(it) },
                                 onRequestScope = { viewModel.requestScope() }
                             )
                         }

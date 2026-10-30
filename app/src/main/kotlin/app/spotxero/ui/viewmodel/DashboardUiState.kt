@@ -40,6 +40,7 @@ data class DashboardUiState(
     val isHideBrandAdsEnabled: Boolean = true,
     val isHidePlayerAdsEnabled: Boolean = true,
     val isHidePodcastsEnabled: Boolean = false,
+    val isDisableSmartShuffleEnabled: Boolean = true,
 
     val activeSpotify: InstalledSpotifyInfo? = null,
     val installedSpotifyVariants: List<InstalledSpotifyInfo> = emptyList()

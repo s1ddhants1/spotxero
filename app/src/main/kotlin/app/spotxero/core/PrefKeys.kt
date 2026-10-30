@@ -12,4 +12,5 @@ object PrefKeys {
     const val KEY_HIDE_BRAND_ADS = "pref_hide_brand_ads"
     const val KEY_HIDE_PLAYER_ADS = "pref_hide_player_ads"
     const val KEY_HIDE_PODCASTS = "pref_hide_podcasts"
+    const val KEY_DISABLE_SMART_SHUFFLE = "pref_disable_smart_shuffle"
 }

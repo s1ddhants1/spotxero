@@ -43,6 +43,13 @@ class SpotXeroModule : XposedModule() {
         }
 
         runCatching {
+            System.loadLibrary("spotxero_native")
+            log(Log.INFO, TAG, "Loaded native patch library")
+        }.onFailure {
+            log(Log.WARN, TAG, "Failed loading native patch library: ${it.message}", it)
+        }
+
+        runCatching {
             HookRegistry.resolveAndInstall(
                 module = this,
                 appInfo = param.applicationInfo,

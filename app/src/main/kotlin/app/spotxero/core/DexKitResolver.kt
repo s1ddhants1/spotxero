@@ -19,6 +19,9 @@ object DexKitResolver {
     const val KEY_BROWSE_SECTION_LIST = "browse_section_list_getter"
     const val KEY_IMAGE_AD_PREDICATE = "scrollsita_image_ad_predicate"
     const val KEY_PROVIDED_ITEMS_LIST = "provided_items_list_getter"
+    const val KEY_SMART_SHUFFLE_FLAGS = "smart_shuffle_flags"
+    const val KEY_PRODUCT_STATE_GETTERS = "product_state_getters"
+    const val KEY_ON_DEMAND_IN_FREE_GETTERS = "on_demand_in_free_getters"
 
     private const val GENERATE_URL_RESPONSE = "com.spotify.share.linkgeneration.api.proto.GenerateUrlResponse"
     private const val GET_ADS_REQUEST = "com.spotify.ads.esperanto.proto.GetAdsRequest"
@@ -59,6 +62,9 @@ object DexKitResolver {
         resolveSectionList(KEY_BROWSE_SECTION_LIST, BROWSE_STRUCTURE, classLoader, cachedSignatures, signatures, members)
         resolveSectionList(KEY_PROVIDED_ITEMS_LIST, PROVIDED, classLoader, cachedSignatures, signatures, members)
         resolveImageAdPredicate(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveSmartShuffleFlags(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveProductStateGetters(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveOnDemandInFreeGetters(dexKit, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -209,6 +215,121 @@ object DexKitResolver {
                 }.singleOrNull()?.getMethodInstance(classLoader)
             }.getOrNull()?.takeIf(::isImageAdPredicate)
         store(KEY_IMAGE_AD_PREDICATE, method, sigs, members)
+    }
+
+    private fun resolveSmartShuffleFlags(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val methods = cached?.get(KEY_SMART_SHUFFLE_FLAGS)
+            ?.split('|')
+            ?.mapNotNull { cachedMethod(classLoader, it, ::isSmartShuffleFlag) }
+            ?.takeIf { it.isNotEmpty() }
+            ?: runCatching {
+                val matchClass = dexKit.findClass {
+                    matcher {
+                        usingStrings(listOf("smart_shuffle_as_default_for_liked_songs"), StringMatchType.Contains)
+                    }
+                }.firstOrNull()
+                val clazz = matchClass?.getInstance(classLoader)
+                clazz?.declaredMethods?.filter { isSmartShuffleFlag(it) }
+            }.getOrNull()?.takeIf { it.isNotEmpty() }
+
+        if (methods.isNullOrEmpty()) {
+            Log.w(TAG, "$KEY_SMART_SHUFFLE_FLAGS: no validated match")
+            return
+        }
+        members[KEY_SMART_SHUFFLE_FLAGS] = methods
+        sigs[KEY_SMART_SHUFFLE_FLAGS] = methods.joinToString("|") { signatureOf(it) }
+    }
+
+    private fun isSmartShuffleFlag(method: Method): Boolean =
+        method.parameterCount == 0 &&
+            method.returnType == Boolean::class.javaPrimitiveType &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun resolveProductStateGetters(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val methods = cached?.get(KEY_PRODUCT_STATE_GETTERS)
+            ?.split('|')
+            ?.mapNotNull { cachedMethod(classLoader, it, ::isProductStateGetter) }
+            ?.takeIf { it.isNotEmpty() }
+            ?: runCatching {
+                val matchClass = dexKit.findClass {
+                    matcher {
+                        usingStrings(listOf("catalogue"), StringMatchType.Contains)
+                    }
+                }.firstOrNull()
+                val clazz = matchClass?.getInstance(classLoader)
+                clazz?.declaredMethods?.filter { isProductStateGetter(it) }
+            }.getOrNull()?.takeIf { it.isNotEmpty() }
+
+        if (methods.isNullOrEmpty()) {
+            Log.w(TAG, "$KEY_PRODUCT_STATE_GETTERS: no validated match")
+            return
+        }
+        members[KEY_PRODUCT_STATE_GETTERS] = methods
+        sigs[KEY_PRODUCT_STATE_GETTERS] = methods.joinToString("|") { signatureOf(it) }
+    }
+
+    private fun isProductStateGetter(method: Method): Boolean =
+        method.parameterCount == 1 &&
+            method.parameterTypes[0] == String::class.java &&
+            method.returnType == String::class.java &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun resolveOnDemandInFreeGetters(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val methods = cached?.get(KEY_ON_DEMAND_IN_FREE_GETTERS)
+            ?.split('|')
+            ?.mapNotNull { cachedMethod(classLoader, it, ::isOnDemandInFreeGetter) }
+            ?.takeIf { it.isNotEmpty() }
+            ?: runCatching {
+                val declaredMethods = mutableListOf<Method>()
+                runCatching {
+                    Class.forName("com.spotify.playlist.proto.PlaylistRequest\$Response", false, classLoader)
+                        .declaredMethods
+                        .filter { isOnDemandInFreeGetter(it) }
+                        .let { declaredMethods.addAll(it) }
+                }
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("isOnDemandInFree"), StringMatchType.Contains)
+                        paramCount(0)
+                    }
+                }.mapNotNull { it.getMethodInstance(classLoader) }
+                    .filter { isOnDemandInFreeGetter(it) }
+                    .let { declaredMethods.addAll(it) }
+
+                declaredMethods.distinctBy { signatureOf(it) }
+            }.getOrNull()?.takeIf { it.isNotEmpty() }
+
+        if (methods.isNullOrEmpty()) {
+            Log.w(TAG, "$KEY_ON_DEMAND_IN_FREE_GETTERS: no validated match")
+            return
+        }
+        members[KEY_ON_DEMAND_IN_FREE_GETTERS] = methods
+        sigs[KEY_ON_DEMAND_IN_FREE_GETTERS] = methods.joinToString("|") { signatureOf(it) }
+    }
+
+    private fun isOnDemandInFreeGetter(method: Method): Boolean {
+        if (method.parameterCount != 0) return false
+        val name = method.returnType.name
+        return (name == "boolean" || name == "java.lang.Boolean") &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
     }
 
     private fun findPremiumTabFlag(dexKit: DexKitBridge, classLoader: ClassLoader): Method? {
