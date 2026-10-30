@@ -77,6 +77,12 @@ The `serverResourcesPatch` **modifies AndroidManifest.xml** to register:
 | Proxy through a separate app | Requires a standalone APK installed alongside the module — loses the single-module simplicity |
 | Use LSPatch integrated mode | LSPatch patches the APK at install time, so it *could* modify the manifest — but this is no longer "Xposed hooking", it's hybrid patching |
 
+### Installer-Dependent: Mount Installs Are Excluded
+
+Commit `dd35dae` (`fix: restrict local files server to installers that can register components`) encodes a constraint the theory above misses: even a patcher that *can* rewrite the manifest only gets the provider if the install path preserves it. A root mount install keeps Spotify's stock manifest, so the provider is never registered, server files never appear, and the server browser cannot open. Morphe therefore offers this patch only when the selected installer can register components at install time.
+
+That is the general lesson for SpotXero: a hook that only *reads* Spotify's code survives every install mode, while a hook that requires a component or authority is silently inert on mount installs and on anything that reuses the stock manifest. Treat "works in the author's install mode" as an unverified claim.
+
 ### Potentially Portable Parts
 
 If the **manifest blockers** were somehow solved (e.g., via LSPatch integration), the remaining bytecode hooks are standard method interceptions that *could* work with Xposed:

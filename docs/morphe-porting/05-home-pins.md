@@ -4,7 +4,7 @@
 **Runtime code**: [`HomePins.java`](file:///home/s1ddhants1/Projects/spotify/morphe-patches/extensions/extension/src/main/java/app/spicetify/extension/spotify/home/HomePins.java)
 **Depends on**: [`playerBridgePatch`](file:///home/s1ddhants1/Projects/spotify/morphe-patches/patches/src/main/kotlin/app/spicetify/patches/spotify/extensions/ExtensionsPatch.kt#L108-L130) (Cosmos router bridge for Your Library queries)
 
-**Porting difficulty**: ⚠️ Complex — requires the PlayerBridge/Cosmos infrastructure
+**Porting difficulty**: ⚠️ Complex — the display hook is small; the PlayerBridge/Cosmos infrastructure is needed only for the picker
 
 ---
 
@@ -46,6 +46,13 @@ The Home pins **picker** needs to read Your Library through the Cosmos router (v
 - Hooks `SharedCosmosRouterService.<init>` at the point where `NativeRouter.initializeScheduling()` has been called.
 - Hands the service to `PlayerBridge.onCosmos(Object)` which extracts a `CosmosRouter` via reflection.
 - The bridge then sends esperanto/cosmos requests through Spotify's own router.
+
+### Verified details (Spotify 9.1.80.2221)
+
+- **The real guard is the field store.** The patch requires the instruction at index 1 to be `iput-object v2, v0, Lp/joz0;->a:ArrayList` with `v0` = `this`, then injects before it. Commit `d966493` (Spotify 9.1.88) records why that matters: *"The section list is now also built for the Compose grid, so both renderers get the pinned order"* — pinning the model instead of the renderer keeps working when Spotify swaps grid implementations. A port that hooks the renderer is re-deriving that fix the hard way.
+- **Tile placeholders are `String[] {uri, title, image}`** passed through the bridge; both the crossfade and the lazy grid render them, so the injected list must keep that exact element shape.
+- **`plan()` runs on every Home render**, so it must be cheap and must never mutate Spotify's own list in place in a way that leaks across sections; the bridge returns the list Spotify should use.
+- **Pins are `SharedPreferences`-backed** in Morphe (`spicetify_home_pins`). Cross-process RemotePreferences in SpotXero means the picker and the hook read through IPC, so the plan step needs a cached snapshot rather than a per-render preferences read.
 
 ---
 

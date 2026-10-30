@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">SpotXero</string>
-    <string name="module_description">Spotify Adblock Module</string>
+    <string name="module_description">Spotify enhancement module</string>
     <string name="framework_active_title_dynamic">%1$s Module Active</string>
     <string name="framework_inactive_title">Module Inactive</string>
     <string name="framework_active_desc">Connected to %1$s %2$s</string>
@@ -17,7 +17,7 @@
     <string name="title_features">Features</string>
     <string name="feature_clean_sharing_title">Clean Sharing Links</string>
     <string name="feature_spotify_amoled_title">Spotify Pure Black (AMOLED)</string>
-    <string name="feature_block_ads_title">Block Audio Ads</string>
+    <string name="feature_block_ads_title">Block Ad Fetching</string>
     <string name="feature_hide_premium_tab_title">Hide Premium Tab</string>
     <string name="feature_hide_brand_ads_title">Hide Home &amp; Browse Ads</string>
     <string name="feature_hide_player_ads_title">Hide Player Ad Cards</string>

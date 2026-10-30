@@ -4,6 +4,7 @@
 **Runtime code**: [`theme/`](file:///home/s1ddhants1/Projects/spotify/morphe-patches/extensions/extension/src/main/java/app/spicetify/extension/spotify/theme/) — 11 Java files (SpicetifyTheme, ThemeRuntime, ThemeOverlay, ThemeRoleMap, ComposeTheme, ColorTable, ThemeTable, ThemeState, ThemePresets, ThemeResolver, ThemeBackground, ArgbColors)
 
 **Porting difficulty**: ⚠️ Complex — requires alternative approaches to resource patching
+**Status in SpotXero**: 🟡 AMOLED only — `hooks/theme/SpotifyAmoledHook.kt` intercepts both `Resources.getColor` overloads and maps Spotify's dark greys to black. Layers 2 and 3 (role table, Compose palette/raw colors/surface/scrim/icon tint) and the configuration UI are unported.
 
 ---
 

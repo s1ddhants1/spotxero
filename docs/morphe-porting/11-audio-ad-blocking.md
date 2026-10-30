@@ -543,6 +543,8 @@ object AdResolverKeys {
 
 ## Risk Assessment
 
+These are the risks of the *plan* above, written before the device work. The limits that turned out to matter — the break being native, `GetAds` not being the creative source, ad metadata being read-only — are in the Verified Findings section at the end.
+
 | Layer | Risk | Mitigation |
 |---|---|---|
 | L1 Product state | Server-side validation could detect mismatch | Hook only the local reader, not the writer; don't send premium state upstream |
@@ -553,4 +555,150 @@ object AdResolverKeys {
 
 ## Recommendation
 
-**Start with L1 (product state override) alone.** If hooking the product state value reader to return `ads: "0"` and `catalogue: "premium"` works, it eliminates audio ads, visual ads, and upgrade CTAs in one hook. Everything else is defense-in-depth for when L1 alone isn't sufficient.
+**Ship `AdResponseHook` + `AdSkipHook`, and treat L1 as unverified rather than as the answer.** The plan above was written before the device measurements; the Verified Findings and Native Disassembly sections at the end of this document overturn its premise. L1's "one hook blocks everything" does not hold on this version: the break is scheduled and played by the native player, not by the Java product-state reader, and L1 was never exercised on device. Native does carry a product-state ads field, so L1 is untested, not disproven. L2–L4 remain worth having for the surfaces they do reach (ad fetching, ad UI, analytics), but none of them stops a break from starting or from being audible. The only audible option measured as feasible is silence-the-break, and the static pass over the player library found no single gate to flip.
+
+---
+
+## Verified Findings (2026-10-30, Spotify 9.1.x, free tier, device SM-S938B)
+
+Audio ad breaks are **not removable from Java-process hooks on this version**. Measured on a real device while playing a playlist, each break was a two-ad sequence (`Advertisement • 1 of 2`, `• 2 of 2`) tracked in the media session metadata. Every observation below is from the same session:
+
+| Observation | Evidence |
+|---|---|
+| The break is driven by the native player, not Java | The ad track (`spotify:ad:<id>`) becomes current from `ContextPlayer` state, and the app only observes it (`b72#d` reads `is_advertisement`/`ad_id`/`duration`). There is no separate player process: `ps -A` shows one `com.spotify.music` process, and the engine is native — `k2q0` calls `System.loadLibrary("orbit-jni-spotify")`, and `liborbit-jni-spotify.so` contains `ad_break_started`, `ad_break_in_progress`, `ad.skippable_ad_delay`, `cannot_fetch_ads_during_an_ad_break` and `ad_clips_per_free_tier_ad_break` |
+| No Java ad-track factory runs | `ku0#a` (the only `ContextTrack` builder writing `is_advertisement`) never fired at a break; only observers did |
+| `GetAds` returns before playback and can be emptied safely | The stub is called per break; returning a decoded empty `GetAdsResponse` is stable (no crash) but the break still plays, so the creative does not come from that response |
+| Ad metadata is read-only for playback | Forcing `is_advertisement(ContextTrack)` to `false` (L4) changes nothing in playback behaviour; it only feeds UI/analytics |
+| Cached creative is not the source | Purging the whole app cache and restarting still produced ad breaks |
+| The ad is not skippable client-side | `KEYCODE_MEDIA_NEXT` during `Advertisement • 2 of 2` was ignored; `Restrictions.disallowSkippingNextReasons` and `ad.skippable_ad_delay` are supplied by the player state |
+| `SubInStream` is not the audio path | `SubInStream` is subscribed from a Compose screen (start-up, once); silencing that stream never coincided with a break |
+| The full ad track is visible in Java, but without any audio reference | Hooking `AutoValue_ContextTrack#metadata()` shows the break's track with `ad_id`, `ad.token`, `ad.is_skippable=false`, `duration=30000`, `has_ephemeral_uri=true` — and no audio URL or file id |
+| Java's network layer only touches ad *tracking*/asset hosts | Instrumenting `java.net.InetAddress` shows music resolving `audio-ak.spotifycdn.com` / `image-cdn-fa.spotifycdn.com`, while a break adds `heads-fa-tls13.spotifycdn.com` ~1 s before the ad becomes current, then `aet.spotify.com` and `canvaz.scdn.co` |
+| Cutting Java DNS for the ad host does not stop the break | Forcing `InetAddress.getAllByName("heads-fa-…")` to throw `UnknownHostException` still played both ads of the break (30 s each); music resumed normally afterwards, so the ad audio is fetched by native code with its own resolution |
+
+**Independent corroboration**: [oyasumi-patches](12-oyasumi-cross-check.md), a separate Morphe patcher pinned to Spotify `9.1.90.2270`, patches the same `GetAds` coroutine wrapper and returns an empty `GetAdsResponse` via the proto parse (`GetAdsResponse;->r([B)` with a zero-length array, because `DEFAULT_INSTANCE` is private). Its own note admits the same limit — *"this seam is only one of Spotify's ad paths; ... playback slates may use other services. Runtime behavior is untested"* — while the patch description claims audio ads are disabled. Two projects, one seam, no evidence of an audible block: keep the UI wording at "blocks ad fetching".
+
+Kept hooks: [`AdResponseHook`](file:///home/s1ddhants1/Projects/spotify/spotxero/app/src/main/kotlin/app/spotxero/hooks/ads/AdResponseHook.kt) (empty `GetAds` response, blocks ad fetching for other surfaces) and [`AdSkipHook`](file:///home/s1ddhants1/Projects/spotify/spotxero/app/src/main/kotlin/app/spotxero/hooks/ads/AdSkipHook.kt) (`is_advertisement` → `false`, keeps ad UI/analytics from treating ad tracks as ads).
+
+## Native Disassembly (`liborbit-jni-spotify.so`, 9.1.94.1929)
+
+Pulled `split_config.arm64_v8a.apk` from the test device and extracted `lib/arm64-v8a/liborbit-jni-spotify.so`: 25,065,936 bytes, aarch64, stripped (NDK r27c, BuildID `463ffdb9ed155010`), `.text` at `0xa54b10`, `.rodata` at `0x332500`, embedded protobuf descriptors in `protodesc_cold` at `0x581a0c`. String xrefs were resolved by scanning `.text` for adjacent `adrp`+`add` pairs that materialise a `.rodata` address, then reading each site with `llvm-objdump`. Addresses below are this build only.
+
+### Where the ad-break vocabulary actually lands
+
+| String | Address | Referencing code | Role |
+|---|---|---|---|
+| `ad_break_started` | `0x359e36` | `0x15bafac` | small function returning the literal |
+| `ad_break_in_progress` | `0x383517` | `0x12c75fc` | case **43** of an enum→string switch at `0x12c75a8` (62 parsed jump-table entries) |
+| `ad_break_ended` | `0x342c0e` | `0x11a7008` | transition handler; `csel` picks this or `user_skipped_out` on `w23 == 4` |
+| `cannot_fetch_ads_during_an_ad_break` | `0x371ac8` | `0x12c789c` | case **1** of the same switch — an ad-slot skip reason, not a guard |
+| `slot_fetching_turned_off` | `0x36aaab` | `0x12c7644` | case **47** of the same switch |
+| `quiet_dummy` | `0x37c2cd` | `0x12c75e4` | case **50** — placeholder ad |
+| `ad.skippable_ad_delay` | `0x444a38` | `0x12d8474` | ad-track metadata assembly, next to `ad.canvas.file_id`, `ad.video_orientation`, `ad.companion.type`, `podcast_ads.parent_uri` |
+| `last_ad_break_stream_time` | `0x334a39` | `0xb1be14` | global initialised in static init (`__cxa_atexit`), among persisted player-state keys (`product state changed`, `played-state`, `active_ads`) |
+| `ad_clips_per_free_tier_ad_break` | `0x4423e8` | `0x1288f54` | client config registration: section `core-list-player`, default **6** |
+
+None of these is a scheduling branch. The switch is the ad-slot **reason** enum; the metadata insert is where the Java-visible ad track gets its `ad.*` keys; the config call registers a knob. The library also carries `FreeTierQueue`, `FreeTierSequence`, `MOBILE_FREE_TIER`, `TABLET_FREE_TIER`, so the free-tier path is real — it just has no printable decision point.
+
+### The two knobs that are about scheduling
+
+**Clips per break.** One function registers the `core-list-player` keys:
+
+| Key | Default |
+|---|---|
+| `ad_clips_per_podcast_segment` | 12 |
+| `ad_clips_per_free_tier_ad_break` | 6 |
+| `ad_clip_lead_time_ms` | 200 |
+| `narration_clip_lead_time_ms` | 3000 |
+| `audio_url_clip_lead_time_ms` | 3000 |
+| `audio_content_clip_lead_time_ms` | 3000 |
+| `video_content_clip_lead_time_ms` | 2000 |
+| `use_fake_podcast_ads` | (bool) |
+
+The registration passes `16` (length of `core-list-player`) and `31` (length of `ad_clips_per_free_tier_ad_break`) alongside the default, i.e. it is a typed `registerInt(section, key, default)`.
+
+**Slot fetching.** Case 47 (`slot_fetching_turned_off`) proves the model has an off-state for slot fetching, and the library speaks the ads services itself: `spotify.ads.esperanto.proto.SlotSettings`, `GetSlotSettings(Response)`, `GetAllSlotSettings(Request)`, `GetSlots(Request/Response)`, `ad_slots.proto`, plus fields `enabled_slots` / `active_slots` in its embedded descriptors. Runtime strings confirm the pipeline is native: `core-ad-config-requester`, `core-ad-fetcher`, `ad-fetcher-enqueue-ads`, `fetching_ads_throttled`, `early_ad_fetching_hook`, `late_ad_fetching_hook`, `ad_slot_disabled`, `slot_has_active_ad`, `slot_does_not_exist`, `always_refill_preroll_slot`, `always_refill_stream_slot`.
+
+### Verdict
+
+- **No single gate to flip.** The player has a state/reason vocabulary and takes its ad policy from the ad config it fetches from the ads service. Nothing next to these strings tests "free tier" and branches.
+- **Slot fetching is the closest real switch.** Emptying `enabled_slots`, or forcing slot fetching off, is the change that maps to "no ad to play". It means intercepting an esperanto/protobuf exchange inside the library — no symbol, no JNI identity, no string anchor beyond the reason name.
+- **Clips-per-break has two ends, and only one is worth patching.** The local default is 6, but the measured break played 2 clips, so the effective value came from the server. Rewriting the *default* (`mov w5, #6` in the registration function) changes nothing live, because the server value overwrites it. The other end is the store after the lookup: the coerced int is written straight into the break-config object, so zeroing it there covers the server value too. That is the patch that was applied below.
+- **Still no Java surface.** None of `enabled_slots`, `ad_clips_per_free_tier_ad_break`, `slot_fetching_turned_off`, `core-ad-config-requester`, `FreeTierQueue`/`FreeTierSequence` exists in the dex. Java has read-only models (`AdBreakContext`, `AdBreakStatus`) and free-tier UI flags only.
+- **Any patch is per-build binary work**, not a semantic resolver: a native hook (LSPosed-only) or an offline `.so` patch in a repacked APK. Both sit outside this module's install model. One such patch (free-tier clips per break → 0) was applied and loaded on device — see Applied Patch — but its audible effect was not observed, so it is not a claim of working ad removal.
+
+### Corrections this forces
+
+- "The library references no `com/spotify/ads/*` class at all" is true but incomplete: it does not call Java ad classes because it speaks the ads **protos** itself. The observability conclusion stands; the stated reason does not.
+- "The Java product-state reader has nothing to gate" was too strong: `last_product_state_ads_enabled` exists as a native proto field, so product state does reach the player. It is not proven to gate scheduling, and L1 was never exercised on device — L1 is **untested**, not dead.
+
+## Applied Patch (2026-10-30, build 9.1.94.1929, device SM-S938B)
+
+One instruction in `liborbit-jni-spotify.so`, at `0x12895d4` inside `.text` (file offset == vaddr for the first `LOAD`):
+
+```
+str w0, [sp, #0x11c]   ; B9011FE0  →  str wzr, [sp, #0x11c]   ; B9011FFF
+```
+
+### Why this store and not the registration default
+
+The config chain in the player is: `registerInt("core-list-player", "ad_clips_per_free_tier_ad_break", 6)` at `0x1288f54` (`0x15d42bc` materialises the key), then a typed get at `0x12895c0`–`0x12895cc` (`0x14706b4`, key `0x15d42bc`, length 31), whose result in `w0` is stored here. The two clip counts are then copied into the break-config object at `0x1289cc0`:
+
+```
+0x1289cb4  ldr w10, [sp, #0xe4]     ; ad_clips_per_podcast_segment  (length 28, default 12)
+0x1289cb8  ldr w9,  [sp, #0x11c]    ; ad_clips_per_free_tier_ad_break (length 31, default 6)
+0x1289cc0  stp w10, w9, [x20, #0x18]  ; fields 0x18 and 0x1c of the config object
+```
+
+Zeroing `[sp,#0x11c]` therefore zeroes field `0x1c` — the free-tier value — *after* the config lookup, so a server-supplied override is zeroed too, not just the default. The podcast-segment store (`0x12895bc`, field `0x18`) was left alone; it looks similar at a glance and is the easy mis-read here.
+
+### Where the edit has to land
+
+The library is **not extracted** on this install: there is no `EXTRACT_NATIVE_LIBS` flag and `lib/arm64/` under the code path is empty. `split_config.arm64_v8a.apk` holds the `.so` stored (uncompressed) with its data starting at apk offset `0x430000`, page aligned, and the loader mmaps it from there. So the patch is 4 bytes at **apk offset `0x16B95D4`** = `0x430000 + 0x12895d4`, and the count of differing bytes in the whole 33.4 MB APK is exactly 1.
+
+The APK no longer verifies against its signature, so it cannot be installed as-is. What was tested is the root route: bind-mount the patched split over the installed one, force-stop, relaunch. Shipping it to non-root users means a repacked APK — the LSPatch arm of that question was explicitly deferred and has not been assessed.
+
+### Device evidence
+
+| Check | Result |
+|---|---|
+| Mounted split is what the app maps | `/proc/<pid>/maps` shows `split_config.arm64_v8a.apk` mapped `r-xp` at pgoff `0x430000` |
+| Patched instruction is live in the process | `/proc/<pid>/mem` at `base+0x12895d4` reads `ff1f 01b9` (`str wzr, [sp, #0x11c]`) |
+| App health on the patched library | Media session `PLAYING`, position advancing, track changes across a queue (Dream On → Cinderella Man → River → The King and I), no tombstone, no FATAL, no `linker` error |
+| Survives a process restart | After a force-stop and cold start, a new pid maps the split at pgoff `0x430000` and `base+0x12895d4` again reads `ff1f 01b9` |
+| Audible effect on an ad break | **Not observed.** No break in ~35 minutes of patched playback, including ~4 minutes with the module's ad hooks off |
+
+What was tried to force a break, and why it did not work:
+
+- `ad-state-storage.bnk` (protobuf, per user under `files/settings/Users/*-user/`) carries `elapsed_stream_time`, `ad_break_time`, `last_ad_break_stream_time`, `unix_epoch_of_last_impression`, `triggered_ad_duration`. Rewriting `last_ad_break_stream_time` to `0` does not make a break due: the player rewrites the file with `elapsed_stream_time = 0` on restart, so the elapsed-since-break delta resets with it.
+- Setting `pref_block_ads=false` in the module (its `GetAds` stub no longer answers empty) and restarting on the patched build still produced no break in ~4 minutes, so the module's own stub is not the thing withholding one — this account simply did not schedule a break inside the test windows.
+
+So the patch proves three things and not a fourth. It is applied (one differing byte in the 33.4 MB APK), it is loaded and live in the process, and it leaves normal playback untouched across a cold start. It is **not** proven to silence a break, because no break occurred; the zero-clip behaviour is read off the code path (`0x12895d4` → field `0x1c` → the clip count the break is built from), not watched.
+
+### Re-applying it
+
+Offsets are per build. On this build, from a copy of the installed split:
+
+```
+# split_config.arm64_v8a.apk, .so data at 0x430000
+printf '\xff\x1f\x01\xb9' | dd of=split_patched.apk bs=1 seek=$((0x430000 + 0x12895d4)) conv=notrunc
+su -c 'mount -o bind /data/local/tmp/split_patched.apk \
+  /data/app/*/com.spotify.music-*/split_config.arm64_v8a.apk'
+```
+
+A rebuild of Spotify replaces the split and the mount must be redone, with the offsets re-derived. `umount` on that path (or a reboot) reverts to the stock library. The test device was left mounted on the patched split.
+
+## Options If Zero Ad Time Is Required
+
+| Option | Reachable from this module? | Evidence | Cost |
+|---|---|---|---|
+| Premium | n/a | account-level | — |
+| Empty `enabled_slots` / slot fetching off inside the native ad manager | No | case 47, embedded ad protos | native hook or `.so` patch, per build |
+| Force clips-per-break to 0 at the config store | Not from the module; applied as an offline APK patch | store at `0x12895d4` → field `0x1c` of the break config | one 4-byte edit, see Applied Patch |
+| Interrupt the break with a player command | Untested | `KEYCODE_MEDIA_NEXT` ignored; no Java skip API (`notifySkipAd` is Comscore) | one device test |
+| Block the ad host at OS level | Untested | Java DNS hook proved only that native resolves separately | one DNS/VPN rule |
+| Silence the break | Yes | `is_advertisement` / `spotify:ad:` signal exists in Java | mute + restore |
+
+Native hooking needs the libxposed C++ API (`META-INF/xposed/native_init.list` → `native_init` → `on_library_loaded` → `hook_func(addr, replace, backup)`), which only LSPosed implements — LSPatch never calls `native_init` ([LSPatch#17](https://github.com/LSPosed/LSPatch/issues/17)) — so it is root-only. The dynamic symbol table has 2577 entries, of which only `JNI_OnLoad`, `JNI_OnUnload` and one `SPTTagReader` function are usable, so a hook address has to come from binary matching; that is why none of this belongs in the module.
+
+Coverage limits: one device (SM-S938B), one build (9.1.94.1929), free tier, one region. The disassembly was read-only. The single clips-per-break patch was loaded and played for ~35 minutes (see Applied Patch), but no ad break occurred while it was active, so the zero-clip behaviour is inferred from the code path, not observed.

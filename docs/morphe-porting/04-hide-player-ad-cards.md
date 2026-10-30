@@ -42,76 +42,62 @@ public static boolean showEmbeddedAd() {
 }
 ```
 
+### Verified details (Spotify 9.1.80.2221)
+
+- **Only two gates, both resolved by string constants.** `PlayerAdCardsPatch` finds the target by searching for the literal `"slot_id"`, `"ad_break"` and `"partner_name"` (the ad-card metadata fields) and for the cards-group builder used by the player; it then hooks (a) the boolean gate that decides the ad-card list is non-empty and (b) the grouping call that produces the card group. The `Cr` interface is consulted, not hooked.
+- **Runtime logic is 16 lines.** `PlayerAdCards.java` is a settings adapter only (`PlayerAdCardsVariant` toggle). All the work is in which list the player is handed, which keeps the port small: return an empty/composed-without-ads collection and the card group renders nothing.
+- **Why grouping, not filtering**: filtering individual item accessors is per-draw and per-accessor; composing the group once, as the patch does, is one interception point regardless of how many accessors the renderer calls. This is the "latest safe point" rule in SpotXero's AGENTS.md.
+- **It does not stop audio.** Ad breaks still arrive and still play; the doc's premise (no cards shown) depends entirely on the group being empty, so a partial hook degrades to "cards visible" rather than to broken playback — and the patch description says so: "Does not suppress audio ads or other player overlays. Experimental."
+
 ---
 
 ## Xposed Porting Strategy
 
 ### DexKit Resolution
 
-**Target 1 — Image ad mapper:**
+The strings are the anchor; the `Section`/`ContextTrack` types are not. Resolve the ad-card metadata method first, then take the two call sites it feeds — the `Cr` object it builds and the boolean gate that decides whether the group is shown.
+
 ```kotlin
-// Section.o0() is on com.spotify.scrollsita.v1.Section — a stable named class
-val sectionClass = loadClass("com.spotify.scrollsita.v1.Section")
-
-// Find the boolean method o0() on Section
-dexKit.findMethod {
+val adCardMetadata = dexKit.findMethod {
     matcher {
-        declaredClass(sectionClass.name)
-        paramCount(0)
-        returnType("boolean")
-        name("o0") // may be obfuscated, but the class is named
+        usingStrings("slot_id", "ad_break", "partner_name")
     }
-}
+}.singleOrNull() ?: throw IllegalStateException("Ad card metadata method not resolved")
 
-// OR: find the mapper that calls this method — the method on an obfuscated class
-// that receives an Object, calls Section.o0(), and maps sections conditionally
-```
-
-**Target 2 — Embedded ad predicate:**
-```kotlin
-// The predicate takes a ContextTrack and returns boolean.
-// ContextTrack is com.spotify.player.model.ContextTrack — a stable named class.
-val contextTrackClass = loadClass("com.spotify.player.model.ContextTrack")
-
-dexKit.findMethod {
+val adCardGate = dexKit.findMethod {
     matcher {
-        paramTypes(contextTrackClass.name)
         returnType("boolean")
-        // The method checks whether a track is an embedded ad
-        // Can narrow down by: the class has an Object field, method reads it first
+        // calls adCardMetadata, or reads the list it fills, then branches into the card group
+        invokes(adCardMetadata)
     }
-}
+}.single()
 ```
 
 ### Hook Implementation
 
 ```kotlin
-// Hook 1: Image brand ad boolean
-// Option A: Hook Section.o0() directly
-module.hook(sectionIsAdMethod).after { param ->
+// Hook 1: the gate — cheap, and it is the shape Morphe hooks first
+module.hook(adCardGate).before { param ->
     if (PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_PLAYER_ADS, false)) {
-        if (param.result == true) {
-            param.result = false
-        }
+        param.result = false
+        return@before
     }
 }
 
-// Option B: Hook the mapper method that calls o0()
-module.hook(adMapperInvoke).before { param ->
-    // Intercept the entire mapping to suppress ad sections
-}
-
-// Hook 2: Embedded ad predicate
-module.hook(embeddedAdPredicate).before { param ->
+// Hook 2: the group builder — prefer this one; the player is handed a group
+// that contains no ad cards, so nothing downstream has to filter per draw
+module.hook(cardsGroupBuilder).before { param ->
     if (PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_PLAYER_ADS, false)) {
-        param.result = false
-        return@before // short-circuit
+        param.result = buildGroupWithoutAds(param.args[0])
+        return@before
     }
 }
 ```
 
+Keep both sites independent: if one resolves and the other does not, attach the one that resolved and report the miss, because they cover different paths (image card vs. embedded ad) and neither is implied by the other.
+
 ### Settings Integration
-Add `PrefKeys.KEY_HIDE_PLAYER_ADS` and a toggle in SpotXero settings.
+Add `PrefKeys.KEY_HIDE_PLAYER_ADS` and a toggle in SpotXero settings. Read the preference once per attach where possible — the gate is on the player's render path.
 
 ---
 
@@ -119,11 +105,13 @@ Add `PrefKeys.KEY_HIDE_PLAYER_ADS` and a toggle in SpotXero settings.
 
 | Aspect | Morphe | SpotXero Port |
 |---|---|---|
-| Image ad hook | Injects after `move-result` in the obfuscated mapper | Hook `Section.o0()` directly (stable class) or hook mapper |
-| Embedded ad hook | Inserts early-return at index 0 of obfuscated predicate | `.before {}` with `param.result = false` — idiomatic Xposed |
-| Version coupling | Hardcoded `Lp/ja31;`, `Lp/onq;`, field references | Hook the stable named `Section` class and `ContextTrack`-taking methods |
+| Target | Calls found by the `"slot_id"` / `"ad_break"` / `"partner_name"` strings | Same string anchors through DexKit; no `Cr`-walking |
+| Gate hook | Method replacement on the non-empty cards gate | `.before {}` with `param.result = false` |
+| Group hook | Method replacement on the card-group builder | Reproduced as a `.before {}` on the same builder, returning the non-ad group |
+| Runtime logic | `PlayerAdCards.java` settings adapter (16 lines) | Single preference read |
+| Fail mode | Throws `PatchException` on a changed shape | Cards stay visible; playback untouched |
 
 ## Risk Assessment
-- **Low risk for image ads**: `scrollsita.v1.Section` is a named protobuf class.
-- **Medium risk for embedded ads**: The predicate method is on an obfuscated class; need a robust DexKit query to find it (e.g., by parameter type `ContextTrack` + return type `boolean` + class shape).
-- **Mitigation**: The `ContextTrack` parameter type is a stable anchor. Combine with field-count or method-count filters on the declaring class.
+- **Low risk on the strings**: ad-card metadata keys are server-driven and have to stay stable for Spotify's own tooling.
+- **Medium risk on the gate**: a boolean gate around a list is a common shape; confirm the strings are in the same method before hooking, and refuse on more than one candidate.
+- **Mitigation**: prefer the group hook over the gate (one interception point, no per-item draw cost), and verify by playing a track through a real ad break rather than by inspecting the card group.
