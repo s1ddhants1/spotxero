@@ -29,7 +29,7 @@ object HidePremiumTabHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val result = chain.proceed()
-                if (PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_PREMIUM_TAB, false)) {
+                if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     false
                 } else {
                     result

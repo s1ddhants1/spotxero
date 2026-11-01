@@ -20,7 +20,7 @@ static bool s_native_hooked = false;
 
 static bool is_target_library(const char *str) {
     if (!str) return false;
-    return (strstr(str, "liborbit") != NULL || strstr(str, "split_config") != NULL);
+    return (strstr(str, "liborbit") != NULL);
 }
 
 static bool patch_single_instruction(uintptr_t addr) {
@@ -89,20 +89,22 @@ static bool scan_process_maps() {
 
 extern "C" void on_library_loaded(const char *name, void *handle) {
     if (s_native_hooked) return;
-    if (name && !is_target_library(name)) return;
+    if (!name || !is_target_library(name)) return;
 
     if (handle) {
         void *onload = dlsym(handle, "JNI_OnLoad");
         if (onload) {
             Dl_info info;
-            if (dladdr(onload, &info) != 0 && info.dli_fbase) {
-                uintptr_t base = (uintptr_t)info.dli_fbase;
-                uintptr_t fast_path_addr = base + 0x12895d4;
+            if (dladdr(onload, &info) != 0 && info.dli_fbase && info.dli_fname) {
+                if (strstr(info.dli_fname, "liborbit") != NULL) {
+                    uintptr_t base = (uintptr_t)info.dli_fbase;
+                    uintptr_t fast_path_addr = base + 0x12895d4;
 
-                if (patch_single_instruction(fast_path_addr)) {
-                    s_native_hooked = true;
-                    LOGI("Successfully applied fast-path native patch to liborbit-jni-spotify.so");
-                    return;
+                    if (patch_single_instruction(fast_path_addr)) {
+                        s_native_hooked = true;
+                        LOGI("Successfully applied fast-path native patch to liborbit-jni-spotify.so");
+                        return;
+                    }
                 }
             }
         }

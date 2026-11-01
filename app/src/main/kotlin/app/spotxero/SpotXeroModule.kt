@@ -43,6 +43,35 @@ class SpotXeroModule : XposedModule() {
         }
 
         runCatching {
+            val appClass = param.classLoader.loadClass("android.app.Application")
+            val attachMethod = appClass.getDeclaredMethod("attachBaseContext", android.content.Context::class.java)
+            deoptimize(attachMethod)
+            hook(attachMethod)
+                .setId("app_attach_base_context_target_prefs")
+                .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    val ctx = chain.getArg(0) as? android.content.Context
+                    if (ctx != null) {
+                        PreferencesManager.initTarget(ctx)
+                    }
+                    chain.proceed()
+                }
+
+            val onCreateMethod = appClass.getDeclaredMethod("onCreate")
+            deoptimize(onCreateMethod)
+            hook(onCreateMethod)
+                .setId("app_on_create_target_prefs")
+                .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    val app = chain.getThisObject() as? android.content.Context
+                    if (app != null) {
+                        PreferencesManager.initTarget(app)
+                    }
+                    chain.proceed()
+                }
+        }
+
+        runCatching {
             System.loadLibrary("spotxero_native")
             log(Log.INFO, TAG, "Loaded native patch library")
         }.onFailure {

@@ -128,12 +128,7 @@ fun SpotXeroApp(
                                 onTogglePremium = { viewModel.setPremiumEnabled(it) },
                                 onCleanSharingToggle = { viewModel.setCleanSharing(it) },
                                 onSpotifyAmoledToggle = { viewModel.setSpotifyAmoled(it) },
-                                onBlockAdsToggle = { viewModel.setBlockAds(it) },
-                                onHidePremiumTabToggle = { viewModel.setHidePremiumTab(it) },
-                                onHideBrandAdsToggle = { viewModel.setHideBrandAds(it) },
-                                onHidePlayerAdsToggle = { viewModel.setHidePlayerAds(it) },
                                 onHidePodcastsToggle = { viewModel.setHidePodcasts(it) },
-                                onDisableSmartShuffleToggle = { viewModel.setDisableSmartShuffle(it) },
                                 onRequestScope = { viewModel.requestScope() }
                             )
                         }

@@ -13,40 +13,37 @@ object ProductStateHook {
     private const val TAG = "SpotXero.ProductState"
 
     fun install(module: XposedModule) {
-        val methods = DexKitResolver.get<List<Method>>(DexKitResolver.KEY_PRODUCT_STATE_GETTERS)
-        if (methods.isNullOrEmpty()) {
-            module.log(Log.WARN, TAG, "Product state getters not resolved, skipping")
+        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_PRODUCT_STATE_MAP)
+        if (method == null) {
+            module.log(Log.WARN, TAG, "Product state map getter not resolved, skipping")
             return
         }
 
-        for ((index, method) in methods.withIndex()) {
-            module.deoptimize(method)
-            module.hook(method)
-                .setId("product_state_getter_$index")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept result
-                    }
-                    val key = chain.args.getOrNull(0) as? String ?: return@intercept result
-                    val overridden = when (key) {
-                        "type" -> "premium"
-                        "catalogue" -> "premium"
-                        "ads" -> "0"
-                        "pick-and-shuffle" -> "true"
-                        "horizon" -> "FULL"
-                        "streaming-rules" -> ""
-                        else -> null
-                    }
-                    overridden ?: result
+        module.deoptimize(method)
+        module.hook(method)
+            .setId("product_state_map")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val result = chain.proceed()
+                val map = result as? Map<*, *> ?: return@intercept result
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept result
                 }
-        }
+                @Suppress("UNCHECKED_CAST")
+                val modified = (map as Map<Any?, Any?>).toMutableMap()
+                modified["type"] = "premium"
+                modified["catalogue"] = "premium"
+                modified["ads"] = "0"
+                modified["pick-and-shuffle"] = "0"
+                modified["horizon"] = "FULL"
+                modified["streaming-rules"] = ""
+                modified
+            }
 
         module.log(
             Log.INFO,
             TAG,
-            "Hooked ${methods.size} product state getters: ${methods.joinToString { "${it.declaringClass.simpleName}#${it.name}" }}"
+            "Hooked product state map: ${method.declaringClass.simpleName}#${method.name}"
         )
     }
 }

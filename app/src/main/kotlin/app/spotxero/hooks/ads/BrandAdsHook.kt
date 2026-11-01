@@ -24,7 +24,7 @@ object BrandAdsHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val result = chain.proceed()
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_BRAND_ADS, true)) {
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept result
                 }
                 val list = result as? List<*> ?: return@intercept result
@@ -40,7 +40,7 @@ object BrandAdsHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val result = chain.proceed()
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_BRAND_ADS, true)) {
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept result
                 }
                 val list = result as? List<*> ?: return@intercept result

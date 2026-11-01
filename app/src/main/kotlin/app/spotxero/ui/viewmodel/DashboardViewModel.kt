@@ -146,12 +146,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isLauncherIconHidden = AppUtils.isLauncherIconHidden(app),
                 isCleanSharingEnabled = PreferencesManager.isCleanSharingEnabled,
                 isSpotifyAmoledEnabled = PreferencesManager.isSpotifyAmoledEnabled,
-                isHidePremiumTabEnabled = PreferencesManager.isHidePremiumTabEnabled,
-                isBlockAdsEnabled = PreferencesManager.isBlockAdsEnabled,
-                isHideBrandAdsEnabled = PreferencesManager.isHideBrandAdsEnabled,
-                isHidePlayerAdsEnabled = PreferencesManager.isHidePlayerAdsEnabled,
-                isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled,
-                isDisableSmartShuffleEnabled = PreferencesManager.isDisableSmartShuffleEnabled
+                isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled
             )
         }
     }
@@ -254,33 +249,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(isSpotifyAmoledEnabled = enabled) }
     }
 
-    fun setHidePremiumTab(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PrefKeys.KEY_HIDE_PREMIUM_TAB, enabled)
-        PreferencesManager.isHidePremiumTabEnabled = enabled
-        _uiState.update { it.copy(isHidePremiumTabEnabled = enabled) }
-    }
 
-    fun setBlockAds(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PrefKeys.KEY_BLOCK_ADS, enabled)
-        PreferencesManager.isBlockAdsEnabled = enabled
-        _uiState.update { it.copy(isBlockAdsEnabled = enabled) }
-    }
-
-    fun setHideBrandAds(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PrefKeys.KEY_HIDE_BRAND_ADS, enabled)
-        PreferencesManager.isHideBrandAdsEnabled = enabled
-        _uiState.update { it.copy(isHideBrandAdsEnabled = enabled) }
-    }
-
-    fun setHidePlayerAds(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PrefKeys.KEY_HIDE_PLAYER_ADS, enabled)
-        PreferencesManager.isHidePlayerAdsEnabled = enabled
-        _uiState.update { it.copy(isHidePlayerAdsEnabled = enabled) }
-    }
 
     fun setHidePodcasts(enabled: Boolean) {
         val app = getApplication<Application>()
@@ -289,12 +258,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(isHidePodcastsEnabled = enabled) }
     }
 
-    fun setDisableSmartShuffle(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PrefKeys.KEY_DISABLE_SMART_SHUFFLE, enabled)
-        PreferencesManager.isDisableSmartShuffleEnabled = enabled
-        _uiState.update { it.copy(isDisableSmartShuffleEnabled = enabled) }
-    }
 
     fun showSettingsScreen() {
         _uiState.update { it.copy(showSettings = true, settingsSubpage = null) }

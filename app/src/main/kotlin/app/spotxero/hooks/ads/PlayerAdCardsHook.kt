@@ -30,7 +30,7 @@ object PlayerAdCardsHook {
             .setId("hide_player_image_ad")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
-                if (PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_PLAYER_ADS, true)) {
+                if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     false
                 } else {
                     chain.proceed()

@@ -3,6 +3,7 @@ package app.spotxero.core
 import android.util.Log
 import org.luckypray.dexkit.DexKitBridge
 import org.luckypray.dexkit.query.enums.StringMatchType
+import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 
 object DexKitResolver {
@@ -20,8 +21,41 @@ object DexKitResolver {
     const val KEY_IMAGE_AD_PREDICATE = "scrollsita_image_ad_predicate"
     const val KEY_PROVIDED_ITEMS_LIST = "provided_items_list_getter"
     const val KEY_SMART_SHUFFLE_FLAGS = "smart_shuffle_flags"
-    const val KEY_PRODUCT_STATE_GETTERS = "product_state_getters"
+    const val KEY_PRODUCT_STATE_MAP = "product_state_map"
+    const val KEY_PLAYER_RESTRICTIONS_METHODS = "player_restrictions_methods"
     const val KEY_ON_DEMAND_IN_FREE_GETTERS = "on_demand_in_free_getters"
+    const val KEY_SET_SHUFFLE_COMMAND_VALUE = "set_shuffle_command_value"
+    const val KEY_PLAYER_OPTIONS_SHUFFLE_GETTER = "player_options_shuffle_getter"
+    const val KEY_PLAYER_OPTIONS_BUILDER_SHUFFLE = "player_options_builder_shuffle"
+    const val KEY_PREPARE_PLAY_OPTIONS_BUILDER_BUILD = "prepare_play_options_builder_build"
+    const val KEY_PLAYER_OPTION_OVERRIDES_BUILDER_SHUFFLE = "player_option_overrides_builder_shuffle"
+    const val KEY_ES_CONTEXT_PLAYER_OPTIONS_SHUFFLE_GETTER = "es_context_player_options_shuffle_getter"
+    const val KEY_ES_OPTION_OVERRIDES_SHUFFLE_SETTER = "es_option_overrides_shuffle_setter"
+    const val KEY_PLAYER_OPTION_OVERRIDES_SHUFFLE_GETTER = "player_option_overrides_shuffle_getter"
+    const val KEY_PREPARE_PLAY_OPTIONS_SUPPRESSIONS_GETTER = "prepare_play_options_suppressions_getter"
+    const val KEY_SET_SHUFFLE_COMMAND_CREATE = "set_shuffle_command_create"
+    const val KEY_SET_SHUFFLE_COMMAND_VALUE_GETTER = "set_shuffle_command_value_getter"
+    const val KEY_PLAYBACK_SETTINGS_SET_SHUFFLE = "playback_settings_set_shuffle"
+    const val KEY_SHUFFLE_STATE_PARSE = "shuffle_state_parse"
+    const val KEY_SHUFFLE_ENUM_LINEAR = "shuffle_enum_linear"
+    const val KEY_SHUFFLE_ENUM_SHUFFLE = "shuffle_enum_shuffle"
+    const val KEY_SHUFFLE_ENUM_SMART_SHUFFLE = "shuffle_enum_smart_shuffle"
+    const val KEY_SHUFFLE_CONTEXT_MODES_GETTER = "shuffle_context_modes_getter"
+    const val KEY_SHUFFLE_CONTEXT_DEFAULT_GETTER = "shuffle_context_default_getter"
+    const val KEY_SHUFFLE_CONTEXT_ENABLED_GETTER = "shuffle_context_enabled_getter"
+    const val KEY_CONTEXT_CAPABILITY_INIT = "context_capability_init"
+    const val KEY_CLIENT_BASE_CALL_SINGLE = "client_base_call_single"
+    const val KEY_COROUTINE_CLIENT_BASE_CALL_SINGLE = "coroutine_client_base_call_single"
+    const val KEY_PREPARE_PLAY_OPTIONS_TO_PROTO = "prepare_play_options_to_proto"
+    const val KEY_PLAYER_OPTION_OVERRIDES_FILTER = "player_option_overrides_filter"
+    const val KEY_PREPARE_PLAY_OPTIONS_FROM_SKIP_TO = "prepare_play_options_from_skip_to"
+
+    private const val CLIENT_BASE = "com.spotify.esperanto.esperanto.ClientBase"
+    private const val COROUTINE_CLIENT_BASE = "com.spotify.esperanto.esperanto.CoroutineClientBase"
+    private const val PREPARE_PLAY_OPTIONS = "com.spotify.player.model.command.options.PreparePlayOptions"
+    private const val ES_PREPARE_PLAY_OPTIONS = "com.spotify.player.esperanto.proto.EsPreparePlayOptions\$PreparePlayOptions"
+    private const val PLAYER_OPTION_OVERRIDES = "com.spotify.player.model.command.options.PlayerOptionOverrides"
+    private const val SKIP_TO_TRACK = "com.spotify.player.model.command.options.SkipToTrack"
 
     private const val GENERATE_URL_RESPONSE = "com.spotify.share.linkgeneration.api.proto.GenerateUrlResponse"
     private const val GET_ADS_REQUEST = "com.spotify.ads.esperanto.proto.GetAdsRequest"
@@ -35,6 +69,27 @@ object DexKitResolver {
 
     private const val IMAGE_BRAND_AD_FIELD = "IMAGE_BRAND_AD_FIELD_NUMBER"
     private const val SHARE_RESPONSE_URL_COUNT = 4
+    private const val AUTO_VALUE_RESTRICTIONS = "com.spotify.player.model.AutoValue_Restrictions"
+    private val RESTRICTION_METHOD_NAMES = listOf(
+        "disallowTogglingShuffleReasons",
+        "disallowTogglingRepeatTrackReasons",
+        "disallowTogglingRepeatContextReasons"
+    )
+    private const val GET_VALUES_RESPONSE = "com.spotify.connectivity.product_state.esperanto.proto.GetValuesResponse"
+    private const val PLAYLIST_REQUEST_RESPONSE = "com.spotify.playlist.proto.PlaylistRequest\$Response"
+    private const val IS_ON_DEMAND_IN_FREE_FIELD = "isOnDemandInFree_"
+    private const val AUTO_VALUE_SET_SHUFFLE_COMMAND_BUILDER = "com.spotify.player.model.command.AutoValue_SetShufflingContextCommand\$Builder"
+    private const val AUTO_VALUE_PLAYER_OPTIONS = "com.spotify.player.model.AutoValue_PlayerOptions"
+    private const val AUTO_VALUE_PLAYER_OPTIONS_BUILDER = "com.spotify.player.model.AutoValue_PlayerOptions\$Builder"
+    private const val AUTO_VALUE_PREPARE_PLAY_OPTIONS_BUILDER = "com.spotify.player.model.command.options.AutoValue_PreparePlayOptions\$Builder"
+    private const val AUTO_VALUE_PLAYER_OPTION_OVERRIDES_BUILDER = "com.spotify.player.model.command.options.AutoValue_PlayerOptionOverrides\$Builder"
+    private const val AUTO_VALUE_PLAYER_OPTION_OVERRIDES = "com.spotify.player.model.command.options.AutoValue_PlayerOptionOverrides"
+    private const val AUTO_VALUE_PREPARE_PLAY_OPTIONS = "com.spotify.player.model.command.options.AutoValue_PreparePlayOptions"
+    private const val SET_SHUFFLE_COMMAND = "com.spotify.player.model.command.SetShufflingContextCommand"
+    private const val AUTO_VALUE_SET_SHUFFLE_COMMAND = "com.spotify.player.model.command.AutoValue_SetShufflingContextCommand"
+    private const val ES_CONTEXT_PLAYER_OPTIONS = "com.spotify.player.esperanto.proto.EsContextPlayerOptions\$ContextPlayerOptions"
+    private const val ES_CONTEXT_PLAYER_OPTION_OVERRIDES = "com.spotify.player.esperanto.proto.EsContextPlayerOptions\$ContextPlayerOptionOverrides"
+    private const val SHUFFLING_CONTEXT_FIELD = "shufflingContext_"
     private val PREMIUM_KEYS = listOf(
         "premium_tab_enabled",
         "premium_tab_shows_on_tablets",
@@ -63,8 +118,27 @@ object DexKitResolver {
         resolveSectionList(KEY_PROVIDED_ITEMS_LIST, PROVIDED, classLoader, cachedSignatures, signatures, members)
         resolveImageAdPredicate(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveSmartShuffleFlags(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolveProductStateGetters(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveProductStateMap(classLoader, cachedSignatures, signatures, members)
+        resolvePlayerRestrictions(classLoader, cachedSignatures, signatures, members)
         resolveOnDemandInFreeGetters(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveSetShuffleCommandValue(classLoader, cachedSignatures, signatures, members)
+        resolvePlayerOptionsShuffle(classLoader, cachedSignatures, signatures, members)
+        resolvePreparePlayOptionsBuilderBuild(classLoader, cachedSignatures, signatures, members)
+        resolvePlayerOptionOverridesBuilderShuffle(classLoader, cachedSignatures, signatures, members)
+        resolveEsContextPlayerOptionsShuffle(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolvePlayerOptionOverridesShuffleGetter(classLoader, cachedSignatures, signatures, members)
+        resolvePreparePlayOptionsSuppressionsGetter(classLoader, cachedSignatures, signatures, members)
+        resolveSetShuffleCommandCreate(classLoader, cachedSignatures, signatures, members)
+        resolveSetShuffleCommandValueGetter(classLoader, cachedSignatures, signatures, members)
+        resolvePlaybackSettingsSetShuffle(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveShuffleStateParse(classLoader, cachedSignatures, signatures, members)
+        resolveShuffleContextModes(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveContextCapabilityInit(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveClientBaseCallSingle(classLoader, cachedSignatures, signatures, members)
+        resolveCoroutineClientBaseCallSingle(classLoader, cachedSignatures, signatures, members)
+        resolvePreparePlayOptionsToProto(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolvePlayerOptionOverridesFilter(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolvePreparePlayOptionsFromSkipTo(dexKit, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -227,16 +301,36 @@ object DexKitResolver {
         val methods = cached?.get(KEY_SMART_SHUFFLE_FLAGS)
             ?.split('|')
             ?.mapNotNull { cachedMethod(classLoader, it, ::isSmartShuffleFlag) }
-            ?.takeIf { it.isNotEmpty() }
+            ?.takeIf { it.size == 2 }
             ?: runCatching {
-                val matchClass = dexKit.findClass {
+                val modelsMethod = dexKit.findMethod {
                     matcher {
-                        usingStrings(listOf("smart_shuffle_as_default_for_liked_songs"), StringMatchType.Contains)
+                        usingStrings(
+                            listOf("smart_shuffle_as_default_for_liked_songs", "smart_shuffle_as_default_for_playlist"),
+                            StringMatchType.Equals
+                        )
+                        paramCount(0)
+                        returnType("java.util.List")
                     }
-                }.firstOrNull()
-                val clazz = matchClass?.getInstance(classLoader)
-                clazz?.declaredMethods?.filter { isSmartShuffleFlag(it) }
-            }.getOrNull()?.takeIf { it.isNotEmpty() }
+                }.singleOrNull() ?: return@runCatching null
+
+                val declaringClassName = modelsMethod.className
+                val propertyNames = modelsMethod.usingStrings.filter { it != "android-system-smart-shuffle" }
+                val likedIndex = propertyNames.indexOf("smart_shuffle_as_default_for_liked_songs")
+                val playlistIndex = propertyNames.indexOf("smart_shuffle_as_default_for_playlist")
+                if (likedIndex == -1 || playlistIndex == -1) return@runCatching null
+
+                val getters = modelsMethod.invokes
+                    .filter { it.className == declaringClassName && !it.isConstructor }
+                    .mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+
+                val likedMethod = getters.getOrNull(likedIndex)?.takeIf(::isSmartShuffleFlag)
+                val playlistMethod = getters.getOrNull(playlistIndex)?.takeIf(::isSmartShuffleFlag)
+
+                if (likedMethod != null && playlistMethod != null) {
+                    listOf(likedMethod, playlistMethod)
+                } else null
+            }.getOrNull()?.takeIf { it.size == 2 }
 
         if (methods.isNullOrEmpty()) {
             Log.w(TAG, "$KEY_SMART_SHUFFLE_FLAGS: no validated match")
@@ -251,39 +345,56 @@ object DexKitResolver {
             method.returnType == Boolean::class.javaPrimitiveType &&
             !java.lang.reflect.Modifier.isStatic(method.modifiers)
 
-    private fun resolveProductStateGetters(
-        dexKit: DexKitBridge,
+    private fun resolveProductStateMap(
         classLoader: ClassLoader,
         cached: Map<String, String>?,
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val methods = cached?.get(KEY_PRODUCT_STATE_GETTERS)
-            ?.split('|')
-            ?.mapNotNull { cachedMethod(classLoader, it, ::isProductStateGetter) }
-            ?.takeIf { it.isNotEmpty() }
+        val method = cachedMethod(cached, KEY_PRODUCT_STATE_MAP, classLoader, ::isProductStateMapGetter)
             ?: runCatching {
-                val matchClass = dexKit.findClass {
-                    matcher {
-                        usingStrings(listOf("catalogue"), StringMatchType.Contains)
-                    }
-                }.firstOrNull()
-                val clazz = matchClass?.getInstance(classLoader)
-                clazz?.declaredMethods?.filter { isProductStateGetter(it) }
-            }.getOrNull()?.takeIf { it.isNotEmpty() }
-
-        if (methods.isNullOrEmpty()) {
-            Log.w(TAG, "$KEY_PRODUCT_STATE_GETTERS: no validated match")
-            return
-        }
-        members[KEY_PRODUCT_STATE_GETTERS] = methods
-        sigs[KEY_PRODUCT_STATE_GETTERS] = methods.joinToString("|") { signatureOf(it) }
+                Class.forName(GET_VALUES_RESPONSE, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isProductStateMapGetter(it) }
+            }.getOrNull()?.takeIf(::isProductStateMapGetter)
+        store(KEY_PRODUCT_STATE_MAP, method, sigs, members)
     }
 
-    private fun isProductStateGetter(method: Method): Boolean =
-        method.parameterCount == 1 &&
-            method.parameterTypes[0] == String::class.java &&
-            method.returnType == String::class.java &&
+    private fun isProductStateMapGetter(method: Method): Boolean =
+        method.declaringClass.name == GET_VALUES_RESPONSE &&
+            method.parameterCount == 0 &&
+            Map::class.java.isAssignableFrom(method.returnType) &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun resolvePlayerRestrictions(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val methods = cached?.get(KEY_PLAYER_RESTRICTIONS_METHODS)
+            ?.split('|')
+            ?.mapNotNull { cachedMethod(classLoader, it, ::isRestrictionsMethod) }
+            ?.takeIf { it.size == RESTRICTION_METHOD_NAMES.size }
+            ?: runCatching {
+                val clazz = Class.forName(AUTO_VALUE_RESTRICTIONS, false, classLoader)
+                RESTRICTION_METHOD_NAMES.mapNotNull { name ->
+                    clazz.declaredMethods.firstOrNull { it.name == name && isRestrictionsMethod(it) }
+                }
+            }.getOrNull()?.takeIf { it.size == RESTRICTION_METHOD_NAMES.size }
+
+        if (methods.isNullOrEmpty()) {
+            Log.w(TAG, "$KEY_PLAYER_RESTRICTIONS_METHODS: no validated match")
+            return
+        }
+        members[KEY_PLAYER_RESTRICTIONS_METHODS] = methods
+        sigs[KEY_PLAYER_RESTRICTIONS_METHODS] = methods.joinToString("|") { signatureOf(it) }
+    }
+
+    private fun isRestrictionsMethod(method: Method): Boolean =
+        method.declaringClass.name == AUTO_VALUE_RESTRICTIONS &&
+            method.parameterCount == 0 &&
+            Set::class.java.isAssignableFrom(method.returnType) &&
             !java.lang.reflect.Modifier.isStatic(method.modifiers)
 
     private fun resolveOnDemandInFreeGetters(
@@ -298,23 +409,17 @@ object DexKitResolver {
             ?.mapNotNull { cachedMethod(classLoader, it, ::isOnDemandInFreeGetter) }
             ?.takeIf { it.isNotEmpty() }
             ?: runCatching {
-                val declaredMethods = mutableListOf<Method>()
-                runCatching {
-                    Class.forName("com.spotify.playlist.proto.PlaylistRequest\$Response", false, classLoader)
-                        .declaredMethods
-                        .filter { isOnDemandInFreeGetter(it) }
-                        .let { declaredMethods.addAll(it) }
-                }
+                val clazz = Class.forName(PLAYLIST_REQUEST_RESPONSE, false, classLoader)
+                val field = clazz.getDeclaredField(IS_ON_DEMAND_IN_FREE_FIELD)
                 dexKit.findMethod {
                     matcher {
-                        usingStrings(listOf("isOnDemandInFree"), StringMatchType.Contains)
+                        declaredClass(PLAYLIST_REQUEST_RESPONSE)
                         paramCount(0)
+                        returnType("boolean")
+                        addUsingField(org.luckypray.dexkit.query.matchers.UsingFieldMatcher(field))
                     }
-                }.mapNotNull { it.getMethodInstance(classLoader) }
+                }.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
                     .filter { isOnDemandInFreeGetter(it) }
-                    .let { declaredMethods.addAll(it) }
-
-                declaredMethods.distinctBy { signatureOf(it) }
             }.getOrNull()?.takeIf { it.isNotEmpty() }
 
         if (methods.isNullOrEmpty()) {
@@ -325,12 +430,246 @@ object DexKitResolver {
         sigs[KEY_ON_DEMAND_IN_FREE_GETTERS] = methods.joinToString("|") { signatureOf(it) }
     }
 
-    private fun isOnDemandInFreeGetter(method: Method): Boolean {
-        if (method.parameterCount != 0) return false
-        val name = method.returnType.name
-        return (name == "boolean" || name == "java.lang.Boolean") &&
+    private fun isOnDemandInFreeGetter(method: Method): Boolean =
+        method.declaringClass.name == PLAYLIST_REQUEST_RESPONSE &&
+            method.parameterCount == 0 &&
+            method.returnType == Boolean::class.javaPrimitiveType &&
             !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun resolveSetShuffleCommandValue(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_SET_SHUFFLE_COMMAND_VALUE, classLoader, ::isSetShuffleCommandValue)
+            ?: runCatching {
+                Class.forName(AUTO_VALUE_SET_SHUFFLE_COMMAND_BUILDER, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isSetShuffleCommandValue(it) }
+            }.getOrNull()
+        store(KEY_SET_SHUFFLE_COMMAND_VALUE, method, sigs, members)
     }
+
+    private fun isSetShuffleCommandValue(method: Method): Boolean =
+        method.declaringClass.name == AUTO_VALUE_SET_SHUFFLE_COMMAND_BUILDER &&
+            method.name == "value" &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0] == Boolean::class.javaPrimitiveType
+
+    private fun resolvePlayerOptionsShuffle(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val getter = cachedMethod(cached, KEY_PLAYER_OPTIONS_SHUFFLE_GETTER, classLoader, ::isPlayerOptionsShuffleGetter)
+            ?: runCatching {
+                Class.forName(AUTO_VALUE_PLAYER_OPTIONS, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isPlayerOptionsShuffleGetter(it) }
+            }.getOrNull()
+        store(KEY_PLAYER_OPTIONS_SHUFFLE_GETTER, getter, sigs, members)
+
+        val builderSetter = cachedMethod(cached, KEY_PLAYER_OPTIONS_BUILDER_SHUFFLE, classLoader, ::isPlayerOptionsBuilderShuffle)
+            ?: runCatching {
+                Class.forName(AUTO_VALUE_PLAYER_OPTIONS_BUILDER, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isPlayerOptionsBuilderShuffle(it) }
+            }.getOrNull()
+        store(KEY_PLAYER_OPTIONS_BUILDER_SHUFFLE, builderSetter, sigs, members)
+    }
+
+    private fun isPlayerOptionsShuffleGetter(method: Method): Boolean =
+        method.declaringClass.name == AUTO_VALUE_PLAYER_OPTIONS &&
+            method.name == "shufflingContext" &&
+            method.parameterCount == 0 &&
+            method.returnType == Boolean::class.javaPrimitiveType
+
+    private fun isPlayerOptionsBuilderShuffle(method: Method): Boolean =
+        method.declaringClass.name == AUTO_VALUE_PLAYER_OPTIONS_BUILDER &&
+            method.name == "shufflingContext" &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0] == Boolean::class.javaPrimitiveType
+
+    private fun resolvePreparePlayOptionsBuilderBuild(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_PREPARE_PLAY_OPTIONS_BUILDER_BUILD, classLoader, ::isPreparePlayOptionsBuilderBuild)
+            ?: runCatching {
+                Class.forName(AUTO_VALUE_PREPARE_PLAY_OPTIONS_BUILDER, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isPreparePlayOptionsBuilderBuild(it) }
+            }.getOrNull()
+        store(KEY_PREPARE_PLAY_OPTIONS_BUILDER_BUILD, method, sigs, members)
+    }
+
+    private fun isPreparePlayOptionsBuilderBuild(method: Method): Boolean =
+        method.declaringClass.name == AUTO_VALUE_PREPARE_PLAY_OPTIONS_BUILDER &&
+            method.name == "build" &&
+            method.parameterCount == 0
+
+    private fun resolvePlayerOptionOverridesBuilderShuffle(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_PLAYER_OPTION_OVERRIDES_BUILDER_SHUFFLE, classLoader, ::isPlayerOptionOverridesBuilderShuffle)
+            ?: runCatching {
+                Class.forName(AUTO_VALUE_PLAYER_OPTION_OVERRIDES_BUILDER, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isPlayerOptionOverridesBuilderShuffle(it) }
+            }.getOrNull()
+        store(KEY_PLAYER_OPTION_OVERRIDES_BUILDER_SHUFFLE, method, sigs, members)
+    }
+
+    private fun isPlayerOptionOverridesBuilderShuffle(method: Method): Boolean =
+        method.declaringClass.name == AUTO_VALUE_PLAYER_OPTION_OVERRIDES_BUILDER &&
+            method.name == "shufflingContext" &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0] == Boolean::class.javaObjectType
+
+    private fun resolveEsContextPlayerOptionsShuffle(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val getter = cachedMethod(cached, KEY_ES_CONTEXT_PLAYER_OPTIONS_SHUFFLE_GETTER, classLoader, ::isEsContextPlayerOptionsShuffleGetter)
+            ?: runCatching {
+                val clazz = Class.forName(ES_CONTEXT_PLAYER_OPTIONS, false, classLoader)
+                val field = clazz.getDeclaredField(SHUFFLING_CONTEXT_FIELD)
+                dexKit.findMethod {
+                    matcher {
+                        declaredClass(ES_CONTEXT_PLAYER_OPTIONS)
+                        paramCount(0)
+                        returnType("boolean")
+                        addUsingField(org.luckypray.dexkit.query.matchers.UsingFieldMatcher(field))
+                    }
+                }.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                    .firstOrNull { isEsContextPlayerOptionsShuffleGetter(it) }
+            }.getOrNull()
+        store(KEY_ES_CONTEXT_PLAYER_OPTIONS_SHUFFLE_GETTER, getter, sigs, members)
+
+        val setter = cachedMethod(cached, KEY_ES_OPTION_OVERRIDES_SHUFFLE_SETTER, classLoader, ::isEsOptionOverridesShuffleSetter)
+            ?: runCatching {
+                val clazz = Class.forName(ES_CONTEXT_PLAYER_OPTION_OVERRIDES, false, classLoader)
+                val field = clazz.getDeclaredField(SHUFFLING_CONTEXT_FIELD)
+                dexKit.findMethod {
+                    matcher {
+                        declaredClass(ES_CONTEXT_PLAYER_OPTION_OVERRIDES)
+                        paramCount(1)
+                        returnType("void")
+                        addUsingField(org.luckypray.dexkit.query.matchers.UsingFieldMatcher(field))
+                    }
+                }.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                    .firstOrNull { isEsOptionOverridesShuffleSetter(it) }
+            }.getOrNull()
+        store(KEY_ES_OPTION_OVERRIDES_SHUFFLE_SETTER, setter, sigs, members)
+    }
+
+    private fun isEsContextPlayerOptionsShuffleGetter(method: Method): Boolean =
+        method.declaringClass.name == ES_CONTEXT_PLAYER_OPTIONS &&
+            method.parameterCount == 0 &&
+            method.returnType == Boolean::class.javaPrimitiveType &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun isEsOptionOverridesShuffleSetter(method: Method): Boolean =
+        method.declaringClass.name == ES_CONTEXT_PLAYER_OPTION_OVERRIDES &&
+            method.parameterCount == 1 &&
+            method.returnType == Void.TYPE &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun resolvePlayerOptionOverridesShuffleGetter(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_PLAYER_OPTION_OVERRIDES_SHUFFLE_GETTER, classLoader, ::isPlayerOptionOverridesShuffleGetter)
+            ?: runCatching {
+                Class.forName(AUTO_VALUE_PLAYER_OPTION_OVERRIDES, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isPlayerOptionOverridesShuffleGetter(it) }
+            }.getOrNull()
+        store(KEY_PLAYER_OPTION_OVERRIDES_SHUFFLE_GETTER, method, sigs, members)
+    }
+
+    private fun isPlayerOptionOverridesShuffleGetter(method: Method): Boolean =
+        method.declaringClass.name == AUTO_VALUE_PLAYER_OPTION_OVERRIDES &&
+            method.name == "shufflingContext" &&
+            method.parameterCount == 0 &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun resolvePreparePlayOptionsSuppressionsGetter(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_PREPARE_PLAY_OPTIONS_SUPPRESSIONS_GETTER, classLoader, ::isPreparePlayOptionsSuppressionsGetter)
+            ?: runCatching {
+                Class.forName(AUTO_VALUE_PREPARE_PLAY_OPTIONS, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isPreparePlayOptionsSuppressionsGetter(it) }
+            }.getOrNull()
+        store(KEY_PREPARE_PLAY_OPTIONS_SUPPRESSIONS_GETTER, method, sigs, members)
+    }
+
+    private fun isPreparePlayOptionsSuppressionsGetter(method: Method): Boolean =
+        method.declaringClass.name == AUTO_VALUE_PREPARE_PLAY_OPTIONS &&
+            method.name == "suppressions" &&
+            method.parameterCount == 0 &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun resolveSetShuffleCommandCreate(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_SET_SHUFFLE_COMMAND_CREATE, classLoader, ::isSetShuffleCommandCreate)
+            ?: runCatching {
+                Class.forName(SET_SHUFFLE_COMMAND, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isSetShuffleCommandCreate(it) }
+            }.getOrNull()
+        store(KEY_SET_SHUFFLE_COMMAND_CREATE, method, sigs, members)
+    }
+
+    private fun isSetShuffleCommandCreate(method: Method): Boolean =
+        method.declaringClass.name == SET_SHUFFLE_COMMAND &&
+            method.name == "create" &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0] == Boolean::class.javaPrimitiveType &&
+            java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun resolveSetShuffleCommandValueGetter(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_SET_SHUFFLE_COMMAND_VALUE_GETTER, classLoader, ::isSetShuffleCommandValueGetter)
+            ?: runCatching {
+                Class.forName(AUTO_VALUE_SET_SHUFFLE_COMMAND, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isSetShuffleCommandValueGetter(it) }
+            }.getOrNull()
+        store(KEY_SET_SHUFFLE_COMMAND_VALUE_GETTER, method, sigs, members)
+    }
+
+    private fun isSetShuffleCommandValueGetter(method: Method): Boolean =
+        method.declaringClass.name == AUTO_VALUE_SET_SHUFFLE_COMMAND &&
+            method.name == "value" &&
+            method.parameterCount == 0 &&
+            method.returnType == Boolean::class.javaPrimitiveType &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
 
     private fun findPremiumTabFlag(dexKit: DexKitBridge, classLoader: ClassLoader): Method? {
         val record = dexKit.findMethod {
@@ -449,14 +788,237 @@ object DexKitResolver {
         }.getOrNull()?.takeIf(validate)
     }
 
+    private fun resolvePlaybackSettingsSetShuffle(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_PLAYBACK_SETTINGS_SET_SHUFFLE, classLoader, ::isPlaybackSettingsSetShuffle)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(
+                            listOf("spotify.playback_settings.esperanto.proto.PlaybackSettings", "SetShuffleState"),
+                            StringMatchType.Equals
+                        )
+                        paramTypes(listOf("java.lang.String", "boolean", "boolean", "boolean"))
+                    }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isPlaybackSettingsSetShuffle)
+        store(KEY_PLAYBACK_SETTINGS_SET_SHUFFLE, method, sigs, members)
+    }
+
+    private fun isPlaybackSettingsSetShuffle(method: Method): Boolean =
+        method.parameterCount == 4 &&
+            method.parameterTypes[0] == String::class.java &&
+            method.parameterTypes[1] == Boolean::class.javaPrimitiveType &&
+            method.parameterTypes[2] == Boolean::class.javaPrimitiveType &&
+            method.parameterTypes[3] == Boolean::class.javaPrimitiveType
+
+    private fun resolveShuffleStateParse(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_SHUFFLE_STATE_PARSE, classLoader, ::isShuffleStateParse)
+            ?: runCatching {
+                val clazz = Class.forName(
+                    "com.spotify.playback_settings.esperanto.proto.PlaybackSettingsEsperantoService\$ShuffleState",
+                    false,
+                    classLoader
+                )
+                clazz.declaredMethods.firstOrNull { isShuffleStateParse(it) }
+            }.getOrNull()
+        store(KEY_SHUFFLE_STATE_PARSE, method, sigs, members)
+    }
+
+    private fun isShuffleStateParse(method: Method): Boolean =
+        java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0] == ByteArray::class.java &&
+            method.declaringClass.isAssignableFrom(method.returnType)
+
+    private fun resolveShuffleContextModes(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val modesMethod = cachedMethod(cached, KEY_SHUFFLE_CONTEXT_MODES_GETTER, classLoader, ::isShuffleContextModesGetter)
+        val defaultMethod = cachedMethod(cached, KEY_SHUFFLE_CONTEXT_DEFAULT_GETTER, classLoader, ::isShuffleContextDefaultGetter)
+        val enabledMethod = cachedMethod(cached, KEY_SHUFFLE_CONTEXT_ENABLED_GETTER, classLoader, ::isShuffleContextEnabledGetter)
+        if (modesMethod != null && defaultMethod != null && enabledMethod != null) {
+            val enumClass = defaultMethod.returnType
+            val enumConstants = enumClass.enumConstants
+            if (enumConstants != null && enumConstants.size >= 3) {
+                members[KEY_SHUFFLE_ENUM_LINEAR] = enumConstants[0]
+                members[KEY_SHUFFLE_ENUM_SHUFFLE] = enumConstants[1]
+                members[KEY_SHUFFLE_ENUM_SMART_SHUFFLE] = enumConstants[2]
+            }
+            store(KEY_SHUFFLE_CONTEXT_MODES_GETTER, modesMethod, sigs, members)
+            store(KEY_SHUFFLE_CONTEXT_DEFAULT_GETTER, defaultMethod, sigs, members)
+            store(KEY_SHUFFLE_CONTEXT_ENABLED_GETTER, enabledMethod, sigs, members)
+            return
+        }
+
+        val resolved = runCatching {
+            val enumClassData = dexKit.findClass {
+                matcher {
+                    usingStrings(
+                        listOf("Linear", "Shuffle", "SmartShuffle", "Loading"),
+                        StringMatchType.Equals
+                    )
+                }
+            }.singleOrNull() ?: return@runCatching null
+
+            val enumClass = Class.forName(enumClassData.name, false, classLoader)
+            val enumConstants = enumClass.enumConstants ?: return@runCatching null
+            if (enumConstants.size < 3) return@runCatching null
+
+            val initMethod = dexKit.findMethod {
+                matcher {
+                    paramTypes(listOf("java.util.Set", enumClass.name, "boolean"))
+                    name("<init>")
+                }
+            }.singleOrNull() ?: return@runCatching null
+
+            val holderClass = Class.forName(initMethod.className, false, classLoader)
+            val modes = holderClass.declaredMethods.firstOrNull {
+                !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                    it.parameterCount == 0 &&
+                    Set::class.java.isAssignableFrom(it.returnType)
+            } ?: return@runCatching null
+
+            val def = holderClass.declaredMethods.firstOrNull {
+                !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                    it.parameterCount == 0 &&
+                    it.returnType == enumClass
+            } ?: return@runCatching null
+
+            val enabled = holderClass.declaredMethods.firstOrNull {
+                !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                    it.parameterCount == 0 &&
+                    (it.returnType == Boolean::class.javaPrimitiveType || it.returnType == java.lang.Boolean::class.java)
+            } ?: return@runCatching null
+
+            ShuffleContextResolved(modes, def, enabled, enumConstants)
+        }.getOrNull()
+
+        if (resolved != null) {
+            val linear = resolved.enums[0]
+            val shuffle = resolved.enums[1]
+            val smartShuffle = resolved.enums[2]
+            if (linear != null) members[KEY_SHUFFLE_ENUM_LINEAR] = linear
+            if (shuffle != null) members[KEY_SHUFFLE_ENUM_SHUFFLE] = shuffle
+            if (smartShuffle != null) members[KEY_SHUFFLE_ENUM_SMART_SHUFFLE] = smartShuffle
+            store(KEY_SHUFFLE_CONTEXT_MODES_GETTER, resolved.modes, sigs, members)
+            store(KEY_SHUFFLE_CONTEXT_DEFAULT_GETTER, resolved.defaultMode, sigs, members)
+            store(KEY_SHUFFLE_CONTEXT_ENABLED_GETTER, resolved.enabled, sigs, members)
+        }
+    }
+
+    private data class ShuffleContextResolved(
+        val modes: Method,
+        val defaultMode: Method,
+        val enabled: Method,
+        val enums: Array<*>
+    )
+
+    private fun isShuffleContextModesGetter(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 0 &&
+            Set::class.java.isAssignableFrom(method.returnType)
+
+    private fun isShuffleContextDefaultGetter(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 0 &&
+            method.returnType.isEnum
+
+    private fun isShuffleContextEnabledGetter(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 0 &&
+            (method.returnType == Boolean::class.javaPrimitiveType || method.returnType == java.lang.Boolean::class.java)
+
+    private fun resolveContextCapabilityInit(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val ctor = cachedConstructor(cached, KEY_CONTEXT_CAPABILITY_INIT, classLoader, ::isContextCapabilityInit)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        paramTypes(listOf("java.lang.String", "java.lang.String", "boolean", "int", "boolean", "boolean"))
+                        name("<init>")
+                    }
+                }.mapNotNull {
+                    val clazz = runCatching { Class.forName(it.className, false, classLoader) }.getOrNull()
+                    clazz?.declaredConstructors?.firstOrNull { c -> isContextCapabilityInit(c) }
+                }.firstOrNull { c ->
+                    c.declaringClass.declaredMethods.any { m ->
+                        !java.lang.reflect.Modifier.isStatic(m.modifiers) &&
+                            m.parameterCount == 0 &&
+                            m.returnType == Boolean::class.javaPrimitiveType
+                    }
+                }
+            }.getOrNull()
+
+        if (ctor != null) {
+            members[KEY_CONTEXT_CAPABILITY_INIT] = ctor
+            sigs[KEY_CONTEXT_CAPABILITY_INIT] = signatureOf(ctor)
+        }
+    }
+
+    private fun isContextCapabilityInit(ctor: Constructor<*>): Boolean {
+        val types = ctor.parameterTypes
+        return types.size == 6 &&
+            types[0] == String::class.java &&
+            types[1] == String::class.java &&
+            types[2] == Boolean::class.javaPrimitiveType &&
+            types[3] == Int::class.javaPrimitiveType &&
+            types[4] == Boolean::class.javaPrimitiveType &&
+            types[5] == Boolean::class.javaPrimitiveType
+    }
+
     private fun signatureOf(method: Method): String =
         "${method.declaringClass.name}#${method.name}#${descriptorOf(method)}"
+
+    private fun signatureOf(ctor: Constructor<*>): String =
+        "${ctor.declaringClass.name}#<init>#${descriptorOf(ctor)}"
 
     private fun descriptorOf(method: Method): String = buildString {
         append('(')
         method.parameterTypes.forEach { append(descriptorOf(it)) }
         append(')')
         append(descriptorOf(method.returnType))
+    }
+
+    private fun descriptorOf(ctor: Constructor<*>): String = buildString {
+        append('(')
+        ctor.parameterTypes.forEach { append(descriptorOf(it)) }
+        append(")V")
+    }
+
+    private fun cachedConstructor(
+        cached: Map<String, String>?,
+        key: String,
+        classLoader: ClassLoader,
+        validate: (Constructor<*>) -> Boolean
+    ): Constructor<*>? {
+        val entry = cached?.get(key) ?: return null
+        val parts = entry.split("#")
+        if (parts.size != 3) return null
+        return runCatching {
+            Class.forName(parts[0], false, classLoader)
+                .declaredConstructors
+                .firstOrNull { descriptorOf(it) == parts[2] }
+        }.getOrNull()?.takeIf(validate)
     }
 
     private fun descriptorOf(type: Class<*>): String = when (type) {
@@ -475,4 +1037,142 @@ object DexKitResolver {
             "L" + type.name.replace('.', '/') + ";"
         }
     }
+
+    private fun resolveClientBaseCallSingle(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_CLIENT_BASE_CALL_SINGLE, classLoader, ::isClientBaseCallSingle)
+            ?: runCatching {
+                Class.forName(CLIENT_BASE, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isClientBaseCallSingle(it) }
+            }.getOrNull()
+        store(KEY_CLIENT_BASE_CALL_SINGLE, method, sigs, members)
+    }
+
+    private fun isClientBaseCallSingle(method: Method): Boolean =
+        method.declaringClass.name == CLIENT_BASE &&
+            method.name == "callSingle" &&
+            method.parameterCount == 3 &&
+            method.parameterTypes[0] == String::class.java &&
+            method.parameterTypes[1] == String::class.java
+
+    private fun resolveCoroutineClientBaseCallSingle(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_COROUTINE_CLIENT_BASE_CALL_SINGLE, classLoader, ::isCoroutineClientBaseCallSingle)
+            ?: runCatching {
+                Class.forName(COROUTINE_CLIENT_BASE, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isCoroutineClientBaseCallSingle(it) }
+            }.getOrNull()
+        store(KEY_COROUTINE_CLIENT_BASE_CALL_SINGLE, method, sigs, members)
+    }
+
+    private fun isCoroutineClientBaseCallSingle(method: Method): Boolean =
+        method.declaringClass.name == COROUTINE_CLIENT_BASE &&
+            method.name == "callSingle" &&
+            method.parameterCount == 4 &&
+            method.parameterTypes[0] == String::class.java &&
+            method.parameterTypes[1] == String::class.java
+
+    private fun resolvePreparePlayOptionsToProto(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_PREPARE_PLAY_OPTIONS_TO_PROTO, classLoader, ::isPreparePlayOptionsToProto)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        paramTypes(PREPARE_PLAY_OPTIONS)
+                        returnType(ES_PREPARE_PLAY_OPTIONS)
+                        modifiers(java.lang.reflect.Modifier.STATIC or java.lang.reflect.Modifier.PUBLIC)
+                    }
+                }.firstOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isPreparePlayOptionsToProto)
+        store(KEY_PREPARE_PLAY_OPTIONS_TO_PROTO, method, sigs, members)
+    }
+
+    private fun isPreparePlayOptionsToProto(method: Method): Boolean =
+        java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0].name == PREPARE_PLAY_OPTIONS &&
+            method.returnType.name == ES_PREPARE_PLAY_OPTIONS
+
+    private fun resolvePlayerOptionOverridesFilter(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_PLAYER_OPTION_OVERRIDES_FILTER, classLoader, ::isPlayerOptionOverridesFilter)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        paramTypes(
+                            PREPARE_PLAY_OPTIONS,
+                            "boolean",
+                            "boolean"
+                        )
+                        returnType(PLAYER_OPTION_OVERRIDES)
+                        modifiers(java.lang.reflect.Modifier.STATIC or java.lang.reflect.Modifier.PUBLIC)
+                    }
+                }.firstOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isPlayerOptionOverridesFilter)
+        store(KEY_PLAYER_OPTION_OVERRIDES_FILTER, method, sigs, members)
+    }
+
+    private fun isPlayerOptionOverridesFilter(method: Method): Boolean =
+        java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 3 &&
+            method.parameterTypes[0].name == PREPARE_PLAY_OPTIONS &&
+            method.parameterTypes[1] == Boolean::class.javaPrimitiveType &&
+            method.parameterTypes[2] == Boolean::class.javaPrimitiveType &&
+            method.returnType.name == PLAYER_OPTION_OVERRIDES
+
+    private fun resolvePreparePlayOptionsFromSkipTo(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_PREPARE_PLAY_OPTIONS_FROM_SKIP_TO, classLoader, ::isPreparePlayOptionsFromSkipTo)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        paramTypes(
+                            SKIP_TO_TRACK,
+                            "long",
+                            "java.lang.Long",
+                            "boolean",
+                            "int"
+                        )
+                        returnType(PREPARE_PLAY_OPTIONS)
+                        modifiers(java.lang.reflect.Modifier.STATIC or java.lang.reflect.Modifier.PUBLIC)
+                    }
+                }.firstOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isPreparePlayOptionsFromSkipTo)
+        store(KEY_PREPARE_PLAY_OPTIONS_FROM_SKIP_TO, method, sigs, members)
+    }
+
+    private fun isPreparePlayOptionsFromSkipTo(method: Method): Boolean =
+        java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 5 &&
+            method.parameterTypes[0].name == SKIP_TO_TRACK &&
+            method.parameterTypes[1] == Long::class.javaPrimitiveType &&
+            method.parameterTypes[2].name == "java.lang.Long" &&
+            method.parameterTypes[3] == Boolean::class.javaPrimitiveType &&
+            method.parameterTypes[4] == Int::class.javaPrimitiveType &&
+            method.returnType.name == PREPARE_PLAY_OPTIONS
 }

@@ -10,6 +10,7 @@ object PreferencesManager {
 
     private const val TAG = "SpotXero.Prefs"
     const val PREFS_NAME = "spotify_prefs"
+    private const val TARGET_PREFS_NAME = "spotxero_target_prefs"
 
     const val KEY_APP_THEME_MODE = "app_theme_mode"
     const val KEY_APP_DYNAMIC_COLOR = "app_dynamic_color"
@@ -27,12 +28,7 @@ object PreferencesManager {
     var isPremiumEnabled: Boolean = true
     var isCleanSharingEnabled: Boolean = true
     var isSpotifyAmoledEnabled: Boolean = false
-    var isHidePremiumTabEnabled: Boolean = false
-    var isBlockAdsEnabled: Boolean = true
-    var isHideBrandAdsEnabled: Boolean = true
-    var isHidePlayerAdsEnabled: Boolean = true
     var isHidePodcastsEnabled: Boolean = false
-    var isDisableSmartShuffleEnabled: Boolean = true
 
     var onPreferenceChangedListener: (() -> Unit)? = null
 
@@ -42,9 +38,47 @@ object PreferencesManager {
     @Volatile
     private var localPrefs: SharedPreferences? = null
 
+    @Volatile
+    private var targetPrefs: SharedPreferences? = null
+
     private val inMemoryBooleans = ConcurrentHashMap<String, Boolean>()
     private val inMemoryStrings = ConcurrentHashMap<String, String>()
     private val inMemoryInts = ConcurrentHashMap<String, Int>()
+
+    private fun resolveTargetContext(): Context? {
+        return runCatching {
+            val atClass = Class.forName("android.app.ActivityThread")
+            val currentApp = atClass.getMethod("currentApplication").invoke(null) as? Context
+            if (currentApp != null) return@runCatching currentApp
+            val at = atClass.getMethod("currentActivityThread").invoke(null)
+            atClass.getMethod("getApplication").invoke(at) as? Context
+        }.getOrNull()
+    }
+
+    fun initTarget(context: Context) {
+        val targetContext = context.applicationContext ?: context
+        runCatching {
+            val tp = targetContext.getSharedPreferences(TARGET_PREFS_NAME, Context.MODE_PRIVATE)
+            targetPrefs = tp
+            if (tp.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
+                inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = tp.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
+            }
+        }
+    }
+
+    private fun getTargetPrefs(): SharedPreferences? {
+        val tp = targetPrefs
+        if (tp != null) return tp
+        val ctx = resolveTargetContext() ?: return null
+        return runCatching {
+            val target = ctx.getSharedPreferences(TARGET_PREFS_NAME, Context.MODE_PRIVATE)
+            targetPrefs = target
+            if (target.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
+                inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = target.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
+            }
+            target
+        }.getOrNull()
+    }
 
     private val changeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         if (key != null) {
@@ -167,37 +201,49 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_CLEAN_SHARING] = isCleanSharingEnabled
         isSpotifyAmoledEnabled = prefs.getBoolean(PrefKeys.KEY_SPOTIFY_AMOLED, false)
         inMemoryBooleans[PrefKeys.KEY_SPOTIFY_AMOLED] = isSpotifyAmoledEnabled
-        isHidePremiumTabEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PREMIUM_TAB, false)
-        inMemoryBooleans[PrefKeys.KEY_HIDE_PREMIUM_TAB] = isHidePremiumTabEnabled
-        isBlockAdsEnabled = prefs.getBoolean(PrefKeys.KEY_BLOCK_ADS, true)
-        inMemoryBooleans[PrefKeys.KEY_BLOCK_ADS] = isBlockAdsEnabled
-        isHideBrandAdsEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_BRAND_ADS, true)
-        inMemoryBooleans[PrefKeys.KEY_HIDE_BRAND_ADS] = isHideBrandAdsEnabled
-        isHidePlayerAdsEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PLAYER_ADS, true)
-        inMemoryBooleans[PrefKeys.KEY_HIDE_PLAYER_ADS] = isHidePlayerAdsEnabled
         isHidePodcastsEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PODCASTS, false)
         inMemoryBooleans[PrefKeys.KEY_HIDE_PODCASTS] = isHidePodcastsEnabled
-        isDisableSmartShuffleEnabled = prefs.getBoolean(PrefKeys.KEY_DISABLE_SMART_SHUFFLE, true)
-        inMemoryBooleans[PrefKeys.KEY_DISABLE_SMART_SHUFFLE] = isDisableSmartShuffleEnabled
         isLauncherIconHidden = prefs.getBoolean(KEY_HIDE_LAUNCHER_ICON, false)
         inMemoryBooleans[KEY_HIDE_LAUNCHER_ICON] = isLauncherIconHidden
+        val tp = getTargetPrefs()
+        if (tp != null && tp.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
+            inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = tp.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
+        } else if (prefs.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
+            inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = prefs.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
+        }
     }
 
     fun isEnabled(key: String, default: Boolean = true): Boolean {
         inMemoryBooleans[key]?.let { return it }
-        val value = try {
-            remotePrefs?.getBoolean(key, default)
-                ?: localPrefs?.getBoolean(key, default)
-                ?: default
-        } catch (_: Throwable) {
-            default
+        val tp = getTargetPrefs()
+        if (tp != null && tp.contains(key)) {
+            val v = tp.getBoolean(key, default)
+            inMemoryBooleans[key] = v
+            return v
         }
-        inMemoryBooleans[key] = value
-        return value
+        val rp = remotePrefs
+        if (rp != null && rp.contains(key)) {
+            val v = rp.getBoolean(key, default)
+            inMemoryBooleans[key] = v
+            return v
+        }
+        val lp = localPrefs
+        if (lp != null && lp.contains(key)) {
+            val v = lp.getBoolean(key, default)
+            inMemoryBooleans[key] = v
+            return v
+        }
+        return default
     }
 
     fun getString(key: String, default: String = ""): String {
         inMemoryStrings[key]?.let { return it }
+        val tp = getTargetPrefs()
+        if (tp != null && tp.contains(key)) {
+            val v = tp.getString(key, default) ?: default
+            inMemoryStrings[key] = v
+            return v
+        }
         val value = try {
             remotePrefs?.getString(key, default)
                 ?: localPrefs?.getString(key, default)
@@ -211,11 +257,24 @@ object PreferencesManager {
 
     fun setBoolean(context: Context? = null, key: String, value: Boolean) {
         inMemoryBooleans[key] = value
-        try {
-            getPrefs(context).edit().putBoolean(key, value).apply()
-            updateFieldDirectly(key, value)
-        } catch (t: Throwable) {
-            Log.e(TAG, "Error writing boolean preference $key: ${t.message}", t)
+        updateFieldDirectly(key, value)
+        val tp = getTargetPrefs()
+        if (tp != null) {
+            runCatching {
+                tp.edit().putBoolean(key, value).commit()
+            }
+        }
+        val rp = remotePrefs
+        if (rp != null) {
+            runCatching {
+                rp.edit().putBoolean(key, value).apply()
+            }
+        }
+        val prefs = runCatching { getPrefs(context) }.getOrNull()
+        if (prefs != null && prefs != tp && prefs != rp) {
+            runCatching {
+                prefs.edit().putBoolean(key, value).apply()
+            }
         }
     }
 
@@ -254,10 +313,6 @@ object PreferencesManager {
             PrefKeys.KEY_ENABLE_PREMIUM -> isPremiumEnabled = value
             PrefKeys.KEY_CLEAN_SHARING -> isCleanSharingEnabled = value
             PrefKeys.KEY_SPOTIFY_AMOLED -> isSpotifyAmoledEnabled = value
-            PrefKeys.KEY_HIDE_PREMIUM_TAB -> isHidePremiumTabEnabled = value
-            PrefKeys.KEY_BLOCK_ADS -> isBlockAdsEnabled = value
-            PrefKeys.KEY_HIDE_BRAND_ADS -> isHideBrandAdsEnabled = value
-            PrefKeys.KEY_HIDE_PLAYER_ADS -> isHidePlayerAdsEnabled = value
             PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = value
             KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = value
             KEY_APP_AMOLED_THEME -> isAppAmoledEnabled = value
@@ -275,10 +330,6 @@ object PreferencesManager {
                         PrefKeys.KEY_ENABLE_PREMIUM -> isPremiumEnabled = v
                         PrefKeys.KEY_CLEAN_SHARING -> isCleanSharingEnabled = v
                         PrefKeys.KEY_SPOTIFY_AMOLED -> isSpotifyAmoledEnabled = v
-                        PrefKeys.KEY_HIDE_PREMIUM_TAB -> isHidePremiumTabEnabled = v
-                        PrefKeys.KEY_BLOCK_ADS -> isBlockAdsEnabled = v
-                        PrefKeys.KEY_HIDE_BRAND_ADS -> isHideBrandAdsEnabled = v
-                        PrefKeys.KEY_HIDE_PLAYER_ADS -> isHidePlayerAdsEnabled = v
                         PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = v
                         KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = v
                         KEY_APP_AMOLED_THEME -> isAppAmoledEnabled = v

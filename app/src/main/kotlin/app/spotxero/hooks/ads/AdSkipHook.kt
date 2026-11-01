@@ -30,7 +30,7 @@ object AdSkipHook {
             .setId("ad_skip_boolean")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
-                if (PreferencesManager.isEnabled(PrefKeys.KEY_BLOCK_ADS, true)) {
+                if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     false
                 } else {
                     chain.proceed()

@@ -29,7 +29,7 @@ object DisableSmartShuffleHook {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     val result = chain.proceed()
-                    if (PreferencesManager.isEnabled(PrefKeys.KEY_DISABLE_SMART_SHUFFLE, true)) {
+                    if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                         false
                     } else {
                         result

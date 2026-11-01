@@ -9,6 +9,9 @@ import app.spotxero.hooks.ads.PlayerAdCardsHook
 import app.spotxero.hooks.content.HidePodcastsHook
 import app.spotxero.hooks.navigation.HidePremiumTabHook
 import app.spotxero.hooks.player.DisableSmartShuffleHook
+import app.spotxero.hooks.player.OnDemandInFreeHook
+import app.spotxero.hooks.player.PlayerRestrictionsHook
+import app.spotxero.hooks.player.PlayerShuffleHook
 import app.spotxero.hooks.player.ProductStateHook
 import app.spotxero.hooks.sharing.CleanSharingHook
 import app.spotxero.hooks.theme.SpotifyAmoledHook
@@ -76,6 +79,9 @@ object HookRegistry {
             "SpotifyAmoled" to { SpotifyAmoledHook.install(module) },
             "DisableSmartShuffle" to { DisableSmartShuffleHook.install(module) },
             "ProductState" to { ProductStateHook.install(module) },
+            "PlayerRestrictions" to { PlayerRestrictionsHook.install(module) },
+            "OnDemandInFree" to { OnDemandInFreeHook.install(module) },
+            "PlayerShuffle" to { PlayerShuffleHook.install(module) },
         )
 
         var installed = 0
