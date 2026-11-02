@@ -1,6 +1,5 @@
 package app.spotxero.hooks.player
 
-import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -10,8 +9,6 @@ import java.lang.reflect.Field
 import java.lang.reflect.Method
 
 object ProductStateHook {
-
-    private const val TAG = "SpotXero.ProductState"
 
     val TYPED_SPOOFS: Map<String, Any> = mapOf(
         "ads" to false,
@@ -43,11 +40,7 @@ object ProductStateHook {
     }
 
     private fun installMapSeam(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_PRODUCT_STATE_MAP)
-        if (method == null) {
-            module.log(Log.WARN, TAG, "Product state map getter not resolved, skipping")
-            return
-        }
+        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_PRODUCT_STATE_MAP) ?: return
 
         module.deoptimize(method)
         module.hook(method)
@@ -64,19 +57,12 @@ object ProductStateHook {
                     putAll(LEGACY_SPOOFS)
                 }
             }
-
-        module.log(
-            Log.INFO,
-            TAG,
-            "Hooked product state map: ${method.declaringClass.simpleName}#${method.name}"
-        )
     }
 
     private fun installAttributeSeam(module: XposedModule) {
         val accessor = DexKitResolver.get<Method>(DexKitResolver.KEY_PRODUCT_STATE_ATTRIBUTE_OBJECTS)
         val valueField = DexKitResolver.get<Field>(DexKitResolver.KEY_PRODUCT_STATE_ATTRIBUTE_VALUE_FIELD)
         if (accessor == null || valueField == null) {
-            module.log(Log.WARN, TAG, "Product state attribute seam not resolved, skipping")
             return
         }
 
@@ -98,11 +84,5 @@ object ProductStateHook {
                 }
                 result
             }
-
-        module.log(
-            Log.INFO,
-            TAG,
-            "Hooked product state attributes: ${accessor.declaringClass.simpleName}#${accessor.name}"
-        )
     }
 }

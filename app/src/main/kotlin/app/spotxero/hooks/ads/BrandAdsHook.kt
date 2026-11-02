@@ -1,6 +1,5 @@
 package app.spotxero.hooks.ads
 
-import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -9,8 +8,6 @@ import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Method
 
 object BrandAdsHook {
-
-    private const val TAG = "SpotXero.BrandAds"
 
     fun install(module: XposedModule) {
         hookHomeSections(module)
@@ -30,7 +27,6 @@ object BrandAdsHook {
                 val list = result as? List<*> ?: return@intercept result
                 AdSectionFilter.filterHome(list)
             }
-        module.log(Log.INFO, TAG, "Hooked home sections: ${method.declaringClass.name}#${method.name}")
     }
 
     private fun hookBrowseSections(module: XposedModule) {
@@ -46,6 +42,5 @@ object BrandAdsHook {
                 val list = result as? List<*> ?: return@intercept result
                 AdSectionFilter.filterBrowse(list)
             }
-        module.log(Log.INFO, TAG, "Hooked browse sections: ${method.declaringClass.name}#${method.name}")
     }
 }

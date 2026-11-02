@@ -1,7 +1,6 @@
 package app.spotxero.core
 
 import android.content.pm.ApplicationInfo
-import android.util.Log
 import app.spotxero.hooks.ads.AdResponseHook
 import app.spotxero.hooks.ads.AdSkipHook
 import app.spotxero.hooks.ads.BrandAdsHook
@@ -19,8 +18,6 @@ import io.github.libxposed.api.XposedModule
 import org.luckypray.dexkit.DexKitBridge
 
 object HookRegistry {
-
-    private const val TAG = "SpotXero.Registry"
 
     fun resolveAndInstall(module: XposedModule, appInfo: ApplicationInfo, classLoader: ClassLoader) {
         val apkPath = appInfo.sourceDir
@@ -44,23 +41,12 @@ object HookRegistry {
         }.getOrNull() ?: java.io.File(apkPath).lastModified()
 
         val cachedSignatures = DexKitSignatureCache.loadFromFile(appInfo, versionCode)
-        if (cachedSignatures != null) {
-            module.log(Log.INFO, TAG, "Using cached DexKit signatures for version $versionCode")
-        }
-
-        val startTime = System.currentTimeMillis()
 
         System.loadLibrary("dexkit")
         DexKitBridge.create(apkPath).use { dexKit ->
-            module.log(Log.INFO, TAG, "DexKit bridge created in ${System.currentTimeMillis() - startTime}ms")
-
-            val resolveStart = System.currentTimeMillis()
             val signatures = DexKitResolver.resolve(dexKit, classLoader, cachedSignatures)
-            module.log(Log.INFO, TAG, "Resolved ${signatures.size} signatures in ${System.currentTimeMillis() - resolveStart}ms")
-
             if (signatures.isNotEmpty() && signatures != cachedSignatures) {
                 DexKitSignatureCache.saveToFile(appInfo, versionCode, signatures)
-                module.log(Log.INFO, TAG, "Saved ${signatures.size} signatures to cache")
             }
         }
 
@@ -84,15 +70,10 @@ object HookRegistry {
             "PlayerShuffle" to { PlayerShuffleHook.install(module) },
         )
 
-        var installed = 0
-        for ((name, installer) in hooks) {
+        for ((_, installer) in hooks) {
             runCatching {
                 installer()
-                installed++
-            }.onFailure {
-                module.log(Log.ERROR, TAG, "Failed installing $name hook: ${it.message}", it)
             }
         }
-        module.log(Log.INFO, TAG, "Installed $installed/${hooks.size} hooks")
     }
 }

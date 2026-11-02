@@ -38,7 +38,6 @@ class SpotXeroModule : XposedModule() {
     private val activeServices: MutableSet<Service> = Collections.newSetFromMap(WeakHashMap())
 
     private fun terminateProcess(context: Context?) {
-        log(Log.INFO, TAG, "Force-stop signal received, terminating process")
         val ctx = context ?: appContext ?: runCatching {
             val atClass = Class.forName("android.app.ActivityThread")
             val currentApp = atClass.getMethod("currentApplication").invoke(null) as? Context
@@ -105,8 +104,6 @@ class SpotXeroModule : XposedModule() {
     }
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
-        log(Log.INFO, TAG, "SpotXero loaded into process: ${param.processName}")
-        log(Log.INFO, TAG, "Framework: $frameworkName v$frameworkVersion (API: $apiVersion)")
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
@@ -118,8 +115,6 @@ class SpotXeroModule : XposedModule() {
             val remotePrefs = getRemotePreferences(PrefKeys.PREFS_NAME)
             PreferencesManager.bindRemote(remotePrefs)
             remotePrefs.registerOnSharedPreferenceChangeListener(forceStopListener)
-        }.onFailure {
-            log(Log.ERROR, TAG, "Failed initializing remote preferences: ${it.message}", it)
         }
 
         runCatching {
@@ -198,9 +193,6 @@ class SpotXeroModule : XposedModule() {
 
         runCatching {
             System.loadLibrary("spotxero_native")
-            log(Log.INFO, TAG, "Loaded native patch library")
-        }.onFailure {
-            log(Log.WARN, TAG, "Failed loading native patch library: ${it.message}", it)
         }
 
         runCatching {
@@ -209,8 +201,7 @@ class SpotXeroModule : XposedModule() {
                 appInfo = param.applicationInfo,
                 classLoader = param.classLoader
             )
-        }.onFailure {
-            log(Log.ERROR, TAG, "Failed installing hooks: ${it.message}", it)
+            log(Log.INFO, TAG, "Hooks injected")
         }
     }
 }

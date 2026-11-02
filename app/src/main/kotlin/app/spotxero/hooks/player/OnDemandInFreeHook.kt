@@ -1,6 +1,5 @@
 package app.spotxero.hooks.player
 
-import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -10,12 +9,9 @@ import java.lang.reflect.Method
 
 object OnDemandInFreeHook {
 
-    private const val TAG = "SpotXero.OnDemandInFree"
-
     fun install(module: XposedModule) {
         val methods = DexKitResolver.get<List<Method>>(DexKitResolver.KEY_ON_DEMAND_IN_FREE_GETTERS)
         if (methods.isNullOrEmpty()) {
-            module.log(Log.WARN, TAG, "On demand in free getters not resolved, skipping")
             return
         }
 
@@ -36,11 +32,5 @@ object OnDemandInFreeHook {
                     }
                 }
         }
-
-        module.log(
-            Log.INFO,
-            TAG,
-            "Hooked ${methods.size} on demand in free getters: ${methods.joinToString { "${it.declaringClass.simpleName}#${it.name}" }}"
-        )
     }
 }

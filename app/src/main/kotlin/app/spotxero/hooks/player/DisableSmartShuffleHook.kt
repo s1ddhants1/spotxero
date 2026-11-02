@@ -1,6 +1,5 @@
 package app.spotxero.hooks.player
 
-import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -10,12 +9,9 @@ import java.lang.reflect.Method
 
 object DisableSmartShuffleHook {
 
-    private const val TAG = "SpotXero.DisableSmartShuffle"
-
     fun install(module: XposedModule) {
         val methods = DexKitResolver.get<List<Method>>(DexKitResolver.KEY_SMART_SHUFFLE_FLAGS)
         if (methods.isNullOrEmpty()) {
-            module.log(Log.WARN, TAG, "Smart shuffle flags not resolved, skipping")
             return
         }
 
@@ -36,11 +32,5 @@ object DisableSmartShuffleHook {
                     }
                 }
         }
-
-        module.log(
-            Log.INFO,
-            TAG,
-            "Hooked ${methods.size} smart shuffle flags: ${methods.joinToString { "${it.declaringClass.simpleName}#${it.name}" }}"
-        )
     }
 }

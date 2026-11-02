@@ -2,15 +2,12 @@ package app.spotxero.hooks.theme
 
 import android.content.res.Resources
 import android.graphics.Color
-import android.util.Log
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
 
 object SpotifyAmoledHook {
-
-    private const val TAG = "SpotXero.Amoled"
 
     private val DARK_COLORS = setOf(
         0xFF121212.toInt(),
@@ -64,7 +61,5 @@ object SpotifyAmoledHook {
                     if (color in DARK_COLORS) Color.BLACK else color
                 }
         }
-
-        module.log(Log.INFO, TAG, "Hooked Resources.getColor for Spotify AMOLED theme")
     }
 }

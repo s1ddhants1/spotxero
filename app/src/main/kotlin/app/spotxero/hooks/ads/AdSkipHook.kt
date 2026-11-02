@@ -1,6 +1,5 @@
 package app.spotxero.hooks.ads
 
-import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -10,7 +9,6 @@ import java.lang.reflect.Method
 
 object AdSkipHook {
 
-    private const val TAG = "SpotXero.AdSkip"
     private const val CONTEXT_TRACK = "com.spotify.player.model.ContextTrack"
 
     fun install(module: XposedModule) {
@@ -20,7 +18,6 @@ object AdSkipHook {
             method.parameterTypes[0].name != CONTEXT_TRACK ||
             method.returnType != Boolean::class.javaPrimitiveType
         ) {
-            module.log(Log.WARN, TAG, "is_advertisement check not resolved, skipping ad blocking")
             return
         }
 
@@ -36,7 +33,5 @@ object AdSkipHook {
                     chain.proceed()
                 }
             }
-
-        module.log(Log.INFO, TAG, "Hooked ad detection: ${method.declaringClass.name}#${method.name}")
     }
 }

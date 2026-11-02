@@ -1,6 +1,5 @@
 package app.spotxero.hooks.player
 
-import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -10,7 +9,6 @@ import java.lang.reflect.Method
 
 object PlayerRestrictionsHook {
 
-    private const val TAG = "SpotXero.Restrictions"
     private const val RESTRICTIONS_CLASS = "com.spotify.player.model.Restrictions"
 
     fun install(module: XposedModule) {
@@ -34,14 +32,10 @@ object PlayerRestrictionsHook {
                     }
                     emptyInstance
                 }
-            module.log(Log.INFO, TAG, "Hooked restrictions converter: ${converter.declaringClass.name}#${converter.name}")
         }
 
         val methods = DexKitResolver.get<List<Method>>(DexKitResolver.KEY_PLAYER_RESTRICTIONS_METHODS)
         if (methods.isNullOrEmpty()) {
-            if (converter == null) {
-                module.log(Log.WARN, TAG, "Player restrictions methods not resolved, skipping")
-            }
             return
         }
 
@@ -69,12 +63,6 @@ object PlayerRestrictionsHook {
                 }
         }
 
-        module.log(
-            Log.INFO,
-            TAG,
-            "Hooked ${methods.size} restrictions methods: ${methods.joinToString { "${it.declaringClass.simpleName}#${it.name}" }}"
-        )
-
         val esRestrictionsMethods = runCatching {
             val cl = methods.first().declaringClass.classLoader
             val esClass = Class.forName("com.spotify.player.esperanto.proto.EsRestrictions\$Restrictions", false, cl)
@@ -94,9 +82,6 @@ object PlayerRestrictionsHook {
                     }
                     emptyMap<Any, Any>()
                 }
-        }
-        if (esRestrictionsMethods.isNotEmpty()) {
-            module.log(Log.INFO, TAG, "Hooked ${esRestrictionsMethods.size} EsRestrictions map getters")
         }
     }
 }

@@ -1,6 +1,5 @@
 package app.spotxero.hooks.content
 
-import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -9,8 +8,6 @@ import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Method
 
 object HidePodcastsHook {
-
-    private const val TAG = "SpotXero.HidePodcasts"
 
     fun install(module: XposedModule) {
         hookProvidedItems(module)
@@ -30,7 +27,6 @@ object HidePodcastsHook {
                 val list = result as? List<*> ?: return@intercept result
                 PodcastDetector.filterPodcastItems(list)
             }
-        module.log(Log.INFO, TAG, "Hooked provided items list: ${method.declaringClass.name}#${method.name}")
     }
 
     private fun hookHomeSections(module: XposedModule) {
@@ -46,6 +42,5 @@ object HidePodcastsHook {
                 val list = result as? List<*> ?: return@intercept result
                 PodcastDetector.filterPodcastSections(list)
             }
-        module.log(Log.INFO, TAG, "Hooked home sections for podcasts: ${method.declaringClass.name}#${method.name}")
     }
 }
