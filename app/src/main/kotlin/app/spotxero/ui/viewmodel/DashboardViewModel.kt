@@ -1,10 +1,7 @@
 package app.spotxero.ui.viewmodel
 
 import android.app.Application
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
-import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.spotxero.R

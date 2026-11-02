@@ -14,18 +14,43 @@ object PlayerRestrictionsHook {
     private const val RESTRICTIONS_CLASS = "com.spotify.player.model.Restrictions"
 
     fun install(module: XposedModule) {
+        val converter = DexKitResolver.get<Method>(DexKitResolver.KEY_PLAYER_RESTRICTIONS_CONVERTER)
+        val emptyInstance = runCatching {
+            val cl = converter?.declaringClass?.classLoader
+                ?: DexKitResolver.get<List<Method>>(DexKitResolver.KEY_PLAYER_RESTRICTIONS_METHODS)?.firstOrNull()?.declaringClass?.classLoader
+                ?: return@runCatching null
+            val restrictionsClass = Class.forName(RESTRICTIONS_CLASS, false, cl)
+            restrictionsClass.getField("EMPTY").get(null)
+        }.getOrNull()
+
+        if (converter != null && emptyInstance != null) {
+            module.deoptimize(converter)
+            module.hook(converter)
+                .setId("player_restrictions_converter")
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                        return@intercept chain.proceed()
+                    }
+                    emptyInstance
+                }
+            module.log(Log.INFO, TAG, "Hooked restrictions converter: ${converter.declaringClass.name}#${converter.name}")
+        }
+
         val methods = DexKitResolver.get<List<Method>>(DexKitResolver.KEY_PLAYER_RESTRICTIONS_METHODS)
         if (methods.isNullOrEmpty()) {
-            module.log(Log.WARN, TAG, "Player restrictions methods not resolved, skipping")
+            if (converter == null) {
+                module.log(Log.WARN, TAG, "Player restrictions methods not resolved, skipping")
+            }
             return
         }
 
         val emptyValues = runCatching {
             val cl = methods.first().declaringClass.classLoader
             val restrictionsClass = Class.forName(RESTRICTIONS_CLASS, false, cl)
-            val emptyInstance = restrictionsClass.getField("EMPTY").get(null)
+            val empty = emptyInstance ?: restrictionsClass.getField("EMPTY").get(null)
             methods.associateWith { method ->
-                restrictionsClass.getMethod(method.name).invoke(emptyInstance)
+                restrictionsClass.getMethod(method.name).invoke(empty)
             }
         }.getOrNull() ?: emptyMap()
 
@@ -49,5 +74,29 @@ object PlayerRestrictionsHook {
             TAG,
             "Hooked ${methods.size} restrictions methods: ${methods.joinToString { "${it.declaringClass.simpleName}#${it.name}" }}"
         )
+
+        val esRestrictionsMethods = runCatching {
+            val cl = methods.first().declaringClass.classLoader
+            val esClass = Class.forName("com.spotify.player.esperanto.proto.EsRestrictions\$Restrictions", false, cl)
+            esClass.declaredMethods.filter {
+                it.parameterCount == 0 && Map::class.java.isAssignableFrom(it.returnType)
+            }
+        }.getOrNull() ?: emptyList()
+
+        for ((index, method) in esRestrictionsMethods.withIndex()) {
+            module.deoptimize(method)
+            module.hook(method)
+                .setId("es_restrictions_map_$index")
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                        return@intercept chain.proceed()
+                    }
+                    emptyMap<Any, Any>()
+                }
+        }
+        if (esRestrictionsMethods.isNotEmpty()) {
+            module.log(Log.INFO, TAG, "Hooked ${esRestrictionsMethods.size} EsRestrictions map getters")
+        }
     }
 }

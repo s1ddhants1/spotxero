@@ -22,12 +22,16 @@ object DexKitResolver {
     const val KEY_PROVIDED_ITEMS_LIST = "provided_items_list_getter"
     const val KEY_SMART_SHUFFLE_FLAGS = "smart_shuffle_flags"
     const val KEY_PRODUCT_STATE_MAP = "product_state_map"
+    const val KEY_PRODUCT_STATE_ATTRIBUTE_OBJECTS = "product_state_attribute_objects"
+    const val KEY_PRODUCT_STATE_ATTRIBUTE_VALUE_FIELD = "product_state_attribute_value_field"
     const val KEY_PLAYER_RESTRICTIONS_METHODS = "player_restrictions_methods"
+    const val KEY_PLAYER_RESTRICTIONS_CONVERTER = "player_restrictions_converter"
     const val KEY_ON_DEMAND_IN_FREE_GETTERS = "on_demand_in_free_getters"
     const val KEY_SET_SHUFFLE_COMMAND_VALUE = "set_shuffle_command_value"
     const val KEY_PLAYER_OPTIONS_SHUFFLE_GETTER = "player_options_shuffle_getter"
     const val KEY_PLAYER_OPTIONS_BUILDER_SHUFFLE = "player_options_builder_shuffle"
     const val KEY_PREPARE_PLAY_OPTIONS_BUILDER_BUILD = "prepare_play_options_builder_build"
+    const val KEY_PLAYER_OPTION_OVERRIDES_BUILDER_BUILD = "player_option_overrides_builder_build"
     const val KEY_PLAYER_OPTION_OVERRIDES_BUILDER_SHUFFLE = "player_option_overrides_builder_shuffle"
     const val KEY_ES_CONTEXT_PLAYER_OPTIONS_SHUFFLE_GETTER = "es_context_player_options_shuffle_getter"
     const val KEY_ES_OPTION_OVERRIDES_SHUFFLE_SETTER = "es_option_overrides_shuffle_setter"
@@ -46,16 +50,9 @@ object DexKitResolver {
     const val KEY_CONTEXT_CAPABILITY_INIT = "context_capability_init"
     const val KEY_CLIENT_BASE_CALL_SINGLE = "client_base_call_single"
     const val KEY_COROUTINE_CLIENT_BASE_CALL_SINGLE = "coroutine_client_base_call_single"
-    const val KEY_PREPARE_PLAY_OPTIONS_TO_PROTO = "prepare_play_options_to_proto"
-    const val KEY_PLAYER_OPTION_OVERRIDES_FILTER = "player_option_overrides_filter"
-    const val KEY_PREPARE_PLAY_OPTIONS_FROM_SKIP_TO = "prepare_play_options_from_skip_to"
 
     private const val CLIENT_BASE = "com.spotify.esperanto.esperanto.ClientBase"
     private const val COROUTINE_CLIENT_BASE = "com.spotify.esperanto.esperanto.CoroutineClientBase"
-    private const val PREPARE_PLAY_OPTIONS = "com.spotify.player.model.command.options.PreparePlayOptions"
-    private const val ES_PREPARE_PLAY_OPTIONS = "com.spotify.player.esperanto.proto.EsPreparePlayOptions\$PreparePlayOptions"
-    private const val PLAYER_OPTION_OVERRIDES = "com.spotify.player.model.command.options.PlayerOptionOverrides"
-    private const val SKIP_TO_TRACK = "com.spotify.player.model.command.options.SkipToTrack"
 
     private const val GENERATE_URL_RESPONSE = "com.spotify.share.linkgeneration.api.proto.GenerateUrlResponse"
     private const val GET_ADS_REQUEST = "com.spotify.ads.esperanto.proto.GetAdsRequest"
@@ -70,12 +67,17 @@ object DexKitResolver {
     private const val IMAGE_BRAND_AD_FIELD = "IMAGE_BRAND_AD_FIELD_NUMBER"
     private const val SHARE_RESPONSE_URL_COUNT = 4
     private const val AUTO_VALUE_RESTRICTIONS = "com.spotify.player.model.AutoValue_Restrictions"
+    private const val ES_RESTRICTIONS = "com.spotify.player.esperanto.proto.EsRestrictions\$Restrictions"
+    private const val RESTRICTIONS = "com.spotify.player.model.Restrictions"
     private val RESTRICTION_METHOD_NAMES = listOf(
         "disallowTogglingShuffleReasons",
         "disallowTogglingRepeatTrackReasons",
         "disallowTogglingRepeatContextReasons"
     )
     private const val GET_VALUES_RESPONSE = "com.spotify.connectivity.product_state.esperanto.proto.GetValuesResponse"
+    private const val PRODUCT_STATE_PROTO = "com.spotify.remoteconfig.internal.ProductStateProto"
+    private const val ACCOUNT_ATTRIBUTE = "com.spotify.remoteconfig.internal.AccountAttribute"
+    private const val ATTRIBUTE_VALUE_FIELD = "value_"
     private const val PLAYLIST_REQUEST_RESPONSE = "com.spotify.playlist.proto.PlaylistRequest\$Response"
     private const val IS_ON_DEMAND_IN_FREE_FIELD = "isOnDemandInFree_"
     private const val AUTO_VALUE_SET_SHUFFLE_COMMAND_BUILDER = "com.spotify.player.model.command.AutoValue_SetShufflingContextCommand\$Builder"
@@ -119,12 +121,15 @@ object DexKitResolver {
         resolveImageAdPredicate(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveSmartShuffleFlags(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveProductStateMap(classLoader, cachedSignatures, signatures, members)
+        resolveProductStateAttributeSeam(classLoader, cachedSignatures, signatures, members)
         resolvePlayerRestrictions(classLoader, cachedSignatures, signatures, members)
+        resolvePlayerRestrictionsConverter(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveOnDemandInFreeGetters(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveSetShuffleCommandValue(classLoader, cachedSignatures, signatures, members)
         resolvePlayerOptionsShuffle(classLoader, cachedSignatures, signatures, members)
         resolvePreparePlayOptionsBuilderBuild(classLoader, cachedSignatures, signatures, members)
         resolvePlayerOptionOverridesBuilderShuffle(classLoader, cachedSignatures, signatures, members)
+        resolvePlayerOptionOverridesBuilderBuild(classLoader, cachedSignatures, signatures, members)
         resolveEsContextPlayerOptionsShuffle(dexKit, classLoader, cachedSignatures, signatures, members)
         resolvePlayerOptionOverridesShuffleGetter(classLoader, cachedSignatures, signatures, members)
         resolvePreparePlayOptionsSuppressionsGetter(classLoader, cachedSignatures, signatures, members)
@@ -136,9 +141,6 @@ object DexKitResolver {
         resolveContextCapabilityInit(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveClientBaseCallSingle(classLoader, cachedSignatures, signatures, members)
         resolveCoroutineClientBaseCallSingle(classLoader, cachedSignatures, signatures, members)
-        resolvePreparePlayOptionsToProto(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolvePlayerOptionOverridesFilter(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolvePreparePlayOptionsFromSkipTo(dexKit, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -366,6 +368,50 @@ object DexKitResolver {
             Map::class.java.isAssignableFrom(method.returnType) &&
             !java.lang.reflect.Modifier.isStatic(method.modifiers)
 
+    private fun resolveProductStateAttributeSeam(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val container = runCatching { Class.forName(PRODUCT_STATE_PROTO, false, classLoader) }.getOrNull()
+        val attributeClass = runCatching { Class.forName(ACCOUNT_ATTRIBUTE, false, classLoader) }.getOrNull()
+        if (container == null || attributeClass == null) {
+            Log.w(TAG, "$KEY_PRODUCT_STATE_ATTRIBUTE_OBJECTS: no validated match")
+            return
+        }
+        val valueField = runCatching { attributeClass.getDeclaredField(ATTRIBUTE_VALUE_FIELD) }
+            .getOrNull()
+            ?.takeIf {
+                it.type == Any::class.java &&
+                    !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                    it.declaringClass == attributeClass
+            }
+        if (valueField == null) {
+            Log.w(TAG, "$KEY_PRODUCT_STATE_ATTRIBUTE_VALUE_FIELD: no validated match")
+            return
+        }
+        val accessor = cachedMethod(cached, KEY_PRODUCT_STATE_ATTRIBUTE_OBJECTS, classLoader, ::isProductStateAttributeAccessor)
+            ?: container.declaredMethods
+                .filter(::isProductStateAttributeAccessor)
+                .distinctBy { it.name }
+                .singleOrNull()
+        if (accessor == null) {
+            Log.w(TAG, "$KEY_PRODUCT_STATE_ATTRIBUTE_OBJECTS: no validated match")
+            return
+        }
+        valueField.isAccessible = true
+        members[KEY_PRODUCT_STATE_ATTRIBUTE_VALUE_FIELD] = valueField
+        members[KEY_PRODUCT_STATE_ATTRIBUTE_OBJECTS] = accessor
+        sigs[KEY_PRODUCT_STATE_ATTRIBUTE_OBJECTS] = signatureOf(accessor)
+    }
+
+    private fun isProductStateAttributeAccessor(method: Method): Boolean =
+        method.declaringClass.name == PRODUCT_STATE_PROTO &&
+            method.parameterCount == 0 &&
+            method.returnType == Map::class.java &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
     private fun resolvePlayerRestrictions(
         classLoader: ClassLoader,
         cached: Map<String, String>?,
@@ -396,6 +442,31 @@ object DexKitResolver {
             method.parameterCount == 0 &&
             Set::class.java.isAssignableFrom(method.returnType) &&
             !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun resolvePlayerRestrictionsConverter(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_PLAYER_RESTRICTIONS_CONVERTER, classLoader, ::isRestrictionsConverter)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        paramTypes(ES_RESTRICTIONS)
+                        returnType(RESTRICTIONS)
+                    }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isRestrictionsConverter)
+        store(KEY_PLAYER_RESTRICTIONS_CONVERTER, method, sigs, members)
+    }
+
+    private fun isRestrictionsConverter(method: Method): Boolean =
+        method.parameterCount == 1 &&
+            method.parameterTypes[0].name == ES_RESTRICTIONS &&
+            method.returnType.name == RESTRICTIONS &&
+            java.lang.reflect.Modifier.isStatic(method.modifiers)
 
     private fun resolveOnDemandInFreeGetters(
         dexKit: DexKitBridge,
@@ -526,6 +597,27 @@ object DexKitResolver {
             }.getOrNull()
         store(KEY_PLAYER_OPTION_OVERRIDES_BUILDER_SHUFFLE, method, sigs, members)
     }
+
+    private fun resolvePlayerOptionOverridesBuilderBuild(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_PLAYER_OPTION_OVERRIDES_BUILDER_BUILD, classLoader, ::isPlayerOptionOverridesBuilderBuild)
+            ?: runCatching {
+                Class.forName(AUTO_VALUE_PLAYER_OPTION_OVERRIDES_BUILDER, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull { isPlayerOptionOverridesBuilderBuild(it) }
+            }.getOrNull()?.takeIf(::isPlayerOptionOverridesBuilderBuild)
+        store(KEY_PLAYER_OPTION_OVERRIDES_BUILDER_BUILD, method, sigs, members)
+    }
+
+    private fun isPlayerOptionOverridesBuilderBuild(method: Method): Boolean =
+        method.declaringClass.name == AUTO_VALUE_PLAYER_OPTION_OVERRIDES_BUILDER &&
+            method.name == "build" &&
+            method.parameterCount == 0 &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
 
     private fun isPlayerOptionOverridesBuilderShuffle(method: Method): Boolean =
         method.declaringClass.name == AUTO_VALUE_PLAYER_OPTION_OVERRIDES_BUILDER &&
@@ -1081,98 +1173,4 @@ object DexKitResolver {
             method.parameterCount == 4 &&
             method.parameterTypes[0] == String::class.java &&
             method.parameterTypes[1] == String::class.java
-
-    private fun resolvePreparePlayOptionsToProto(
-        dexKit: DexKitBridge,
-        classLoader: ClassLoader,
-        cached: Map<String, String>?,
-        sigs: MutableMap<String, String>,
-        members: MutableMap<String, Any>
-    ) {
-        val method = cachedMethod(cached, KEY_PREPARE_PLAY_OPTIONS_TO_PROTO, classLoader, ::isPreparePlayOptionsToProto)
-            ?: runCatching {
-                dexKit.findMethod {
-                    matcher {
-                        paramTypes(PREPARE_PLAY_OPTIONS)
-                        returnType(ES_PREPARE_PLAY_OPTIONS)
-                        modifiers(java.lang.reflect.Modifier.STATIC or java.lang.reflect.Modifier.PUBLIC)
-                    }
-                }.firstOrNull()?.getMethodInstance(classLoader)
-            }.getOrNull()?.takeIf(::isPreparePlayOptionsToProto)
-        store(KEY_PREPARE_PLAY_OPTIONS_TO_PROTO, method, sigs, members)
-    }
-
-    private fun isPreparePlayOptionsToProto(method: Method): Boolean =
-        java.lang.reflect.Modifier.isStatic(method.modifiers) &&
-            method.parameterCount == 1 &&
-            method.parameterTypes[0].name == PREPARE_PLAY_OPTIONS &&
-            method.returnType.name == ES_PREPARE_PLAY_OPTIONS
-
-    private fun resolvePlayerOptionOverridesFilter(
-        dexKit: DexKitBridge,
-        classLoader: ClassLoader,
-        cached: Map<String, String>?,
-        sigs: MutableMap<String, String>,
-        members: MutableMap<String, Any>
-    ) {
-        val method = cachedMethod(cached, KEY_PLAYER_OPTION_OVERRIDES_FILTER, classLoader, ::isPlayerOptionOverridesFilter)
-            ?: runCatching {
-                dexKit.findMethod {
-                    matcher {
-                        paramTypes(
-                            PREPARE_PLAY_OPTIONS,
-                            "boolean",
-                            "boolean"
-                        )
-                        returnType(PLAYER_OPTION_OVERRIDES)
-                        modifiers(java.lang.reflect.Modifier.STATIC or java.lang.reflect.Modifier.PUBLIC)
-                    }
-                }.firstOrNull()?.getMethodInstance(classLoader)
-            }.getOrNull()?.takeIf(::isPlayerOptionOverridesFilter)
-        store(KEY_PLAYER_OPTION_OVERRIDES_FILTER, method, sigs, members)
-    }
-
-    private fun isPlayerOptionOverridesFilter(method: Method): Boolean =
-        java.lang.reflect.Modifier.isStatic(method.modifiers) &&
-            method.parameterCount == 3 &&
-            method.parameterTypes[0].name == PREPARE_PLAY_OPTIONS &&
-            method.parameterTypes[1] == Boolean::class.javaPrimitiveType &&
-            method.parameterTypes[2] == Boolean::class.javaPrimitiveType &&
-            method.returnType.name == PLAYER_OPTION_OVERRIDES
-
-    private fun resolvePreparePlayOptionsFromSkipTo(
-        dexKit: DexKitBridge,
-        classLoader: ClassLoader,
-        cached: Map<String, String>?,
-        sigs: MutableMap<String, String>,
-        members: MutableMap<String, Any>
-    ) {
-        val method = cachedMethod(cached, KEY_PREPARE_PLAY_OPTIONS_FROM_SKIP_TO, classLoader, ::isPreparePlayOptionsFromSkipTo)
-            ?: runCatching {
-                dexKit.findMethod {
-                    matcher {
-                        paramTypes(
-                            SKIP_TO_TRACK,
-                            "long",
-                            "java.lang.Long",
-                            "boolean",
-                            "int"
-                        )
-                        returnType(PREPARE_PLAY_OPTIONS)
-                        modifiers(java.lang.reflect.Modifier.STATIC or java.lang.reflect.Modifier.PUBLIC)
-                    }
-                }.firstOrNull()?.getMethodInstance(classLoader)
-            }.getOrNull()?.takeIf(::isPreparePlayOptionsFromSkipTo)
-        store(KEY_PREPARE_PLAY_OPTIONS_FROM_SKIP_TO, method, sigs, members)
-    }
-
-    private fun isPreparePlayOptionsFromSkipTo(method: Method): Boolean =
-        java.lang.reflect.Modifier.isStatic(method.modifiers) &&
-            method.parameterCount == 5 &&
-            method.parameterTypes[0].name == SKIP_TO_TRACK &&
-            method.parameterTypes[1] == Long::class.javaPrimitiveType &&
-            method.parameterTypes[2].name == "java.lang.Long" &&
-            method.parameterTypes[3] == Boolean::class.javaPrimitiveType &&
-            method.parameterTypes[4] == Int::class.javaPrimitiveType &&
-            method.returnType.name == PREPARE_PLAY_OPTIONS
 }

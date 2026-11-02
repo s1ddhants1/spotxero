@@ -5,7 +5,6 @@ import app.spotxero.R
 
 object CommonUtils {
     const val SPOTIFY_PACKAGE_NAME = "com.spotify.music"
-    const val MY_PACKAGE_NAME = "app.spotxero"
 
     val SUPPORTED_PACKAGES = listOf(
         "com.spotify.music",

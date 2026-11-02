@@ -13,6 +13,8 @@ import java.lang.reflect.Method
 object PlayerShuffleHook {
 
     private const val TAG = "SpotXero.PlayerShuffle"
+    private const val STATION_PREFIX = "spotify:station:"
+    private const val BASE_PREFIX = "spotify:"
 
     @Volatile
     private var userShuffleState: Boolean? = null
@@ -198,6 +200,28 @@ object PlayerShuffleHook {
                     buildBooleanOptional(cl, result, isShuffleEnabled()) ?: result
                 }
         }
+
+        if (builderSetter == null) {
+            module.log(Log.WARN, TAG, "PlayerOptionOverrides builder shuffle setter not resolved, skipping build catch-all")
+            return
+        }
+        val buildMethod = DexKitResolver.get<Method>(DexKitResolver.KEY_PLAYER_OPTION_OVERRIDES_BUILDER_BUILD)
+        if (buildMethod == null) {
+            module.log(Log.WARN, TAG, "PlayerOptionOverrides builder build not resolved, skipping catch-all")
+            return
+        }
+
+        module.deoptimize(buildMethod)
+        module.hook(buildMethod)
+            .setId("player_option_overrides_builder_build")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) && !isShuffleEnabled()) {
+                    chain.getThisObject()?.let { builder -> builderSetter.invoke(builder, java.lang.Boolean.FALSE) }
+                }
+                chain.proceed()
+            }
+        module.log(Log.INFO, TAG, "Hooked PlayerOptionOverrides builder build catch-all: ${buildMethod.declaringClass.simpleName}#build")
     }
 
     private fun hookProtoOptions(module: XposedModule) {
@@ -419,14 +443,8 @@ object PlayerShuffleHook {
                 .setId("playback_settings_set_shuffle")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
-                    val shuffleOn = chain.getArg(1) as? Boolean
-                    if (shuffleOn != null) {
-                        userShuffleState = shuffleOn
-                        PreferencesManager.setBoolean(null, PrefKeys.KEY_SHUFFLE_STATE, shuffleOn)
-                        module.log(Log.INFO, TAG, "User shuffle state updated via SetShuffleState: $shuffleOn")
-                    }
                     if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        chain.proceed(arrayOf(chain.getArg(0), shuffleOn ?: false, java.lang.Boolean.FALSE, chain.getArg(3)))
+                        chain.proceed(arrayOf(chain.getArg(0), isShuffleEnabled(), java.lang.Boolean.FALSE, chain.getArg(3)))
                     } else {
                         chain.proceed()
                     }
@@ -539,11 +557,60 @@ object PlayerShuffleHook {
         }
     }
 
+    @Volatile
+    private var nativeTransport: Any? = null
+
+    private fun hookNativeTransportCtors(module: XposedModule, cl: ClassLoader) {
+        runCatching {
+            val nativeCls = Class.forName("com.spotify.esperanto.esperantoimpl.NativeTransport", false, cl)
+            val ctor = nativeCls.declaredConstructors.firstOrNull()
+            if (ctor != null) {
+                module.deoptimize(ctor)
+                module.hook(ctor)
+                    .setId("native_transport_init")
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        val result = chain.proceed()
+                        val thisObj = chain.getThisObject()
+                        if (thisObj != null) {
+                            nativeTransport = thisObj
+                            module.log(Log.INFO, TAG, "Captured NativeTransport instance from ctor: ${thisObj.javaClass.name}")
+                        }
+                        result
+                    }
+            }
+        }
+
+        runCatching {
+            val schedCls = Class.forName("com.spotify.esperanto.esperantoimpl.SchedulingTransport", false, cl)
+            val ctor = schedCls.declaredConstructors.firstOrNull()
+            if (ctor != null) {
+                module.deoptimize(ctor)
+                module.hook(ctor)
+                    .setId("scheduling_transport_init")
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        val result = chain.proceed()
+                        val thisObj = chain.getThisObject()
+                        if (thisObj != null) {
+                            nativeTransport = thisObj
+                            module.log(Log.INFO, TAG, "Captured SchedulingTransport instance from ctor: ${thisObj.javaClass.name}")
+                        }
+                        result
+                    }
+            }
+        }
+    }
+
     private fun hookClientBase(module: XposedModule) {
         val method = DexKitResolver.get<Method>(DexKitResolver.KEY_CLIENT_BASE_CALL_SINGLE)
         if (method == null) {
             module.log(Log.ERROR, TAG, "Failed resolving ClientBase.callSingle method")
             return
+        }
+        val cl = method.declaringClass.classLoader
+        if (cl != null) {
+            hookNativeTransportCtors(module, cl)
         }
         module.deoptimize(method)
         module.hook(method)
@@ -553,9 +620,28 @@ object PlayerShuffleHook {
                 val service = chain.getArg(0) as? String
                 val methodName = chain.getArg(1) as? String
                 val payload = chain.getArg(2)
+                val client = chain.getThisObject()
+                if (client != null) {
+                    val t = getTransport(client)
+                    if (t != null && !t.javaClass.name.contains("Cosmos")) {
+                        nativeTransport = t
+                    }
+                }
                 module.log(Log.INFO, TAG, "callSingle intercepted: service=$service method=$methodName")
 
                 if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    if (service == "spotify.connectivity.auth.esperanto.proto.Session" && methodName == "writeProductStateToLegacyStorage" && payload != null) {
+                        val modifiedPayload = overrideProductStateMap(payload, module)
+                        if (modifiedPayload != null) {
+                            return@intercept chain.proceed(arrayOf(service, methodName, modifiedPayload))
+                        }
+                    }
+                    if (service == "spotify.product_state.esperanto.proto.ProductState" && (methodName == "PutValues" || methodName == "PutValuesSync") && payload != null) {
+                        val modifiedPayload = overridePutValues(payload, module)
+                        if (modifiedPayload != null) {
+                            return@intercept chain.proceed(arrayOf(service, methodName, modifiedPayload))
+                        }
+                    }
                     if (service == "spotify.playback_settings.esperanto.proto.PlaybackSettings" && methodName == "GetShuffleState") {
                         val shuffleOn = isShuffleEnabled()
                         val stateBytes = if (shuffleOn) byteArrayOf(0x08, 0x01, 0x10, 0x00) else byteArrayOf(0x08, 0x00, 0x10, 0x00)
@@ -566,7 +652,7 @@ object PlayerShuffleHook {
                             return@intercept singleObj
                         }
                     }
-                    handleEsperantoPayload(chain, method, service, methodName, payload, module)
+                    handleEsperantoPayload(chain, service, methodName, payload, module)
                 }
 
                 chain.proceed()
@@ -580,7 +666,6 @@ object PlayerShuffleHook {
             module.log(Log.ERROR, TAG, "Failed resolving CoroutineClientBase.callSingle method")
             return
         }
-        val clientBaseMethod = DexKitResolver.get<Method>(DexKitResolver.KEY_CLIENT_BASE_CALL_SINGLE)
         module.deoptimize(method)
         module.hook(method)
             .setId("coroutine_client_base_call_single")
@@ -589,6 +674,13 @@ object PlayerShuffleHook {
                 val service = chain.getArg(0) as? String
                 val methodName = chain.getArg(1) as? String
                 val payload = chain.getArg(2)
+                val client = chain.getThisObject()
+                if (client != null) {
+                    val t = getTransport(client)
+                    if (t != null && !t.javaClass.name.contains("Cosmos")) {
+                        nativeTransport = t
+                    }
+                }
                 module.log(Log.INFO, TAG, "coroutine callSingle intercepted: service=$service method=$methodName")
 
                 if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
@@ -598,7 +690,7 @@ object PlayerShuffleHook {
                         module.log(Log.INFO, TAG, "Short-circuiting coroutine GetShuffleState: shuffleOn=$shuffleOn")
                         return@intercept stateBytes
                     }
-                    handleEsperantoPayload(chain, clientBaseMethod, service, methodName, payload, module)
+                    handleEsperantoPayload(chain, service, methodName, payload, module)
                 }
 
                 chain.proceed()
@@ -606,15 +698,56 @@ object PlayerShuffleHook {
         module.log(Log.INFO, TAG, "Hooked CoroutineClientBase.callSingle: ${method.name}")
     }
 
+    private fun overrideProductStateMap(payload: Any, module: XposedModule): Any? {
+        return runCatching {
+            val currentMap = payload.javaClass.declaredMethods.firstOrNull {
+                it.parameterCount == 0 && Map::class.java.isAssignableFrom(it.returnType)
+            }?.apply { isAccessible = true }?.invoke(payload) as? Map<*, *>
+
+            val map = java.util.LinkedHashMap<String, String>()
+            currentMap?.forEach { (k, v) ->
+                if (k != null && v != null) map[k.toString()] = v.toString()
+            }
+            map.putAll(ProductStateHook.LEGACY_SPOOFS)
+
+            val builder = payload.javaClass.getMethod("toBuilder").apply { isAccessible = true }.invoke(payload)
+            val nMethod = builder.javaClass.declaredMethods.firstOrNull {
+                it.parameterCount == 1 && Map::class.java.isAssignableFrom(it.parameterTypes[0])
+            }?.apply { isAccessible = true }
+            nMethod?.invoke(builder, map)
+            val built = builder.javaClass.getMethod("build").apply { isAccessible = true }.invoke(builder)
+            module.log(Log.INFO, TAG, "Overrode writeProductStateToLegacyStorage payload with premium product state")
+            built
+        }.getOrNull()
+    }
+
+    private fun overridePutValues(payload: Any, module: XposedModule): Any? {
+        return runCatching {
+            val builder = payload.javaClass.getMethod("toBuilder").apply { isAccessible = true }.invoke(payload)
+            val putMethod = builder.javaClass.declaredMethods.firstOrNull {
+                it.parameterCount == 2 && it.parameterTypes[0] == String::class.java && it.parameterTypes[1] == String::class.java
+            }?.apply { isAccessible = true }
+            if (putMethod != null) {
+                for ((k, v) in ProductStateHook.LEGACY_SPOOFS) {
+                    putMethod.invoke(builder, k, v)
+                }
+                val built = builder.javaClass.getMethod("build").apply { isAccessible = true }.invoke(builder)
+                module.log(Log.INFO, TAG, "Overrode PutValues payload with premium product state")
+                built
+            } else null
+        }.getOrNull()
+    }
+
     private fun handleEsperantoPayload(
         chain: Chain,
-        clientBaseCallSingleMethod: Method?,
         service: String?,
         methodName: String?,
         payload: Any?,
         module: XposedModule
     ) {
         if (payload == null) return
+        val client = chain.getThisObject()
+        module.log(Log.INFO, TAG, "handleEsperantoPayload: service=$service method=$methodName client=${client?.javaClass?.name}")
         if (service == "spotify.player.esperanto.proto.ContextPlayer") {
             when (methodName) {
                 "Play", "PreparePlay" -> {
@@ -623,10 +756,11 @@ object PlayerShuffleHook {
                     }.onFailure { t ->
                         module.log(Log.ERROR, TAG, "Failed applying play overrides: ${t.message}", t)
                     }
+                    dispatchSetShufflingContext(chain.getThisObject(), isShuffleEnabled(), module)
                 }
                 "SetOptions" -> {
                     runCatching {
-                        applySetOptionsOverrides(payload, module)
+                        applySetOptionsOverrides(chain, payload, module)
                     }.onFailure { t ->
                         module.log(Log.ERROR, TAG, "Failed applying set options overrides: ${t.message}", t)
                     }
@@ -634,10 +768,11 @@ object PlayerShuffleHook {
                 "SetShufflingContext" -> {
                     runCatching {
                         val shufflingField = payload.javaClass.getDeclaredField("shufflingContext_").apply { isAccessible = true }
-                        val isShuffle = shufflingField.getBoolean(payload)
-                        userShuffleState = isShuffle
-                        PreferencesManager.setBoolean(null, PrefKeys.KEY_SHUFFLE_STATE, isShuffle)
-                        module.log(Log.INFO, TAG, "ContextPlayer SetShufflingContext intercepted: shuffle=$isShuffle")
+                        if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                            val isShuffle = isShuffleEnabled()
+                            shufflingField.setBoolean(payload, isShuffle)
+                            resetMemoizedSize(payload)
+                        }
                     }
                 }
             }
@@ -648,11 +783,12 @@ object PlayerShuffleHook {
                 }.onFailure { t ->
                     module.log(Log.ERROR, TAG, "Failed applying playlist play overrides: ${t.message}", t)
                 }
+                dispatchSetShufflingContext(chain.getThisObject(), isShuffleEnabled(), module)
             }
         } else if (service == "spotify.playback_settings.esperanto.proto.PlaybackSettings") {
             if (methodName == "SetShuffleState") {
                 runCatching {
-                    handlePlaybackSettingsSetShuffle(chain, clientBaseCallSingleMethod, payload, module)
+                    handlePlaybackSettingsSetShuffle(chain, payload, module)
                 }.onFailure { t ->
                     module.log(Log.ERROR, TAG, "Failed handling SetShuffleState: ${t.message}", t)
                 }
@@ -660,7 +796,61 @@ object PlayerShuffleHook {
         }
     }
 
+    private fun deStationContext(payload: Any, module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) return
+        val (container, context) = locateContext(payload) ?: return
+        var changed = false
+        for (fieldName in listOf("uri_", "url_")) {
+            runCatching {
+                val field = context.javaClass.getDeclaredField(fieldName).apply { isAccessible = true }
+                val current = field.get(context) as? String ?: return@runCatching
+                deStation(current)?.let { destationed ->
+                    field.set(context, destationed)
+                    changed = true
+                    module.log(Log.INFO, TAG, "De-stationed $fieldName: $current -> $destationed")
+                }
+            }.onFailure { t ->
+                module.log(Log.WARN, TAG, "De-station failed for $fieldName: ${t.message}")
+            }
+        }
+        if (changed) {
+            resetMemoizedSize(context)
+            if (container !== payload) {
+                resetMemoizedSize(container)
+            }
+            resetMemoizedSize(payload)
+        }
+    }
+
+    private fun locateContext(payload: Any): Pair<Any, Any>? {
+        runCatching {
+            val field = payload.javaClass.getDeclaredField("context_").apply { isAccessible = true }
+            field.get(payload)?.let { return payload to it }
+        }
+        return runCatching {
+            val parentField = payload.javaClass.getDeclaredField("preparePlayRequest_").apply { isAccessible = true }
+            val parent = parentField.get(payload)
+            parent?.javaClass
+                ?.getDeclaredField("context_")
+                ?.apply { isAccessible = true }
+                ?.get(parent)
+                ?.let { parent to it }
+        }.getOrNull()
+    }
+
+    private fun deStation(uri: String): String? {
+        if (!uri.startsWith(STATION_PREFIX)) return null
+        var seed = uri
+        while (seed.startsWith(STATION_PREFIX)) {
+            seed = seed.substring(STATION_PREFIX.length)
+        }
+        val bare = seed.removePrefix(BASE_PREFIX)
+        if (bare.startsWith("track:") || bare.startsWith("artist:") || bare.startsWith("genre:")) return null
+        return if (seed.startsWith(BASE_PREFIX)) seed else BASE_PREFIX + seed
+    }
+
     private fun applyPlayOverrides(payload: Any, module: XposedModule) {
+        deStationContext(payload, module)
         val cl = payload.javaClass.classLoader ?: return
         val prepPlayClass = Class.forName("com.spotify.player.esperanto.proto.EsPreparePlay\$PreparePlayRequest", false, cl)
         val prepOptionsClass = Class.forName("com.spotify.player.esperanto.proto.EsPreparePlayOptions\$PreparePlayOptions", false, cl)
@@ -713,9 +903,9 @@ object PlayerShuffleHook {
         if (overrides == null) {
             overrides = overridesClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
             overrideField.set(options, overrides)
-            val optBitField = prepOptionsClass.getDeclaredField("bitField0_").apply { isAccessible = true }
-            optBitField.setInt(options, optBitField.getInt(options) or 4)
         }
+        val optBitField = prepOptionsClass.getDeclaredField("bitField0_").apply { isAccessible = true }
+        optBitField.setInt(options, optBitField.getInt(options) or 4)
 
         val optBool = optBoolClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
         val valField = optBoolClass.getDeclaredField("value_").apply { isAccessible = true }
@@ -726,16 +916,6 @@ object PlayerShuffleHook {
         shuffField.set(overrides, optBool)
         val overBitField = overridesClass.getDeclaredField("bitField0_").apply { isAccessible = true }
         overBitField.setInt(overrides, overBitField.getInt(overrides) or 1)
-
-        val modesField = runCatching { overridesClass.getDeclaredField("modes_") }.getOrNull()?.apply { isAccessible = true }
-        if (modesField != null) {
-            val emptyMapInstance = runCatching {
-                modesField.type.getDeclaredField("b").apply { isAccessible = true }.get(null)
-            }.getOrNull()
-            if (emptyMapInstance != null) {
-                modesField.set(overrides, emptyMapInstance)
-            }
-        }
 
         if (!shuffleEnabled) {
             val suppProviders = setOf(
@@ -774,74 +954,111 @@ object PlayerShuffleHook {
         module.log(Log.INFO, TAG, "Play overrides applied: isPlaylistPlay=$isPlaylistPlay shuffleOverride=$shuffleEnabled")
     }
 
-    private fun applySetOptionsOverrides(payload: Any, module: XposedModule) {
+    private fun applySetOptionsOverrides(chain: Chain, payload: Any, module: XposedModule) {
         val cl = payload.javaClass.classLoader ?: return
         val optBoolClass = Class.forName("com.spotify.player.esperanto.proto.EsOptional\$OptionalBoolean", false, cl)
-        val shuffleEnabled = isShuffleEnabled()
+
+        val shuffField = payload.javaClass.getDeclaredField("shufflingContext_").apply { isAccessible = true }
+        val currentOpt = shuffField.get(payload)
+        val bitField = payload.javaClass.getDeclaredField("bitField0_").apply { isAccessible = true }
+        val currentBits = bitField.getInt(payload)
+
+        val shuffleEnabled = if ((currentBits and 4) != 0 && currentOpt != null) {
+            val valField = optBoolClass.getDeclaredField("value_").apply { isAccessible = true }
+            val uiShuffle = valField.getBoolean(currentOpt)
+            userShuffleState = uiShuffle
+            PreferencesManager.setBoolean(null, PrefKeys.KEY_SHUFFLE_STATE, uiShuffle)
+            module.log(Log.INFO, TAG, "UI SetOptions updated shuffle state: $uiShuffle")
+            uiShuffle
+        } else {
+            isShuffleEnabled()
+        }
 
         val optBool = optBoolClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
         val valField = optBoolClass.getDeclaredField("value_").apply { isAccessible = true }
         valField.setBoolean(optBool, shuffleEnabled)
 
-        val shuffField = payload.javaClass.getDeclaredField("shufflingContext_").apply { isAccessible = true }
         shuffField.set(payload, optBool)
-        val bitField = payload.javaClass.getDeclaredField("bitField0_").apply { isAccessible = true }
-        bitField.setInt(payload, bitField.getInt(payload) or 4)
-
-        val modesField = runCatching { payload.javaClass.getDeclaredField("modes_") }.getOrNull()?.apply { isAccessible = true }
-        if (modesField != null) {
-            val emptyMapInstance = runCatching {
-                modesField.type.getDeclaredField("b").apply { isAccessible = true }.get(null)
-            }.getOrNull()
-            if (emptyMapInstance != null) {
-                modesField.set(payload, emptyMapInstance)
-            }
-        }
+        bitField.setInt(payload, currentBits or 4)
 
         resetMemoizedSize(optBool)
         resetMemoizedSize(payload)
         module.log(Log.INFO, TAG, "ContextPlayer.SetOptions intercepted: applied shuffleOverride=$shuffleEnabled")
+
+        dispatchSetShufflingContext(chain.getThisObject(), shuffleEnabled, module)
     }
 
     private fun handlePlaybackSettingsSetShuffle(
         chain: Chain,
-        clientBaseCallSingleMethod: Method?,
         payload: Any,
         module: XposedModule
     ) {
         val shuffleOnField = payload.javaClass.getDeclaredField("shuffleOn_").apply { isAccessible = true }
-        val shuffleOn = shuffleOnField.getBoolean(payload)
-        userShuffleState = shuffleOn
-        PreferencesManager.setBoolean(null, PrefKeys.KEY_SHUFFLE_STATE, shuffleOn)
-        module.log(Log.INFO, TAG, "PlaybackSettings SetShuffleState intercepted: shuffleOn=$shuffleOn")
-
         if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            val shuffleOn = isShuffleEnabled()
+            shuffleOnField.setBoolean(payload, shuffleOn)
             val ceField = runCatching { payload.javaClass.getDeclaredField("contextEnhancement_") }.getOrNull()?.apply { isAccessible = true }
             ceField?.setInt(payload, 0)
+            resetMemoizedSize(payload)
+            dispatchSetShufflingContext(chain.getThisObject(), shuffleOn, module)
         }
-        resetMemoizedSize(payload)
+    }
 
-        val client = chain.getThisObject() ?: return
-        val cl = payload.javaClass.classLoader ?: return
-        val reqClass = Class.forName("com.spotify.player.esperanto.proto.EsSetShufflingContext\$SetShufflingContextRequest", false, cl)
-        val req = reqClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
-        val scField = reqClass.getDeclaredField("shufflingContext_").apply { isAccessible = true }
-        scField.setBoolean(req, shuffleOn)
-        val bf = reqClass.getDeclaredField("bitField0_").apply { isAccessible = true }
-        bf.setInt(req, bf.getInt(req) or 1)
-        resetMemoizedSize(req)
-
-        val syncMethod = client.javaClass.methods.firstOrNull {
-            it.name == "callSync" && it.parameterCount == 3 && it.parameterTypes[0] == String::class.java
+    private fun getTransport(client: Any): Any? {
+        var cls: Class<*>? = client.javaClass
+        while (cls != null && cls != Any::class.java) {
+            val field = runCatching { cls.getDeclaredField("transport") }.getOrNull()
+            if (field != null) {
+                field.isAccessible = true
+                return runCatching { field.get(client) }.getOrNull()
+            }
+            cls = cls.superclass
         }
-        if (syncMethod != null) {
-            syncMethod.invoke(client, "spotify.player.esperanto.proto.ContextPlayer", "SetShufflingContext", req)
-            module.log(Log.INFO, TAG, "Dispatched ContextPlayer.SetShufflingContext($shuffleOn) via callSync")
-        } else if (clientBaseCallSingleMethod != null && clientBaseCallSingleMethod.declaringClass.isAssignableFrom(client.javaClass)) {
-            val single = clientBaseCallSingleMethod.invoke(client, "spotify.player.esperanto.proto.ContextPlayer", "SetShufflingContext", req)
-            val subscribeMethod = single?.javaClass?.methods?.firstOrNull { it.name == "subscribe" && it.parameterCount == 0 }
-            subscribeMethod?.invoke(single)
-            module.log(Log.INFO, TAG, "Dispatched ContextPlayer.SetShufflingContext($shuffleOn) via callSingle")
+        return null
+    }
+
+    private fun dispatchSetShufflingContext(client: Any?, shuffleOn: Boolean, module: XposedModule) {
+        runCatching {
+            val transport = (if (client != null) getTransport(client) else null)
+                ?.takeIf { !it.javaClass.name.contains("Cosmos") }
+                ?: nativeTransport
+            module.log(Log.INFO, TAG, "dispatchSetShufflingContext: shuffleOn=$shuffleOn transport=${transport?.javaClass?.name}")
+            if (transport == null) return
+            val syncMethod = transport.javaClass.methods.firstOrNull {
+                it.name == "callSync" &&
+                    it.parameterCount == 3 &&
+                    it.parameterTypes[0] == String::class.java &&
+                    it.parameterTypes[1] == String::class.java &&
+                    it.parameterTypes[2] == ByteArray::class.java
+            } ?: transport.javaClass.interfaces.firstNotNullOfOrNull { iface ->
+                iface.methods.firstOrNull {
+                    it.name == "callSync" &&
+                        it.parameterCount == 3 &&
+                        it.parameterTypes[0] == String::class.java &&
+                        it.parameterTypes[1] == String::class.java &&
+                        it.parameterTypes[2] == ByteArray::class.java
+                }
+            }
+            if (syncMethod != null) {
+                syncMethod.isAccessible = true
+                val scPayload = if (shuffleOn) byteArrayOf(0x08, 0x01) else byteArrayOf(0x08, 0x00)
+                syncMethod.invoke(
+                    transport,
+                    "spotify.player.esperanto.proto.ContextPlayer",
+                    "SetShufflingContext",
+                    scPayload
+                )
+                val soPayload = if (shuffleOn) byteArrayOf(0x1a, 0x02, 0x08, 0x01) else byteArrayOf(0x1a, 0x02, 0x08, 0x00)
+                syncMethod.invoke(
+                    transport,
+                    "spotify.player.esperanto.proto.ContextPlayer",
+                    "SetOptions",
+                    soPayload
+                )
+                module.log(Log.INFO, TAG, "Dispatched ContextPlayer SetShufflingContext and SetOptions(shuffleOn=$shuffleOn) via native transport: ${transport.javaClass.name}")
+            }
+        }.onFailure { t ->
+            module.log(Log.ERROR, TAG, "Failed dispatching SetShufflingContext: ${t.message}", t)
         }
     }
 
