@@ -150,7 +150,7 @@ above. Note `type = "premium"` is a **String** in this client (it appears as the
 | `type` | `"premium"` ✓ | `"premium"` | keep |
 | `pick-and-shuffle`, `streaming-rules`, `ads`, `on-demand` | ✓ (string values) | typed equivalents | keep both seam's values consistent |
 | `player-license`, `player-license-v2`, `shuffle`, `streaming`, `nft-disabled`, `can_use_superbird`, `tablet-free` | **missing** | present | add to both seams |
-| `catalogue`, `horizon`, `shuffle-restricted`, `unlimited-skips`, `offline` | present | absent | keep — SpotXero-only extras, harmless client-side beliefs |
+| `catalogue`, `horizon`, `shuffle-restricted`, `unlimited-skips` | present | absent | keep — SpotXero-only extras, harmless client-side UI beliefs (`offline` omitted so server-side entitlement is untouched) |
 
 Also extend the esperanto payload rewrites in `PlayerShuffleHook`
 (`overrideProductStateMap` / `overridePutValues`) with the same seven keys so the server-written legacy

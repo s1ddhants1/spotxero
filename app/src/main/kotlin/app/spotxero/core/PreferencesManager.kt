@@ -305,7 +305,11 @@ object PreferencesManager {
     }
 
     fun requestForceStop(context: Context? = null) {
-        setLong(context, PrefKeys.KEY_FORCE_STOP, System.currentTimeMillis())
+        try {
+            getPrefs(context).edit().putLong(PrefKeys.KEY_FORCE_STOP, System.currentTimeMillis()).commit()
+        } catch (t: Throwable) {
+            Log.e(TAG, "Error requesting force stop: ${t.message}", t)
+        }
     }
 
     fun updateFieldDirectly(key: String, value: Boolean) {

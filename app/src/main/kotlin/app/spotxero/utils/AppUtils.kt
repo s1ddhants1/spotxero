@@ -1,5 +1,8 @@
 package app.spotxero.utils
 
+import android.app.Activity
+import android.app.ActivityManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -8,12 +11,16 @@ import android.net.Uri
 import android.provider.Settings
 import android.util.Log
 import app.spotxero.SpotXeroApplication
+import app.spotxero.SpotXeroModule
 import app.spotxero.core.PreferencesManager
 import app.spotxero.utils.core.CommonUtils
+import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 object AppUtils {
     private const val TAG = "SpotXero"
@@ -25,32 +32,104 @@ object AppUtils {
         null
     }
 
+    fun isPackageRunning(context: Context, packageName: String): Boolean {
+        val service = SpotXeroApplication.service
+        if (service != null) {
+            val targets = runCatching { service.runningTargets }.getOrNull()
+            if (targets?.any { it.processName == packageName || it.processName.startsWith("$packageName:") } == true) {
+                return true
+            }
+        }
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        val procs = runCatching { am?.runningAppProcesses }.getOrNull()
+        return procs?.any { it.processName == packageName || it.processName.startsWith("$packageName:") } == true
+    }
+
+    private fun tryRootForceStop(packageName: String): Boolean {
+        return runCatching {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "am force-stop $packageName"))
+            process.waitFor() == 0
+        }.getOrDefault(false)
+    }
+
     suspend fun forceStopPackage(
         context: Context,
         packageName: String,
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO
     ): Boolean {
         val service = SpotXeroApplication.service
-        val wasRunning = service?.runningTargets?.any { it.processName == packageName }
-        if (service != null && wasRunning == false) {
+        val wasRunningInService = service?.runningTargets?.any {
+            it.processName == packageName || it.processName.startsWith("$packageName:")
+        }
+        if (service != null && wasRunningInService == false) {
+            return true
+        }
+
+        val rootStopped = withContext(ioDispatcher) {
+            tryRootForceStop(packageName)
+        }
+        if (rootStopped && !isPackageRunning(context, packageName)) {
             return true
         }
 
         PreferencesManager.requestForceStop(context)
 
-        val stopped = withContext(ioDispatcher) {
-            var isStopped = false
-            for (i in 0 until 10) {
-                delay(50)
-                val stillRunning = SpotXeroApplication.service?.runningTargets?.any { it.processName == packageName }
-                if (stillRunning == false) {
-                    isStopped = true
-                    break
+        var broadcastHandled = false
+        withContext(ioDispatcher) {
+            runCatching {
+                withTimeoutOrNull(1000) {
+                    suspendCancellableCoroutine { continuation ->
+                        val intent = Intent(SpotXeroModule.ACTION_FORCE_STOP).apply {
+                            setPackage(packageName)
+                        }
+                        val resultReceiver = object : BroadcastReceiver() {
+                            override fun onReceive(c: Context?, i: Intent?) {
+                                if (continuation.isActive) {
+                                    continuation.resume(resultCode == Activity.RESULT_OK)
+                                }
+                            }
+                        }
+                        context.sendOrderedBroadcast(
+                            intent,
+                            null,
+                            resultReceiver,
+                            null,
+                            Activity.RESULT_CANCELED,
+                            null,
+                            null
+                        )
+                    }
                 }
-            }
-            isStopped || (service != null && wasRunning == true)
+            }.getOrNull()?.let { broadcastHandled = it }
         }
-        if (stopped) return true
+
+        runCatching {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            am?.killBackgroundProcesses(packageName)
+        }
+
+        if (broadcastHandled) {
+            delay(200)
+            return true
+        }
+
+        if (wasRunningInService == true) {
+            val stopped = withContext(ioDispatcher) {
+                var isStopped = false
+                for (i in 0 until 10) {
+                    delay(100)
+                    val stillRunning = SpotXeroApplication.service?.runningTargets?.any {
+                        it.processName == packageName || it.processName.startsWith("$packageName:")
+                    } == true
+                    if (!stillRunning) {
+                        isStopped = true
+                        break
+                    }
+                }
+                isStopped
+            }
+            if (stopped) return true
+        }
 
         attempt("open $packageName app settings") {
             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {

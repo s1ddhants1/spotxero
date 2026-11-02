@@ -34,8 +34,7 @@ object ProductStateHook {
         "catalogue" to "premium",
         "horizon" to "FULL",
         "shuffle-restricted" to "0",
-        "unlimited-skips" to "1",
-        "offline" to "1"
+        "unlimited-skips" to "1"
     )
 
     fun install(module: XposedModule) {
