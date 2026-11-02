@@ -35,8 +35,6 @@ import app.spotxero.R
 import app.spotxero.ui.theme.AppSpacing
 import app.spotxero.ui.viewmodel.DashboardUiState
 
-import androidx.compose.ui.graphics.vector.ImageVector
-
 @Composable
 fun HomeDashboard(
     uiState: DashboardUiState,
@@ -58,16 +56,13 @@ fun HomeDashboard(
         )
 
         FeatureModuleCard(
-            icon = AppIcons.Share,
             title = stringResource(R.string.feature_clean_sharing_title),
             checked = uiState.isCleanSharingEnabled,
             enabled = true,
             onCheckedChange = onCleanSharingToggle
         )
 
-
         FeatureModuleCard(
-            icon = AppIcons.VisibilityOff,
             title = stringResource(R.string.feature_hide_podcasts_title),
             checked = uiState.isHidePodcastsEnabled,
             enabled = true,
@@ -75,7 +70,6 @@ fun HomeDashboard(
         )
 
         FeatureModuleCard(
-            icon = AppIcons.DarkMode,
             title = stringResource(R.string.feature_spotify_amoled_title),
             checked = uiState.isSpotifyAmoledEnabled,
             enabled = true,
@@ -86,7 +80,6 @@ fun HomeDashboard(
 
 @Composable
 private fun FeatureModuleCard(
-    icon: ImageVector,
     title: String,
     checked: Boolean,
     enabled: Boolean,
@@ -118,20 +111,6 @@ private fun FeatureModuleCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Surface(
-                shape = CircleShape,
-                color = if (checked && enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
-                contentColor = if (checked && enabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(38.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
@@ -192,20 +171,6 @@ private fun EnablePremiumCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Surface(
-                shape = CircleShape,
-                color = if (enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
-                contentColor = if (enabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(38.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = AppIcons.PowerSettingsNew,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
             Text(
                 text = stringResource(R.string.pref_enable_premium_title),
                 style = MaterialTheme.typography.titleSmall,
