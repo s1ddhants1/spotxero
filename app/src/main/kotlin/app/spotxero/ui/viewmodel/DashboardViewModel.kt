@@ -190,7 +190,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             } else {
                 app.getString(R.string.msg_opened_spotify_settings)
             }
-            notifyEffect(DashboardUiEffect.ShowSnackbar(msg))
+            notifyEffect(DashboardUiEffect.ShowToast(msg))
         }
     }
 

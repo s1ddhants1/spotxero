@@ -57,20 +57,6 @@ fun HomeDashboard(
             onToggle = onTogglePremium
         )
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = AppSpacing.xs, vertical = AppSpacing.xxs),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(R.string.title_features),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-
         FeatureModuleCard(
             icon = AppIcons.Share,
             title = stringResource(R.string.feature_clean_sharing_title),
