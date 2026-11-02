@@ -3,7 +3,7 @@ name: Build APKs
 on:
   workflow_dispatch:
   push:
-    branches: ["master"]
+    branches: ["main"]
     paths-ignore:
       - "README.md"
       - "art/**"
@@ -49,12 +49,12 @@ jobs:
           if [ -n "${{ secrets.KEYSTORE }}" ]; then
             echo "Configuring release keystore from secrets"
             echo "${{ secrets.KEYSTORE }}" | base64 -d > spotxero.keystore
-            cat <<EOF > keystore.properties
-KEYSTORE_FILE=spotxero.keystore
-KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
-KEY_ALIAS=${{ secrets.KEY_ALIAS }}
-KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
-EOF
+            {
+              echo "KEYSTORE_FILE=spotxero.keystore"
+              echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}"
+              echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"
+              echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}"
+            } > keystore.properties
           else
             echo "Custom keystore not provided; fallback will be used"
           fi
@@ -91,12 +91,12 @@ EOF
       - name: Configure Fallback Keystore Properties
         if: secrets.KEYSTORE == ''
         run: |
-          cat <<EOF > keystore.properties
-KEYSTORE_FILE=app/build/keystore/nightly-fallback.keystore
-KEYSTORE_PASSWORD=android
-KEY_ALIAS=spotxeronightly
-KEY_PASSWORD=android
-EOF
+          {
+            echo "KEYSTORE_FILE=app/build/keystore/nightly-fallback.keystore"
+            echo "KEYSTORE_PASSWORD=android"
+            echo "KEY_ALIAS=spotxeronightly"
+            echo "KEY_PASSWORD=android"
+          } > keystore.properties
 
       - name: Build Release APK
         run: ./gradlew --console=plain assembleRelease --warning-mode summary
@@ -198,7 +198,7 @@ EOF
 
           PREVIOUS_NIGHTLY_SHA=$(gh release view nightly --json targetCommitish --jq .targetCommitish 2>/dev/null || true)
           {
-            echo "Automated prerelease built from master at commit $GITHUB_SHA. It may be unstable."
+            echo "Automated prerelease built from ${GITHUB_REF_NAME:-main} at commit $GITHUB_SHA. It may be unstable."
             if [ -n "$PREVIOUS_NIGHTLY_SHA" ] && [ "$PREVIOUS_NIGHTLY_SHA" != "$GITHUB_SHA" ]; then
               echo
               echo "## Changes since previous nightly"
