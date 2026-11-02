@@ -9,6 +9,8 @@
     <string name="framework_spotify_not_installed_desc">Install Spotify to use this module</string>
     <string name="framework_lsposed_not_in_scope_title">Spotify Not in Scope</string>
     <string name="framework_lsposed_not_in_scope_desc">Add Spotify to module scope in LSPosed Manager</string>
+    <string name="framework_spotify_not_in_scope_title">Module Disabled in LSPatch</string>
+    <string name="framework_spotify_not_in_scope_desc">Enable SpotXero for Spotify in LSPatch Manager</string>
     <string name="pref_enable_premium_title">Enable Premium</string>
     <string name="btn_back">Back</string>
     <string name="btn_force_stop">Force Stop</string>

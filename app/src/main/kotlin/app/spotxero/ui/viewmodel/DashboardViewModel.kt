@@ -71,6 +71,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val isModuleActive = ModuleStatus.isModuleActive.value
         val frameworkName = ModuleStatus.frameworkName.value ?: "LSPosed"
         val service = SpotXeroApplication.service
+        val name = service?.frameworkName?.takeIf { it.isNotBlank() } ?: frameworkName
+        val version = service?.frameworkVersion.orEmpty()
         val isFrameworkConnected = isModuleActive || service != null
         val isInstalled = _uiState.value.installedSpotifyVariants.isNotEmpty()
 
@@ -85,25 +87,53 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 )
             }
             service != null -> {
-                val scope = service.scope
-                val isInScope = scope.any { it in CommonUtils.SUPPORTED_PACKAGES }
-                if (!isInScope && scope.isNotEmpty()) {
-                    BannerEvaluationData(
-                        titleRes = R.string.framework_lsposed_not_in_scope_title,
-                        titleArgs = emptyList(),
-                        descRes = R.string.framework_lsposed_not_in_scope_desc,
-                        descArgs = emptyList(),
-                        isInjectable = false
-                    )
+                val currentScope = service.scope.orEmpty()
+                val isLSPatch = name.contains("LSPatch", ignoreCase = true)
+
+                if (isLSPatch) {
+                    val isInScope = currentScope.any { it in CommonUtils.SUPPORTED_PACKAGES }
+                    if (!isInScope) {
+                        BannerEvaluationData(
+                            titleRes = R.string.framework_spotify_not_in_scope_title,
+                            titleArgs = emptyList(),
+                            descRes = R.string.framework_spotify_not_in_scope_desc,
+                            descArgs = emptyList(),
+                            isInjectable = false
+                        )
+                    } else {
+                        BannerEvaluationData(
+                            titleRes = R.string.framework_active_title_dynamic,
+                            titleArgs = listOf(name),
+                            descRes = R.string.framework_active_desc,
+                            descArgs = listOf(name, version),
+                            isInjectable = true
+                        )
+                    }
                 } else {
-                    val fwVersion = service.frameworkVersion
-                    BannerEvaluationData(
-                        titleRes = R.string.framework_active_title_dynamic,
-                        titleArgs = listOf(frameworkName),
-                        descRes = R.string.framework_active_desc,
-                        descArgs = listOf(frameworkName, fwVersion),
-                        isInjectable = true
-                    )
+                    val isLSPosed = name.contains("LSPosed", ignoreCase = true)
+                    val isInScope = if (isLSPosed) {
+                        currentScope.any { it in CommonUtils.SUPPORTED_PACKAGES }
+                    } else {
+                        currentScope.isEmpty() || currentScope.any { it in CommonUtils.SUPPORTED_PACKAGES }
+                    }
+
+                    if (!isInScope) {
+                        BannerEvaluationData(
+                            titleRes = if (isLSPosed) R.string.framework_lsposed_not_in_scope_title else R.string.framework_spotify_not_in_scope_title,
+                            titleArgs = emptyList(),
+                            descRes = if (isLSPosed) R.string.framework_lsposed_not_in_scope_desc else R.string.framework_spotify_not_in_scope_desc,
+                            descArgs = emptyList(),
+                            isInjectable = false
+                        )
+                    } else {
+                        BannerEvaluationData(
+                            titleRes = R.string.framework_active_title_dynamic,
+                            titleArgs = listOf(name),
+                            descRes = R.string.framework_active_desc,
+                            descArgs = listOf(name, version),
+                            isInjectable = true
+                        )
+                    }
                 }
             }
             isModuleActive -> {
@@ -129,7 +159,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { current ->
             current.copy(
                 isModuleActive = isModuleActive,
-                detectedFramework = frameworkName,
+                detectedFramework = name,
                 isFrameworkConnected = isFrameworkConnected,
                 isInjectable = eval.isInjectable,
                 titleRes = eval.titleRes,

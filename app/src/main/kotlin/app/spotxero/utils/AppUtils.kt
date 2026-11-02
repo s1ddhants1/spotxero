@@ -33,23 +33,28 @@ object AppUtils {
     }
 
     fun isPackageRunning(context: Context, packageName: String): Boolean {
-        val service = SpotXeroApplication.service
-        if (service != null) {
-            val targets = runCatching { service.runningTargets }.getOrNull()
-            if (targets?.any { it.processName == packageName || it.processName.startsWith("$packageName:") } == true) {
-                return true
-            }
-        }
+        val rootRunning = runCatching {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "pidof $packageName"))
+            val output = process.inputStream.bufferedReader().readText().trim()
+            process.waitFor() == 0 && output.isNotEmpty()
+        }.getOrNull()
+        if (rootRunning != null) return rootRunning
+
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
         val procs = runCatching { am?.runningAppProcesses }.getOrNull()
         return procs?.any { it.processName == packageName || it.processName.startsWith("$packageName:") } == true
     }
 
     private fun tryRootForceStop(packageName: String): Boolean {
-        return runCatching {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "am force-stop $packageName"))
-            process.waitFor() == 0
-        }.getOrDefault(false)
+        val suPaths = listOf("su", "/system/bin/su", "/system/xbin/su", "/data/adb/ksu/bin/su", "/data/adb/magisk/su")
+        for (su in suPaths) {
+            val success = runCatching {
+                val process = Runtime.getRuntime().exec(arrayOf(su, "-c", "am force-stop $packageName"))
+                process.waitFor() == 0
+            }.getOrDefault(false)
+            if (success) return true
+        }
+        return false
     }
 
     suspend fun forceStopPackage(
@@ -57,18 +62,10 @@ object AppUtils {
         packageName: String,
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO
     ): Boolean {
-        val service = SpotXeroApplication.service
-        val wasRunningInService = service?.runningTargets?.any {
-            it.processName == packageName || it.processName.startsWith("$packageName:")
-        }
-        if (service != null && wasRunningInService == false) {
-            return true
-        }
-
         val rootStopped = withContext(ioDispatcher) {
             tryRootForceStop(packageName)
         }
-        if (rootStopped && !isPackageRunning(context, packageName)) {
+        if (rootStopped) {
             return true
         }
 
@@ -77,10 +74,11 @@ object AppUtils {
         var broadcastHandled = false
         withContext(ioDispatcher) {
             runCatching {
-                withTimeoutOrNull(1000) {
+                withTimeoutOrNull(1500) {
                     suspendCancellableCoroutine { continuation ->
                         val intent = Intent(SpotXeroModule.ACTION_FORCE_STOP).apply {
                             setPackage(packageName)
+                            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                         }
                         val resultReceiver = object : BroadcastReceiver() {
                             override fun onReceive(c: Context?, i: Intent?) {
@@ -109,26 +107,8 @@ object AppUtils {
         }
 
         if (broadcastHandled) {
-            delay(200)
+            delay(300)
             return true
-        }
-
-        if (wasRunningInService == true) {
-            val stopped = withContext(ioDispatcher) {
-                var isStopped = false
-                for (i in 0 until 10) {
-                    delay(100)
-                    val stillRunning = SpotXeroApplication.service?.runningTargets?.any {
-                        it.processName == packageName || it.processName.startsWith("$packageName:")
-                    } == true
-                    if (!stillRunning) {
-                        isStopped = true
-                        break
-                    }
-                }
-                isStopped
-            }
-            if (stopped) return true
         }
 
         attempt("open $packageName app settings") {

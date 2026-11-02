@@ -12,17 +12,14 @@ object ProductStateHook {
 
     val TYPED_SPOOFS: Map<String, Any> = mapOf(
         "ads" to false,
-        "player-license" to "premium",
-        "player-license-v2" to "premium",
         "shuffle" to false,
         "on-demand" to true,
-        "streaming" to true,
         "pick-and-shuffle" to false,
         "streaming-rules" to "",
         "nft-disabled" to "1",
         "type" to "premium",
         "can_use_superbird" to true,
-        "tablet-free" to false
+        "tablet-free" to true
     )
 
     val LEGACY_SPOOFS: Map<String, String> = TYPED_SPOOFS.mapValues { (_, value) ->

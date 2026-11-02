@@ -1,6 +1,7 @@
 package app.spotxero
 
 import android.app.Activity
+import android.app.Application
 import android.app.NotificationManager
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -10,6 +11,7 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.media.AudioManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
@@ -35,6 +37,7 @@ class SpotXeroModule : XposedModule() {
     @Volatile
     private var appContext: Context? = null
 
+    private val activeActivities: MutableSet<Activity> = Collections.newSetFromMap(WeakHashMap())
     private val activeServices: MutableSet<Service> = Collections.newSetFromMap(WeakHashMap())
 
     private fun terminateProcess(context: Context?) {
@@ -47,6 +50,12 @@ class SpotXeroModule : XposedModule() {
             }
         }.getOrNull()
 
+        for (activity in activeActivities.toList()) {
+            runCatching {
+                activity.finishAffinity()
+                activity.finishAndRemoveTask()
+            }
+        }
         for (service in activeServices.toList()) {
             runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -157,6 +166,24 @@ class SpotXeroModule : XposedModule() {
                         registerReceiverSafely(app)
                         PreferencesManager.initTarget(app)
                     }
+                    val application = chain.getThisObject() as? Application
+                    application?.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+                        override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                            activeActivities.add(activity)
+                        }
+                        override fun onActivityStarted(activity: Activity) {
+                            activeActivities.add(activity)
+                        }
+                        override fun onActivityResumed(activity: Activity) {
+                            activeActivities.add(activity)
+                        }
+                        override fun onActivityPaused(activity: Activity) {}
+                        override fun onActivityStopped(activity: Activity) {}
+                        override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+                        override fun onActivityDestroyed(activity: Activity) {
+                            activeActivities.remove(activity)
+                        }
+                    })
                     chain.proceed()
                 }
         }

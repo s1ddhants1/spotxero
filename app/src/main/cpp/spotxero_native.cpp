@@ -22,7 +22,7 @@ static bool s_native_hooked = false;
 
 static bool is_target_library(const char *str) {
     if (!str) return false;
-    return (strstr(str, "liborbit") != NULL);
+    return (strstr(str, "liborbit") != NULL || strstr(str, "split_config.arm64_v8a.apk") != NULL);
 }
 
 static bool patch_single_instruction(uintptr_t addr) {
