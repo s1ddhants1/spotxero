@@ -24,6 +24,8 @@ jobs:
     if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      KEYSTORE: ${{ secrets.KEYSTORE }}
 
     steps:
       - uses: actions/checkout@v7
@@ -46,9 +48,9 @@ jobs:
       - name: Setup Release Keystore
         id: setup_keystore
         run: |
-          if [ -n "${{ secrets.KEYSTORE }}" ]; then
+          if [ -n "$KEYSTORE" ]; then
             echo "Configuring release keystore from secrets"
-            echo "${{ secrets.KEYSTORE }}" | base64 -d > spotxero.keystore
+            echo "$KEYSTORE" | base64 -d > spotxero.keystore
             {
               echo "KEYSTORE_FILE=spotxero.keystore"
               echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}"
@@ -60,7 +62,7 @@ jobs:
           fi
 
       - name: Restore Nightly Fallback Keystore
-        if: secrets.KEYSTORE == ''
+        if: env.KEYSTORE == ''
         id: fallback_keystore_cache
         uses: actions/cache/restore@v6
         with:
@@ -68,7 +70,7 @@ jobs:
           key: spotxero-nightly-fallback-keystore
 
       - name: Generate Fallback Keystore if not cached
-        if: secrets.KEYSTORE == '' && steps.fallback_keystore_cache.outputs.cache-hit != 'true'
+        if: env.KEYSTORE == '' && steps.fallback_keystore_cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p app/build/keystore
           keytool -genkeypair -v \
@@ -82,14 +84,14 @@ jobs:
             -dname "CN=SpotXero Nightly,O=SpotXero,C=US"
 
       - name: Save Fallback Keystore to cache
-        if: secrets.KEYSTORE == '' && steps.fallback_keystore_cache.outputs.cache-hit != 'true'
+        if: env.KEYSTORE == '' && steps.fallback_keystore_cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: app/build/keystore/nightly-fallback.keystore
           key: spotxero-nightly-fallback-keystore
 
       - name: Configure Fallback Keystore Properties
-        if: secrets.KEYSTORE == ''
+        if: env.KEYSTORE == ''
         run: |
           {
             echo "KEYSTORE_FILE=app/build/keystore/nightly-fallback.keystore"
