@@ -9,10 +9,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <elf.h>
 #include "hook.h"
 
 #define LOG_TAG "SpotXeroNative"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 static HookFunType hook_func = NULL;
@@ -31,7 +33,17 @@ static bool patch_single_instruction(uintptr_t addr) {
         return true;
     }
 
-    if ((instr & 0xFFC003FF) != 0xB90003E0) {
+    if ((instr & 0xFFC00000) != 0xB9000000) {
+        return false;
+    }
+
+    uint32_t rn = (instr >> 5) & 0x1F;
+    if (rn != 31 && rn != 29) {
+        return false;
+    }
+
+    uint32_t rt = instr & 0x1F;
+    if (rt != 0) {
         return false;
     }
 
@@ -50,20 +62,79 @@ static bool patch_single_instruction(uintptr_t addr) {
     return true;
 }
 
+#if defined(__aarch64__)
 static bool scan_and_patch(uintptr_t start, uintptr_t end) {
-    for (uintptr_t p = start; p < end - 16; p += 4) {
-        uint32_t w0 = *(uint32_t *)p;
-        uint32_t w1 = *(uint32_t *)(p + 4);
-        uint32_t w2 = *(uint32_t *)(p + 8);
+    if (end <= start + 16) return false;
 
-        if (w0 == 0x528000C5 && w1 == 0xF94003A8) {
-            if ((w2 & 0xFFC003FF) == 0xB90003E0 || (w2 & 0xFFC003FF) == 0xB90003DF) {
-                return patch_single_instruction(p + 8);
+    for (uintptr_t p = start; p <= end - 16; p += 4) {
+        uint32_t w0 = *(const uint32_t *)p;
+        if ((w0 & 0xFFFFFFE0) != 0x528000C0) {
+            continue;
+        }
+
+        uint32_t w1 = *(const uint32_t *)(p + 4);
+        if ((w1 & 0xFC000000) != 0x94000000) {
+            continue;
+        }
+
+        uint32_t w2 = *(const uint32_t *)(p + 8);
+        if ((w2 & 0xFFC00000) != 0xF9400000) {
+            continue;
+        }
+
+        uint32_t w3 = *(const uint32_t *)(p + 12);
+        if ((w3 & 0xFFC00000) != 0xB9000000) {
+            continue;
+        }
+
+        uint32_t rn = (w3 >> 5) & 0x1F;
+        if (rn != 31 && rn != 29) {
+            continue;
+        }
+
+        uint32_t rt = w3 & 0x1F;
+        if (rt != 0 && rt != 31) {
+            continue;
+        }
+
+        if (patch_single_instruction(p + 12)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool scan_elf_segments(uintptr_t base) {
+    if (!base) return false;
+    const Elf64_Ehdr *ehdr = (const Elf64_Ehdr *)base;
+    if (memcmp(ehdr->e_ident, ELFMAG, SELFMAG) != 0) {
+        return false;
+    }
+
+    const Elf64_Phdr *phdr = (const Elf64_Phdr *)(base + ehdr->e_phoff);
+    for (int i = 0; i < ehdr->e_phnum; i++) {
+        if (phdr[i].p_type == PT_LOAD && (phdr[i].p_flags & PF_X) != 0) {
+            uintptr_t seg_start = base + phdr[i].p_vaddr;
+            uintptr_t seg_end = seg_start + phdr[i].p_memsz;
+            if (scan_and_patch(seg_start, seg_end)) {
+                return true;
             }
         }
     }
     return false;
 }
+#else
+static bool scan_and_patch(uintptr_t start, uintptr_t end) {
+    (void)start;
+    (void)end;
+    return false;
+}
+
+static bool scan_elf_segments(uintptr_t base) {
+    (void)base;
+    return false;
+}
+#endif
 
 static bool scan_process_maps() {
     FILE *fp = fopen("/proc/self/maps", "r");
@@ -96,13 +167,11 @@ extern "C" void on_library_loaded(const char *name, void *handle) {
         if (onload) {
             Dl_info info;
             if (dladdr(onload, &info) != 0 && info.dli_fbase && info.dli_fname) {
-                if (strstr(info.dli_fname, "liborbit") != NULL) {
+                if (is_target_library(info.dli_fname)) {
                     uintptr_t base = (uintptr_t)info.dli_fbase;
-                    uintptr_t fast_path_addr = base + 0x12895d4;
-
-                    if (patch_single_instruction(fast_path_addr)) {
+                    if (scan_elf_segments(base)) {
                         s_native_hooked = true;
-                        LOGI("Successfully applied fast-path native patch to liborbit-jni-spotify.so");
+                        LOGI("Successfully applied semantic native patch to liborbit-jni-spotify.so via ELF scan");
                         return;
                     }
                 }
@@ -112,7 +181,7 @@ extern "C" void on_library_loaded(const char *name, void *handle) {
 
     if (scan_process_maps()) {
         s_native_hooked = true;
-        LOGI("Successfully applied pattern-scanned native patch to liborbit-jni-spotify.so");
+        LOGI("Successfully applied semantic native patch to liborbit-jni-spotify.so via maps scan");
     }
 }
 
@@ -121,7 +190,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     (void)reserved;
     if (scan_process_maps()) {
         s_native_hooked = true;
-        LOGI("Successfully applied native patch on JNI_OnLoad scan");
+        LOGI("Successfully applied semantic native patch on JNI_OnLoad scan");
     }
     return JNI_VERSION_1_6;
 }
@@ -131,7 +200,7 @@ extern "C" __attribute__((visibility("default"))) __attribute__((used)) NativeOn
     hook_func = entries->hook_func;
     if (scan_process_maps()) {
         s_native_hooked = true;
-        LOGI("Successfully applied native patch on native_init scan");
+        LOGI("Successfully applied semantic native patch on native_init scan");
     }
     return on_library_loaded;
 }
