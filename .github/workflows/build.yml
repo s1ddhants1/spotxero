@@ -45,11 +45,11 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Setup Release Keystore
+      - name: Setup Keystore
         id: setup_keystore
         run: |
           if [ -n "$KEYSTORE" ]; then
-            echo "Configuring release keystore from secrets"
+            echo "Configuring keystore from secrets"
             echo "$KEYSTORE" | base64 -d > spotxero.keystore
             {
               echo "KEYSTORE_FILE=spotxero.keystore"
@@ -61,42 +61,42 @@ jobs:
             echo "Custom keystore not provided; fallback will be used"
           fi
 
-      - name: Restore Nightly Fallback Keystore
+      - name: Restore Fallback Keystore
         if: env.KEYSTORE == ''
         id: fallback_keystore_cache
         uses: actions/cache/restore@v6
         with:
-          path: app/build/keystore/nightly-fallback.keystore
-          key: spotxero-nightly-fallback-keystore
+          path: app/build/keystore/spotxero-fallback.keystore
+          key: spotxero-shared-fallback-keystore
 
       - name: Generate Fallback Keystore if not cached
         if: env.KEYSTORE == '' && steps.fallback_keystore_cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p app/build/keystore
           keytool -genkeypair -v \
-            -keystore app/build/keystore/nightly-fallback.keystore \
+            -keystore app/build/keystore/spotxero-fallback.keystore \
             -storepass android \
-            -alias spotxeronightly \
+            -alias spotxero \
             -keypass android \
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -dname "CN=SpotXero Nightly,O=SpotXero,C=US"
+            -dname "CN=SpotXero,O=SpotXero,C=US"
 
       - name: Save Fallback Keystore to cache
         if: env.KEYSTORE == '' && steps.fallback_keystore_cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
-          path: app/build/keystore/nightly-fallback.keystore
-          key: spotxero-nightly-fallback-keystore
+          path: app/build/keystore/spotxero-fallback.keystore
+          key: spotxero-shared-fallback-keystore
 
       - name: Configure Fallback Keystore Properties
         if: env.KEYSTORE == ''
         run: |
           {
-            echo "KEYSTORE_FILE=app/build/keystore/nightly-fallback.keystore"
+            echo "KEYSTORE_FILE=app/build/keystore/spotxero-fallback.keystore"
             echo "KEYSTORE_PASSWORD=android"
-            echo "KEY_ALIAS=spotxeronightly"
+            echo "KEY_ALIAS=spotxero"
             echo "KEY_PASSWORD=android"
           } > keystore.properties
 
@@ -138,6 +138,8 @@ jobs:
     if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      KEYSTORE: ${{ secrets.KEYSTORE }}
 
     steps:
       - uses: actions/checkout@v7
@@ -157,12 +159,60 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Restore Persistent Keystore
-        env:
-          DEBUG_KEYSTORE: ${{ secrets.DEBUG_KEYSTORE }}
-        if: env.DEBUG_KEYSTORE != ''
+      - name: Setup Keystore
+        id: setup_keystore
         run: |
-          echo "$DEBUG_KEYSTORE" | base64 -d > ./app/persistent-debug.keystore
+          if [ -n "$KEYSTORE" ]; then
+            echo "Configuring keystore from secrets"
+            echo "$KEYSTORE" | base64 -d > spotxero.keystore
+            {
+              echo "KEYSTORE_FILE=spotxero.keystore"
+              echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}"
+              echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"
+              echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}"
+            } > keystore.properties
+          else
+            echo "Custom keystore not provided; fallback will be used"
+          fi
+
+      - name: Restore Fallback Keystore
+        if: env.KEYSTORE == ''
+        id: fallback_keystore_cache
+        uses: actions/cache/restore@v6
+        with:
+          path: app/build/keystore/spotxero-fallback.keystore
+          key: spotxero-shared-fallback-keystore
+
+      - name: Generate Fallback Keystore if not cached
+        if: env.KEYSTORE == '' && steps.fallback_keystore_cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p app/build/keystore
+          keytool -genkeypair -v \
+            -keystore app/build/keystore/spotxero-fallback.keystore \
+            -storepass android \
+            -alias spotxero \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=SpotXero,O=SpotXero,C=US"
+
+      - name: Save Fallback Keystore to cache
+        if: env.KEYSTORE == '' && steps.fallback_keystore_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: app/build/keystore/spotxero-fallback.keystore
+          key: spotxero-shared-fallback-keystore
+
+      - name: Configure Fallback Keystore Properties
+        if: env.KEYSTORE == ''
+        run: |
+          {
+            echo "KEYSTORE_FILE=app/build/keystore/spotxero-fallback.keystore"
+            echo "KEYSTORE_PASSWORD=android"
+            echo "KEY_ALIAS=spotxero"
+            echo "KEY_PASSWORD=android"
+          } > keystore.properties
 
       - name: Build Debug APK
         run: ./gradlew --console=plain assembleDebug --warning-mode summary

@@ -99,11 +99,16 @@ android {
                 enableV3Signing = true
                 enableV4Signing = true
             }
-        }
-
-        val debugKeystore = project.file("persistent-debug.keystore")
-        if (debugKeystore.exists()) {
-            getByName("debug").storeFile = debugKeystore
+            getByName("debug").apply {
+                storeFile = keystoreFile
+                storePassword = keystorePassword
+                keyAlias = keyAliasName
+                keyPassword = keyPasswordVal
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
         }
     }
 
@@ -119,6 +124,7 @@ android {
         }
         debug {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
