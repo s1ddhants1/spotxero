@@ -151,11 +151,30 @@ above. Note `type = "premium"` is a **String** in this client (it appears as the
 | `pick-and-shuffle`, `streaming-rules`, `ads`, `on-demand` | ✓ (string values) | typed equivalents | keep both seam's values consistent |
 | `player-license`, `player-license-v2`, `shuffle`, `streaming`, `nft-disabled`, `can_use_superbird`, `tablet-free` | **missing** | present | add to both seams |
 | `catalogue`, `horizon`, `shuffle-restricted`, `unlimited-skips` | present | absent | keep — SpotXero-only extras, harmless client-side UI beliefs (`offline` omitted so server-side entitlement is untouched) |
+### Architectural Rule: Local-Only Readers, Never Outbound Writers
 
-Also extend the esperanto payload rewrites in `PlayerShuffleHook`
-(`overrideProductStateMap` / `overridePutValues`) with the same seven keys so the server-written legacy
-storage view agrees with the in-client spoof. Mismatched keys across seams is exactly the "dual code
-paths" rot `AGENTS.md` warns about — express the key set once.
+> [!IMPORTANT]
+> Product-state account attributes (`internal.AccountAttribute` proto and in-memory `Map`) must **strictly remain local readers** for in-process Java UI and client-side capability checks (`installMapSeam` and `installAttributeSeam` in `ProductStateHook.kt`).
+> Under no circumstances should product state spoofs be written to outbound RPCs, native legacy storage (`writeProductStateToLegacyStorage`), or remote endpoints (`PutValues`, `PutValuesSync`).
+
+During earlier experimentation, an attempt was made to extend Esperanto payload rewrites in `PlayerShuffleHook` (`overrideProductStateMap` / `overridePutValues`) under the assumption that synchronizing the native storage view with the in-client spoof would enforce consistency. In practice, this caused a critical playback regression:
+
+1. **The 9.6-Second Audio Stall Root Cause**:
+   - Playback starts cleanly on any track, but stalls and skips at exactly ~9.65s (`position=9613ms`).
+   - Logcat diagnostics showed `[Esperanto] spotify.player.esperanto.proto.ContextPlayer -> GetError`, followed immediately by `AudioTrack::flush`, with playback state transitioning from `PLAYING(3)` to `BUFFERING(6)` / `PAUSED(2)`.
+   - Streaming architecture inspection revealed that Spotify employs a two-stage audio retrieval pipeline:
+     - **Stage 1 (`interactive_prefetch`)**: An unauthenticated fast initial buffer (~9.65s) fetched directly from the audio CDN (`audio-ak.spotifycdn.com`).
+     - **Stage 2 (`interactive`)**: When the prefetch buffer nears exhaustion at ~9s, the native player (`core-list-player`) initiates a continuous streaming request via `storage-resolve/v2/files/audio/?product=...` using the client's registered account credentials.
+   - When outbound product state was spoofed to `player-license="premium"` or `type="premium"` via `writeProductStateToLegacyStorage` or `PutValues`, Spotify's native storage was poisoned. The backend evaluated the continuous stream request against the actual server-side Free tier entitlement, detected the conflicting client claims, and rejected the `interactive` stream handover with an Esperanto error.
+   - Verification: Decompilation of working releases (`SpotXero-v1.1.0.apk`) confirmed that outbound product-state hooks were never present. Removing `writeProductStateToLegacyStorage` and `PutValues` completely resolved the stall, allowing sustained continuous playback.
+
+2. **Native Ghidra Decompilation & Reverse Engineering (`liborbit-jni-spotify.so`)**:
+   - To rule out native patch interference, the native player configuration routine at entry `0x1288d64` (`core_list_player_config_init`, ending at `0x1289f2c`) was disassembled and decompiled using Ghidra Headless:
+     - Addresses `0x12895c0`–`0x12895d4`: Look up configuration key `"core-list-player"`, `"ad_clips_per_free_tier_ad_break"` (default value 6) and store it on the stack at `[sp, #0x11c]`.
+     - Address `0x1289cc0`: Instruction `stp w10, w9, [x20, #0x18]` writes `w9` (`ad_clips_per_free_tier_ad_break`) to field `0x1c` of the native player configuration object `x20`.
+     - SpotXero's native patch in `libspotxero_native.so` modifies `str w0, [sp, #0x11c]` (`e0 1f 01 b9`) to `str wzr, [sp, #0x11c]` (`ff 1f 01 b9`), setting the ad clip counter to 0.
+     - Live memory analysis via Frida and kernel `/proc/$PID/maps` verified that the 4KB page at `0x78fc991000-0x78fc992000` was cleanly patched and write-protected (`r-xp`).
+     - Dynamic hot-reversion of `0x12895d4` back to stock `e0 1f 01 b9` in running memory confirmed that the native patch had no effect on playback stalls. The stall was 100% reproducible with stock native bytes whenever outbound product state was hooked, and 0% reproducible when product state spoofs remained strictly local.
 
 ### Settings integration
 
