@@ -50,6 +50,10 @@ object DexKitResolver {
     const val KEY_CONTEXT_CAPABILITY_INIT = "context_capability_init"
     const val KEY_CLIENT_BASE_CALL_SINGLE = "client_base_call_single"
     const val KEY_COROUTINE_CLIENT_BASE_CALL_SINGLE = "coroutine_client_base_call_single"
+    const val KEY_MFT_DISALLOW_RESTRICTION_HANDLER = "mft_disallow_restriction_handler"
+    const val KEY_OPTIONAL_ABSENT_INSTANCE = "optional_absent_instance"
+    const val KEY_UCS_ACCOUNT_ATTRIBUTES_GETTER = "ucs_account_attributes_getter"
+    const val KEY_RCS_CONFIGURATION_ASSIGNED_VALUES = "rcs_configuration_assigned_values"
 
     private const val CLIENT_BASE = "com.spotify.esperanto.esperanto.ClientBase"
     private const val COROUTINE_CLIENT_BASE = "com.spotify.esperanto.esperanto.CoroutineClientBase"
@@ -69,11 +73,8 @@ object DexKitResolver {
     private const val AUTO_VALUE_RESTRICTIONS = "com.spotify.player.model.AutoValue_Restrictions"
     private const val ES_RESTRICTIONS = "com.spotify.player.esperanto.proto.EsRestrictions\$Restrictions"
     private const val RESTRICTIONS = "com.spotify.player.model.Restrictions"
-    private val RESTRICTION_METHOD_NAMES = listOf(
-        "disallowTogglingShuffleReasons",
-        "disallowTogglingRepeatTrackReasons",
-        "disallowTogglingRepeatContextReasons"
-    )
+    private const val UCS_ACCOUNT_ATTRIBUTES_RESPONSE = "com.spotify.ucs.proto.v0.UcsResponseWrapper\$AccountAttributesResponse"
+    private const val RCS_CONFIGURATION = "com.spotify.rcs.resolver.grpc.v0.Configuration"
     private const val GET_VALUES_RESPONSE = "com.spotify.connectivity.product_state.esperanto.proto.GetValuesResponse"
     private const val PRODUCT_STATE_PROTO = "com.spotify.remoteconfig.internal.ProductStateProto"
     private const val ACCOUNT_ATTRIBUTE = "com.spotify.remoteconfig.internal.AccountAttribute"
@@ -122,8 +123,12 @@ object DexKitResolver {
         resolveSmartShuffleFlags(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveProductStateMap(classLoader, cachedSignatures, signatures, members)
         resolveProductStateAttributeSeam(classLoader, cachedSignatures, signatures, members)
+        resolveUcsAccountAttributesGetter(classLoader, cachedSignatures, signatures, members)
+        resolveRcsConfigurationAssignedValues(classLoader, cachedSignatures, signatures, members)
         resolvePlayerRestrictions(classLoader, cachedSignatures, signatures, members)
         resolvePlayerRestrictionsConverter(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveMftDisallowRestrictionHandler(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveOptionalAbsentInstance(dexKit, classLoader, members)
         resolveOnDemandInFreeGetters(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveSetShuffleCommandValue(classLoader, cachedSignatures, signatures, members)
         resolvePlayerOptionsShuffle(classLoader, cachedSignatures, signatures, members)
@@ -412,6 +417,48 @@ object DexKitResolver {
             method.returnType == Map::class.java &&
             !java.lang.reflect.Modifier.isStatic(method.modifiers)
 
+    private fun resolveUcsAccountAttributesGetter(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_UCS_ACCOUNT_ATTRIBUTES_GETTER, classLoader, ::isUcsAccountAttributesGetter)
+            ?: runCatching {
+                Class.forName(UCS_ACCOUNT_ATTRIBUTES_RESPONSE, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull(::isUcsAccountAttributesGetter)
+            }.getOrNull()
+        store(KEY_UCS_ACCOUNT_ATTRIBUTES_GETTER, method, sigs, members)
+    }
+
+    private fun isUcsAccountAttributesGetter(method: Method): Boolean =
+        method.declaringClass.name == UCS_ACCOUNT_ATTRIBUTES_RESPONSE &&
+            method.parameterCount == 0 &&
+            Map::class.java.isAssignableFrom(method.returnType) &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun resolveRcsConfigurationAssignedValues(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_RCS_CONFIGURATION_ASSIGNED_VALUES, classLoader, ::isRcsConfigurationAssignedValuesGetter)
+            ?: runCatching {
+                Class.forName(RCS_CONFIGURATION, false, classLoader)
+                    .declaredMethods
+                    .firstOrNull(::isRcsConfigurationAssignedValuesGetter)
+            }.getOrNull()
+        store(KEY_RCS_CONFIGURATION_ASSIGNED_VALUES, method, sigs, members)
+    }
+
+    private fun isRcsConfigurationAssignedValuesGetter(method: Method): Boolean =
+        method.declaringClass.name == RCS_CONFIGURATION &&
+            method.parameterCount == 0 &&
+            List::class.java.isAssignableFrom(method.returnType) &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
     private fun resolvePlayerRestrictions(
         classLoader: ClassLoader,
         cached: Map<String, String>?,
@@ -421,13 +468,11 @@ object DexKitResolver {
         val methods = cached?.get(KEY_PLAYER_RESTRICTIONS_METHODS)
             ?.split('|')
             ?.mapNotNull { cachedMethod(classLoader, it, ::isRestrictionsMethod) }
-            ?.takeIf { it.size == RESTRICTION_METHOD_NAMES.size }
+            ?.ifEmpty { null }
             ?: runCatching {
                 val clazz = Class.forName(AUTO_VALUE_RESTRICTIONS, false, classLoader)
-                RESTRICTION_METHOD_NAMES.mapNotNull { name ->
-                    clazz.declaredMethods.firstOrNull { it.name == name && isRestrictionsMethod(it) }
-                }
-            }.getOrNull()?.takeIf { it.size == RESTRICTION_METHOD_NAMES.size }
+                clazz.declaredMethods.filter(::isRestrictionsMethod)
+            }.getOrNull()?.ifEmpty { null }
 
         if (methods.isNullOrEmpty()) {
             Log.w(TAG, "$KEY_PLAYER_RESTRICTIONS_METHODS: no validated match")
@@ -440,7 +485,7 @@ object DexKitResolver {
     private fun isRestrictionsMethod(method: Method): Boolean =
         method.declaringClass.name == AUTO_VALUE_RESTRICTIONS &&
             method.parameterCount == 0 &&
-            Set::class.java.isAssignableFrom(method.returnType) &&
+            (Set::class.java.isAssignableFrom(method.returnType) || Collection::class.java.isAssignableFrom(method.returnType)) &&
             !java.lang.reflect.Modifier.isStatic(method.modifiers)
 
     private fun resolvePlayerRestrictionsConverter(
@@ -467,6 +512,52 @@ object DexKitResolver {
             method.parameterTypes[0].name == ES_RESTRICTIONS &&
             method.returnType.name == RESTRICTIONS &&
             java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun resolveMftDisallowRestrictionHandler(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_MFT_DISALLOW_RESTRICTION_HANDLER, classLoader, ::isMftDisallowRestrictionHandler)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("mft_disallow"), StringMatchType.Equals)
+                        paramCount(2)
+                    }
+                }.firstOrNull { isMftDisallowRestrictionHandler(it.getMethodInstance(classLoader)) }?.getMethodInstance(classLoader)
+            }.getOrNull()
+        store(KEY_MFT_DISALLOW_RESTRICTION_HANDLER, method, sigs, members)
+    }
+
+    private fun isMftDisallowRestrictionHandler(method: Method): Boolean =
+        method.parameterCount == 2 &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers)
+
+    private fun resolveOptionalAbsentInstance(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        members: MutableMap<String, Any>
+    ) {
+        val instance = runCatching {
+            val absentClassData = dexKit.findClass {
+                matcher {
+                    usingStrings(listOf("Optional.absent()"), StringMatchType.Equals)
+                }
+            }.singleOrNull() ?: return@runCatching null
+            val absentClass = Class.forName(absentClassData.name, false, classLoader)
+            val field = absentClass.declaredFields.firstOrNull { f ->
+                java.lang.reflect.Modifier.isStatic(f.modifiers) && f.type == absentClass
+            } ?: return@runCatching null
+            field.isAccessible = true
+            field.get(null)
+        }.getOrNull()
+        if (instance != null) {
+            members[KEY_OPTIONAL_ABSENT_INSTANCE] = instance
+        }
+    }
 
     private fun resolveOnDemandInFreeGetters(
         dexKit: DexKitBridge,
