@@ -9,6 +9,7 @@
 5. **Clean architecture & idioms**: Follow modern Kotlin and Android best practices. Keep changes minimal and concise: install and use the [ponytail](https://github.com/DietrichGebert/ponytail/raw/refs/heads/main/skills/ponytail/SKILL.md) skill to keep work minimal and clean.
 6. **Thorough refactoring**: When replacing or refactoring logic, remove all superseded code and accompanying artifacts across all layers. Leave no dead paths or legacy baggage.
 7. **Validation**: Validate changes with `./gradlew assembleDebug`. Ensure the build passes before finishing.
+8. **Client-side containment & zero server leakage**: Never touch, modify, or spoof server-side entitlement endpoints or outbound network requests. Product state overrides, entitlement spoofs, and feature unlocks must remain strictly local to client-side evaluation. Spoofed product state, subscription attributes, or premium tokens must never leak upstream to Spotify servers or be included in remote RPC, telemetry, or sync payloads.
 
 ## 2. Framework & Stack Context
 
@@ -28,6 +29,7 @@ Spotify is an obfuscated target under active R8 churn. Hooks must be resilient t
 - **Validate resolved elements**: Assert returned types and signatures before attaching hooks. "The first iget-object after the key" is not proof.
 - **Leave no dangling stubs**: Optional resolvers must never leave live extension placeholders or no-op interceptors behind.
 - **Hook the minimal surface at the latest safe point**: Intercept the smallest value at the point of control rather than modifying broad caller pipelines.
+- **Confine overrides to local read sites**: Hook only local readers and feature consumers. Never mutate data structures or serialization pipelines destined for outbound RPCs, remote sync, or server telemetry; keep all spoofed entitlements strictly within client memory.
 - **Avoid mutating shared utilities**: Do not modify common helpers if they serve unrelated features.
 
 ## 4. Refactoring & Complete Logic Replacement
