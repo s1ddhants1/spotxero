@@ -546,7 +546,7 @@ object PlayerShuffleHook {
     }
 
     @Volatile
-    private var nativeTransport: Any? = null
+    internal var nativeTransport: Any? = null
 
     private fun hookNativeTransportCtors(module: XposedModule, cl: ClassLoader) {
         runCatching {
