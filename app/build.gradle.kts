@@ -6,12 +6,12 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
-val versionMajor = 1
-val versionMinor = 1
+val versionMajor = 2
+val versionMinor = 0
 val versionPatch = 0
 
 val appVersionCode = versionMajor * 100 + versionMinor * 10 + versionPatch
-val appVersionName = "$versionMajor.$versionMinor.$versionPatch"
+val appVersionName = if (versionPatch == 0) "$versionMajor.$versionMinor" else "$versionMajor.$versionMinor.$versionPatch"
 
 android {
     namespace = "app.spotxero"
