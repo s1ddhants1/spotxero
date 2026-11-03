@@ -702,3 +702,26 @@ A rebuild of Spotify replaces the split and the mount must be redone, with the o
 Native hooking needs the libxposed C++ API (`META-INF/xposed/native_init.list` → `native_init` → `on_library_loaded` → `hook_func(addr, replace, backup)`), which only LSPosed implements — LSPatch never calls `native_init` ([LSPatch#17](https://github.com/LSPosed/LSPatch/issues/17)) — so it is root-only. The dynamic symbol table has 2577 entries, of which only `JNI_OnLoad`, `JNI_OnUnload` and one `SPTTagReader` function are usable, so a hook address has to come from binary matching; that is why none of this belongs in the module.
 
 Coverage limits: one device (SM-S938B), one build (9.1.94.1929), free tier, one region. The disassembly was read-only. The single clips-per-break patch was loaded and played for ~35 minutes (see Applied Patch), but no ad break occurred while it was active, so the zero-clip behaviour is inferred from the code path, not observed.
+
+---
+
+## Update: Playback Stall Discovery & Queue Ad Removal (2026-11-03)
+
+See full documentation in [docs/audio-ad-queue-removal-and-containment.md](../audio-ad-queue-removal-and-containment.md).
+
+### 1. Root Cause of Playback Stalls with Host Blockers
+When system-level ad blockers (e.g. `bindhosts`) blackhole Spotify ad CDNs (`adtima-media.zascdn.me`, `ads.zascdn.me`), the native playback pipeline hangs waiting for audio bytes (`BUFFERING(6)`, 0 HAL frames). Because the ad stream never errors out or completes, the player deadlocks.
+
+### 2. Flaw in Previous `AdSkipHook` (`is_advertisement -> false`)
+The initial hypothesis of forcing `KEY_IS_ADVERTISEMENT_CHECK` (`esm1.G(ContextTrack)`) to `false` was counterproductive:
+- It blinded Spotify into treating ad tracks as ordinary songs.
+- The player retained the ad tracks in `nextTracks()` and queued their audio streams.
+- The audio engine still attempted to stream the ad from the blocked CDN, triggering the stall.
+
+### 3. Solution: Queue-Level Ad Removal
+`AdSkipHook` was completely re-architected to strip ad streams across all queue builder and accessor surfaces:
+- **Builders**: `PlayerQueue$Builder#nextTracks(List)`, `AutoValue_PlayerState$Builder#nextTracks(List)`, `SetQueueCommand$Builder#nextTracks(List)`.
+- **Accessors**: `AutoValue_PlayerQueue#nextTracks()`, `AutoValue_PlayerState#nextTracks()`.
+- **Ad Breaks**: `AutoValue_PlayerState#adBreakContext()` returns `PlayerState.EMPTY.adBreakContext()`.
+- **Active Ad Skip**: `AutoValue_PlayerState#track()` detects any active ad track and dispatches `ContextPlayer.SkipNext` over `NativeTransport`.
+- **Zero Server Leakage**: All overrides are strictly client-side; no product state or entitlement spoofs leak to backend servers (Rule 8 compliant).
