@@ -129,8 +129,6 @@ fun SpotXeroApp(
                                 onCleanSharingToggle = { viewModel.setCleanSharing(it) },
                                 onSpotifyAmoledToggle = { viewModel.setSpotifyAmoled(it) },
                                 onHidePodcastsToggle = { viewModel.setHidePodcasts(it) },
-                                onForceLocalPlaybackToggle = { viewModel.setForceLocalPlayback(it) },
-                                onSpoofClientToggle = { viewModel.setSpoofClient(it) },
                                 onRequestScope = { viewModel.requestScope() }
                             )
                         }
