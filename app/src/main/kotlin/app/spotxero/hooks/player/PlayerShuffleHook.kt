@@ -546,7 +546,7 @@ object PlayerShuffleHook {
     }
 
     @Volatile
-    internal var nativeTransport: Any? = null
+    private var nativeTransport: Any? = null
 
     private fun hookNativeTransportCtors(module: XposedModule, cl: ClassLoader) {
         runCatching {
@@ -611,6 +611,18 @@ object PlayerShuffleHook {
                 }
 
                 if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    if (service == "spotify.connectivity.auth.esperanto.proto.Session" && methodName == "writeProductStateToLegacyStorage" && payload != null) {
+                        val modifiedPayload = overrideProductStateMap(payload)
+                        if (modifiedPayload != null) {
+                            return@intercept chain.proceed(arrayOf(service, methodName, modifiedPayload))
+                        }
+                    }
+                    if (service == "spotify.product_state.esperanto.proto.ProductState" && (methodName == "PutValues" || methodName == "PutValuesSync") && payload != null) {
+                        val modifiedPayload = overridePutValues(payload)
+                        if (modifiedPayload != null) {
+                            return@intercept chain.proceed(arrayOf(service, methodName, modifiedPayload))
+                        }
+                    }
                     if (service == "spotify.playback_settings.esperanto.proto.PlaybackSettings" && methodName == "GetShuffleState") {
                         val shuffleOn = isShuffleEnabled()
                         val stateBytes = if (shuffleOn) byteArrayOf(0x08, 0x01, 0x10, 0x00) else byteArrayOf(0x08, 0x00, 0x10, 0x00)
@@ -657,6 +669,42 @@ object PlayerShuffleHook {
 
                 chain.proceed()
             }
+    }
+
+    private fun overrideProductStateMap(payload: Any): Any? {
+        return runCatching {
+            val currentMap = payload.javaClass.declaredMethods.firstOrNull {
+                it.parameterCount == 0 && Map::class.java.isAssignableFrom(it.returnType)
+            }?.apply { isAccessible = true }?.invoke(payload) as? Map<*, *>
+
+            val map = java.util.LinkedHashMap<String, String>()
+            currentMap?.forEach { (k, v) ->
+                if (k != null && v != null) map[k.toString()] = v.toString()
+            }
+            map.putAll(ProductStateHook.LEGACY_SPOOFS)
+
+            val builder = payload.javaClass.getMethod("toBuilder").apply { isAccessible = true }.invoke(payload)
+            val nMethod = builder.javaClass.declaredMethods.firstOrNull {
+                it.parameterCount == 1 && Map::class.java.isAssignableFrom(it.parameterTypes[0])
+            }?.apply { isAccessible = true }
+            nMethod?.invoke(builder, map)
+            builder.javaClass.getMethod("build").apply { isAccessible = true }.invoke(builder)
+        }.getOrNull()
+    }
+
+    private fun overridePutValues(payload: Any): Any? {
+        return runCatching {
+            val builder = payload.javaClass.getMethod("toBuilder").apply { isAccessible = true }.invoke(payload)
+            val putMethod = builder.javaClass.declaredMethods.firstOrNull {
+                it.parameterCount == 2 && it.parameterTypes[0] == String::class.java && it.parameterTypes[1] == String::class.java
+            }?.apply { isAccessible = true }
+            if (putMethod != null) {
+                for ((k, v) in ProductStateHook.LEGACY_SPOOFS) {
+                    putMethod.invoke(builder, k, v)
+                }
+                builder.javaClass.getMethod("build").apply { isAccessible = true }.invoke(builder)
+            } else null
+        }.getOrNull()
     }
 
     private fun handleEsperantoPayload(

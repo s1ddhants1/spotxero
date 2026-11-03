@@ -50,14 +50,14 @@ object HookRegistry {
             }
         }
 
-        installAll(module, classLoader)
+        installAll(module)
     }
 
-    private fun installAll(module: XposedModule, classLoader: ClassLoader) {
+    private fun installAll(module: XposedModule) {
         val hooks = listOf(
             "CleanSharing" to { CleanSharingHook.install(module) },
             "HidePremiumTab" to { HidePremiumTabHook.install(module) },
-            "AdSkip" to { AdSkipHook.install(module, classLoader) },
+            "AdSkip" to { AdSkipHook.install(module) },
             "AdResponse" to { AdResponseHook.install(module) },
             "BrandAds" to { BrandAdsHook.install(module) },
             "PlayerAdCards" to { PlayerAdCardsHook.install(module) },
