@@ -7,7 +7,9 @@ import app.spotxero.hooks.ads.BrandAdsHook
 import app.spotxero.hooks.ads.PlayerAdCardsHook
 import app.spotxero.hooks.content.HidePodcastsHook
 import app.spotxero.hooks.navigation.HidePremiumTabHook
+import app.spotxero.hooks.player.ClientSpoofHook
 import app.spotxero.hooks.player.DisableSmartShuffleHook
+import app.spotxero.hooks.player.ForceLocalPlaybackHook
 import app.spotxero.hooks.player.OnDemandInFreeHook
 import app.spotxero.hooks.player.PlayerRestrictionsHook
 import app.spotxero.hooks.player.PlayerShuffleHook
@@ -50,10 +52,10 @@ object HookRegistry {
             }
         }
 
-        installAll(module)
+        installAll(module, classLoader)
     }
 
-    private fun installAll(module: XposedModule) {
+    private fun installAll(module: XposedModule, classLoader: ClassLoader) {
         val hooks = listOf(
             "CleanSharing" to { CleanSharingHook.install(module) },
             "HidePremiumTab" to { HidePremiumTabHook.install(module) },
@@ -68,6 +70,8 @@ object HookRegistry {
             "PlayerRestrictions" to { PlayerRestrictionsHook.install(module) },
             "OnDemandInFree" to { OnDemandInFreeHook.install(module) },
             "PlayerShuffle" to { PlayerShuffleHook.install(module) },
+            "ForceLocalPlayback" to { ForceLocalPlaybackHook.install(module, classLoader) },
+            "ClientSpoof" to { ClientSpoofHook.install(module, classLoader) },
         )
 
         for ((_, installer) in hooks) {

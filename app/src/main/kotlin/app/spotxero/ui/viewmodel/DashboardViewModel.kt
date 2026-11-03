@@ -173,7 +173,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isLauncherIconHidden = AppUtils.isLauncherIconHidden(app),
                 isCleanSharingEnabled = PreferencesManager.isCleanSharingEnabled,
                 isSpotifyAmoledEnabled = PreferencesManager.isSpotifyAmoledEnabled,
-                isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled
+                isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled,
+                isForceLocalPlaybackEnabled = PreferencesManager.isForceLocalPlaybackEnabled,
+                isSpoofClientEnabled = PreferencesManager.isSpoofClientEnabled
             )
         }
     }
@@ -283,6 +285,20 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         PreferencesManager.setBoolean(app, PrefKeys.KEY_HIDE_PODCASTS, enabled)
         PreferencesManager.isHidePodcastsEnabled = enabled
         _uiState.update { it.copy(isHidePodcastsEnabled = enabled) }
+    }
+
+    fun setForceLocalPlayback(enabled: Boolean) {
+        val app = getApplication<Application>()
+        PreferencesManager.setBoolean(app, PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, enabled)
+        PreferencesManager.isForceLocalPlaybackEnabled = enabled
+        _uiState.update { it.copy(isForceLocalPlaybackEnabled = enabled) }
+    }
+
+    fun setSpoofClient(enabled: Boolean) {
+        val app = getApplication<Application>()
+        PreferencesManager.setBoolean(app, PrefKeys.KEY_SPOOF_CLIENT, enabled)
+        PreferencesManager.isSpoofClientEnabled = enabled
+        _uiState.update { it.copy(isSpoofClientEnabled = enabled) }
     }
 
 

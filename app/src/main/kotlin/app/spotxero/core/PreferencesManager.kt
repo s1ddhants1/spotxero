@@ -29,6 +29,8 @@ object PreferencesManager {
     var isCleanSharingEnabled: Boolean = true
     var isSpotifyAmoledEnabled: Boolean = false
     var isHidePodcastsEnabled: Boolean = false
+    var isForceLocalPlaybackEnabled: Boolean = true
+    var isSpoofClientEnabled: Boolean = false
 
     var onPreferenceChangedListener: (() -> Unit)? = null
 
@@ -203,6 +205,10 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_SPOTIFY_AMOLED] = isSpotifyAmoledEnabled
         isHidePodcastsEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PODCASTS, false)
         inMemoryBooleans[PrefKeys.KEY_HIDE_PODCASTS] = isHidePodcastsEnabled
+        isForceLocalPlaybackEnabled = prefs.getBoolean(PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, true)
+        inMemoryBooleans[PrefKeys.KEY_FORCE_LOCAL_PLAYBACK] = isForceLocalPlaybackEnabled
+        isSpoofClientEnabled = prefs.getBoolean(PrefKeys.KEY_SPOOF_CLIENT, false)
+        inMemoryBooleans[PrefKeys.KEY_SPOOF_CLIENT] = isSpoofClientEnabled
         isLauncherIconHidden = prefs.getBoolean(KEY_HIDE_LAUNCHER_ICON, false)
         inMemoryBooleans[KEY_HIDE_LAUNCHER_ICON] = isLauncherIconHidden
         val tp = getTargetPrefs()
@@ -318,6 +324,8 @@ object PreferencesManager {
             PrefKeys.KEY_CLEAN_SHARING -> isCleanSharingEnabled = value
             PrefKeys.KEY_SPOTIFY_AMOLED -> isSpotifyAmoledEnabled = value
             PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = value
+            PrefKeys.KEY_FORCE_LOCAL_PLAYBACK -> isForceLocalPlaybackEnabled = value
+            PrefKeys.KEY_SPOOF_CLIENT -> isSpoofClientEnabled = value
             KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = value
             KEY_APP_AMOLED_THEME -> isAppAmoledEnabled = value
             KEY_HIDE_LAUNCHER_ICON -> isLauncherIconHidden = value
@@ -335,6 +343,8 @@ object PreferencesManager {
                         PrefKeys.KEY_CLEAN_SHARING -> isCleanSharingEnabled = v
                         PrefKeys.KEY_SPOTIFY_AMOLED -> isSpotifyAmoledEnabled = v
                         PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = v
+                        PrefKeys.KEY_FORCE_LOCAL_PLAYBACK -> isForceLocalPlaybackEnabled = v
+                        PrefKeys.KEY_SPOOF_CLIENT -> isSpoofClientEnabled = v
                         KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = v
                         KEY_APP_AMOLED_THEME -> isAppAmoledEnabled = v
                         KEY_HIDE_LAUNCHER_ICON -> isLauncherIconHidden = v

@@ -50,6 +50,7 @@ object DexKitResolver {
     const val KEY_CONTEXT_CAPABILITY_INIT = "context_capability_init"
     const val KEY_CLIENT_BASE_CALL_SINGLE = "client_base_call_single"
     const val KEY_COROUTINE_CLIENT_BASE_CALL_SINGLE = "coroutine_client_base_call_single"
+    const val KEY_FORCE_LOCAL_PLAYBACK = "force_local_playback"
 
     private const val CLIENT_BASE = "com.spotify.esperanto.esperanto.ClientBase"
     private const val COROUTINE_CLIENT_BASE = "com.spotify.esperanto.esperanto.CoroutineClientBase"
@@ -141,6 +142,7 @@ object DexKitResolver {
         resolveContextCapabilityInit(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveClientBaseCallSingle(classLoader, cachedSignatures, signatures, members)
         resolveCoroutineClientBaseCallSingle(classLoader, cachedSignatures, signatures, members)
+        resolveForceLocalPlayback(dexKit, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -1173,4 +1175,33 @@ object DexKitResolver {
             method.parameterCount == 4 &&
             method.parameterTypes[0] == String::class.java &&
             method.parameterTypes[1] == String::class.java
+
+    private fun resolveForceLocalPlayback(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_FORCE_LOCAL_PLAYBACK, classLoader, ::isForceLocalPlaybackMethod)
+            ?: runCatching { findForceLocalPlaybackMethod(dexKit, classLoader) }.getOrNull()?.takeIf(::isForceLocalPlaybackMethod)
+        store(KEY_FORCE_LOCAL_PLAYBACK, method, sigs, members)
+    }
+
+    private fun findForceLocalPlaybackMethod(dexKit: DexKitBridge, classLoader: ClassLoader): Method? {
+        val methods = dexKit.findMethod {
+            matcher {
+                usingStrings(listOf("mediaSessionCompat"), StringMatchType.Contains)
+                returnType("void")
+            }
+        }
+        for (data in methods) {
+            val method = runCatching { data.getMethodInstance(classLoader) }.getOrNull() ?: continue
+            if (isForceLocalPlaybackMethod(method)) return method
+        }
+        return null
+    }
+
+    private fun isForceLocalPlaybackMethod(method: Method): Boolean =
+        method.returnType == Void.TYPE && method.parameterCount > 0
 }

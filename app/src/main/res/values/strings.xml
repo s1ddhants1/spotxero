@@ -19,6 +19,8 @@
     <string name="feature_clean_sharing_title">Clean Sharing Links</string>
     <string name="feature_spotify_amoled_title">Spotify Pure Black (AMOLED)</string>
     <string name="feature_hide_podcasts_title">Hide Podcasts &amp; Audiobooks</string>
+    <string name="feature_force_local_playback_title">Force Local Volume</string>
+    <string name="feature_spoof_client_title">Spoof iOS Client</string>
     <string name="title_appearance">Appearance</string>
     <string name="title_about">About</string>
     <string name="appearance_category_desc">Themes • Hide App Icon</string>

@@ -9,4 +9,6 @@ object PrefKeys {
     const val KEY_FORCE_STOP = "pref_force_stop"
     const val KEY_HIDE_PODCASTS = "pref_hide_podcasts"
     const val KEY_SHUFFLE_STATE = "pref_user_shuffle_state"
+    const val KEY_FORCE_LOCAL_PLAYBACK = "pref_force_local_playback"
+    const val KEY_SPOOF_CLIENT = "pref_spoof_client"
 }

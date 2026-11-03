@@ -42,6 +42,8 @@ fun HomeDashboard(
     onCleanSharingToggle: (Boolean) -> Unit,
     onSpotifyAmoledToggle: (Boolean) -> Unit,
     onHidePodcastsToggle: (Boolean) -> Unit = {},
+    onForceLocalPlaybackToggle: (Boolean) -> Unit = {},
+    onSpoofClientToggle: (Boolean) -> Unit = {},
     onRequestScope: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -67,6 +69,20 @@ fun HomeDashboard(
             checked = uiState.isHidePodcastsEnabled,
             enabled = true,
             onCheckedChange = onHidePodcastsToggle
+        )
+
+        FeatureModuleCard(
+            title = stringResource(R.string.feature_force_local_playback_title),
+            checked = uiState.isForceLocalPlaybackEnabled,
+            enabled = true,
+            onCheckedChange = onForceLocalPlaybackToggle
+        )
+
+        FeatureModuleCard(
+            title = stringResource(R.string.feature_spoof_client_title),
+            checked = uiState.isSpoofClientEnabled,
+            enabled = true,
+            onCheckedChange = onSpoofClientToggle
         )
 
         FeatureModuleCard(
