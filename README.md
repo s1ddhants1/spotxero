@@ -2,7 +2,7 @@
 <img src="art/spotxero_logo_dark.svg" width="100" alt="SpotXero Logo"/>
 <h1>SpotXero</h1>
 
-<p>A LibXposed module skeleton with a Jetpack Compose companion UI.</p>
+<p>An Xposed module for Spotify on Android </p>
 
 <a href="https://github.com/s1ddhants1/spotxero/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/s1ddhants1/spotxero/build.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=CI" alt="CI Status" /></a>
 <a href="https://github.com/s1ddhants1/spotxero/releases"><img src="https://img.shields.io/github/v/release/s1ddhants1/spotxero?style=for-the-badge&color=1ED760&logo=android&label=Release" alt="Release Version" /></a>
