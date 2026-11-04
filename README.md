@@ -14,16 +14,6 @@
 
 </div>
 
----
-
-## Project status
-
-SpotXero ships eight Spotify hooks behind its Compose companion UI: clean sharing links, hide Premium tab, block ad fetching, ad-track detection, hide Home/Browse brand ads, hide player ad cards, hide podcasts and audiobooks, and an AMOLED pure-black theme.
-
-Ad fetching and ad UI are blocked, but an audio ad break is still scheduled and played by Spotify's native player (`liborbit-jni-spotify.so`), so ad *time* is not removed. See `docs/morphe-porting/11-audio-ad-blocking.md` for the measurements behind that limit.
-
----
-
 ## Compatibility
 
 | Requirement           | Supported Details                                                                                                                    |
