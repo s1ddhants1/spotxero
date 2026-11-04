@@ -80,12 +80,6 @@ class SpotXeroModule : XposedModule() {
         exitProcess(0)
     }
 
-    private val forceStopListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == PrefKeys.KEY_FORCE_STOP) {
-            terminateProcess(appContext)
-        }
-    }
-
     private val forceStopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_FORCE_STOP) {
@@ -123,7 +117,6 @@ class SpotXeroModule : XposedModule() {
         runCatching {
             val remotePrefs = getRemotePreferences(PrefKeys.PREFS_NAME)
             PreferencesManager.bindRemote(remotePrefs)
-            remotePrefs.registerOnSharedPreferenceChangeListener(forceStopListener)
         }
 
         runCatching {

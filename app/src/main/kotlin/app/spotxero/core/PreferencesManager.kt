@@ -81,7 +81,7 @@ object PreferencesManager {
     }
 
     private val changeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
-        if (key != null) {
+        if (key != null && key != "pref_force_stop") {
             Log.d(TAG, "Preference changed: $key")
             updateMemoryCache(prefs, key)
             val lp = localPrefs
@@ -162,16 +162,25 @@ object PreferencesManager {
                 ?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             if (lp != null) {
                 localPrefs = lp
-                val remoteEditor = rp.edit()
-                for ((k, v) in lp.all) {
-                    when (v) {
-                        is Boolean -> remoteEditor.putBoolean(k, v)
-                        is String -> remoteEditor.putString(k, v)
-                        is Int -> remoteEditor.putInt(k, v)
-                        is Long -> remoteEditor.putLong(k, v)
-                    }
+                if (lp.contains("pref_force_stop")) {
+                    lp.edit().remove("pref_force_stop").apply()
                 }
-                remoteEditor.apply()
+                if (rp.contains("pref_force_stop")) {
+                    rp.edit().remove("pref_force_stop").apply()
+                }
+                if (rp.all.isEmpty()) {
+                    val remoteEditor = rp.edit()
+                    for ((k, v) in lp.all) {
+                        if (k == "pref_force_stop") continue
+                        when (v) {
+                            is Boolean -> remoteEditor.putBoolean(k, v)
+                            is String -> remoteEditor.putString(k, v)
+                            is Int -> remoteEditor.putInt(k, v)
+                            is Long -> remoteEditor.putLong(k, v)
+                        }
+                    }
+                    remoteEditor.apply()
+                }
             }
             bindRemote(rp)
             if (lp != null) {
@@ -293,22 +302,6 @@ object PreferencesManager {
             getPrefs(context).edit().putInt(key, value).apply()
         } catch (t: Throwable) {
             Log.e(TAG, "Error writing int preference $key: ${t.message}", t)
-        }
-    }
-
-    fun setLong(context: Context? = null, key: String, value: Long) {
-        try {
-            getPrefs(context).edit().putLong(key, value).apply()
-        } catch (t: Throwable) {
-            Log.e(TAG, "Error writing long preference $key: ${t.message}", t)
-        }
-    }
-
-    fun requestForceStop(context: Context? = null) {
-        try {
-            getPrefs(context).edit().putLong(PrefKeys.KEY_FORCE_STOP, System.currentTimeMillis()).commit()
-        } catch (t: Throwable) {
-            Log.e(TAG, "Error requesting force stop: ${t.message}", t)
         }
     }
 

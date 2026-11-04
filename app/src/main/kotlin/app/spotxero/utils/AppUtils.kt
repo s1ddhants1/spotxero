@@ -69,8 +69,6 @@ object AppUtils {
             return true
         }
 
-        PreferencesManager.requestForceStop(context)
-
         var broadcastHandled = false
         withContext(ioDispatcher) {
             runCatching {
