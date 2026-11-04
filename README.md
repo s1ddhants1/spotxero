@@ -73,32 +73,6 @@ cd spotxero
 
 Compiled APKs are output to `app/build/outputs/apk/release/` and `app/build/outputs/apk/debug/`.
 
----
-
-## Frequently Asked Questions (FAQ)
-
-<details>
-<summary><b>Will using SpotXero get my Spotify account banned?</b></summary>
-<p>The current SpotXero build is a hook-free LibXposed skeleton and does not modify Spotify behavior. Future hooks will need to be assessed separately.</p>
-</details>
-
-<details>
-<summary><b>Can I download songs for offline playback?</b></summary>
-<p><b>No.</b> Offline song downloads are not provided by this hook-free module skeleton.</p>
-</details>
-
-<details>
-<summary><b>How do I apply theme or preference changes?</b></summary>
-<p>Companion-app appearance settings and feature toggles are stored in preferences. The Spotify feature toggles have no effect until their hooks are implemented.</p>
-</details>
-
-<details>
-<summary><b>Can I use SpotXero without root?</b></summary>
-<p><b>Yes.</b> You can use <a href="https://github.com/JingMatrix/LSPatch">LSPatch</a> in Integrated Mode to embed SpotXero directly into the Spotify APK.</p>
-</details>
-
----
-
 ## Credits & License
 
 - **Author**: [s1ddhants1](https://github.com/s1ddhants1)
