@@ -6,13 +6,16 @@
 
 <a href="https://github.com/s1ddhants1/spotxero/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/s1ddhants1/spotxero/build.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=CI" alt="CI Status" /></a>
 <a href="https://github.com/s1ddhants1/spotxero/releases"><img src="https://img.shields.io/github/v/release/s1ddhants1/spotxero?style=for-the-badge&color=1ED760&logo=android&label=Release" alt="Release Version" /></a>
-<a href="https://github.com/s1ddhants1/spotxero/releases/tag/nightly"><img src="https://img.shields.io/badge/Nightly-Pre--release-1DB954?style=for-the-badge&logo=github" alt="Nightly Build" /></a>
+<a href="https://t.me/SpotXero"><img src="https://img.shields.io/badge/Telegram-Channel-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Channel" /></a>
 <a href="https://github.com/s1ddhants1/spotxero/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-MIT-10b981?style=for-the-badge" alt="License" /></a>
 <img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026--37)-f59e0b?style=for-the-badge&logo=android" alt="Android API Support" />
 <img src="https://img.shields.io/badge/Framework-LSPosed%20%7C%20LibXposed%20%7C%20LSPatch-8b5cf6?style=for-the-badge" alt="LSPosed / LibXposed / LSPatch" />
 <img src="https://img.shields.io/badge/UI-Jetpack%20Compose%20M3-06b6d4?style=for-the-badge&logo=jetpackcompose" alt="Jetpack Compose Material 3" />
 
 </div>
+
+> [!NOTE]
+> The source code is not public yet due to DMCA risks.
 
 ## Compatibility
 
@@ -61,21 +64,19 @@ https://github.com/s1ddhants1/spotxero
 
 ---
 
-## Building from Source
+## Source Code
 
-```bash
-git clone https://github.com/s1ddhants1/spotxero.git
-cd spotxero
+> [!NOTE]
+> The source repository is currently kept private and is not public yet due to DMCA risks.
 
-# Build APKs
-./gradlew assembleRelease
-```
+## Community
 
-Compiled APKs are output to `app/build/outputs/apk/release/` and `app/build/outputs/apk/debug/`.
+- **Telegram Channel**: Join [@SpotXero](https://t.me/SpotXero) for discussion, announcements, and support.
 
 ## Credits & License
 
 - **Author**: [s1ddhants1](https://github.com/s1ddhants1)
+- **Telegram**: [@SpotXero](https://t.me/SpotXero)
 - **Frameworks**: [LibXposed](https://github.com/libxposed), [LSPosed](https://github.com/LSPosed/LSPosed), [LSPatch](https://github.com/JingMatrix/LSPatch)
 - **License**: [MIT License](LICENSE)
 
