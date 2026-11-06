@@ -16,6 +16,7 @@ object HidePodcastsHook {
 
     private fun hookProvidedItems(module: XposedModule) {
         val method = DexKitResolver.get<Method>(DexKitResolver.KEY_PROVIDED_ITEMS_LIST) ?: return
+        module.deoptimize(method)
         module.hook(method)
             .setId("hide_provided_podcasts")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
@@ -31,6 +32,7 @@ object HidePodcastsHook {
 
     private fun hookHomeSections(module: XposedModule) {
         val method = DexKitResolver.get<Method>(DexKitResolver.KEY_HOME_SECTION_LIST) ?: return
+        module.deoptimize(method)
         module.hook(method)
             .setId("hide_home_podcast_sections")
             .setExceptionMode(ExceptionMode.PROTECTIVE)

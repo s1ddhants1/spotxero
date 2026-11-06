@@ -543,9 +543,11 @@ object PlayerShuffleHook {
                             chain.getArg(4),
                             chain.getArg(5)
                         )
-                        return@intercept chain.proceed(newArgs)
+                        chain.proceed(newArgs)
+                    } else {
+                        chain.proceed()
                     }
-                    chain.proceed()
+                    null
                 }
         }
     }
@@ -563,12 +565,12 @@ object PlayerShuffleHook {
                     .setId("native_transport_init")
                     .setExceptionMode(ExceptionMode.PROTECTIVE)
                     .intercept { chain ->
-                        val result = chain.proceed()
+                        chain.proceed()
                         val thisObj = chain.getThisObject()
                         if (thisObj != null) {
                             nativeTransport = thisObj
                         }
-                        result
+                        null
                     }
             }
         }
@@ -582,12 +584,12 @@ object PlayerShuffleHook {
                     .setId("scheduling_transport_init")
                     .setExceptionMode(ExceptionMode.PROTECTIVE)
                     .intercept { chain ->
-                        val result = chain.proceed()
+                        chain.proceed()
                         val thisObj = chain.getThisObject()
                         if (thisObj != null) {
                             nativeTransport = thisObj
                         }
-                        result
+                        null
                     }
             }
         }

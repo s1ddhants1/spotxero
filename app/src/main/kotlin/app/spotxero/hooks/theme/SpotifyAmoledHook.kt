@@ -30,6 +30,7 @@ object SpotifyAmoledHook {
         }.getOrNull()
 
         if (methodWithTheme != null) {
+            module.deoptimize(methodWithTheme)
             module.hook(methodWithTheme)
                 .setId("spotify_amoled_get_color_theme")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
@@ -49,6 +50,7 @@ object SpotifyAmoledHook {
         }.getOrNull()
 
         if (methodDeprecated != null) {
+            module.deoptimize(methodDeprecated)
             module.hook(methodDeprecated)
                 .setId("spotify_amoled_get_color_deprecated")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)

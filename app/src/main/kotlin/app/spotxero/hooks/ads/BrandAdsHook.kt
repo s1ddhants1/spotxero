@@ -16,6 +16,7 @@ object BrandAdsHook {
 
     private fun hookHomeSections(module: XposedModule) {
         val method = DexKitResolver.get<Method>(DexKitResolver.KEY_HOME_SECTION_LIST) ?: return
+        module.deoptimize(method)
         module.hook(method)
             .setId("hide_home_brand_ads")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
@@ -31,6 +32,7 @@ object BrandAdsHook {
 
     private fun hookBrowseSections(module: XposedModule) {
         val method = DexKitResolver.get<Method>(DexKitResolver.KEY_BROWSE_SECTION_LIST) ?: return
+        module.deoptimize(method)
         module.hook(method)
             .setId("hide_browse_brand_ads")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
