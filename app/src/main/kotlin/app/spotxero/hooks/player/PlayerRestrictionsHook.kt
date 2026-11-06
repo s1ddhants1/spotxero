@@ -91,20 +91,20 @@ object PlayerRestrictionsHook {
                 if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept chain.proceed()
                 }
-                val arg0 = chain.args.getOrNull(0)
                 var hadMftDisallow = false
-                if (arg0 != null) {
-                    var currentClass: Class<*>? = arg0.javaClass
+                for (arg in chain.args) {
+                    if (arg == null) continue
+                    var currentClass: Class<*>? = arg.javaClass
                     while (currentClass != null && currentClass != Any::class.java) {
                         for (field in currentClass.declaredFields) {
                             if (List::class.java.isAssignableFrom(field.type)) {
                                 runCatching {
                                     field.isAccessible = true
-                                    val list = field.get(arg0) as? List<*>
+                                    val list = field.get(arg) as? List<*>
                                     if (list != null && list.contains("mft_disallow")) {
                                         hadMftDisallow = true
                                         val filtered = list.filter { it != "mft_disallow" }
-                                        field.set(arg0, filtered)
+                                        field.set(arg, filtered)
                                     }
                                 }
                             }
@@ -113,7 +113,7 @@ object PlayerRestrictionsHook {
                     }
                 }
                 val result = chain.proceed()
-                if (hadMftDisallow && absentInstance != null) {
+                if (absentInstance != null) {
                     val containsValue = runCatching {
                         val isPresentMethod = result?.javaClass?.methods?.firstOrNull {
                             it.name == "c" && it.parameterCount == 0 && it.returnType == Boolean::class.javaPrimitiveType

@@ -312,6 +312,11 @@ object PlayerShuffleHook {
             setOverrideMethod?.invoke(builderObj, newOverrides)
         }
 
+        val licenseMethod = builderObj.javaClass.methods.firstOrNull {
+            it.name == "license" && it.parameterCount == 1 && it.parameterTypes[0] == String::class.java
+        }?.apply { isAccessible = true }
+        licenseMethod?.invoke(builderObj, "premium")
+
         if (!shuffleEnabled) {
             val suppOpt = getFieldValue(builderObj, "suppressions")
             val currentSuppressions = if (suppOpt != null) {
@@ -691,6 +696,11 @@ object PlayerShuffleHook {
                         }
                     }
                 }
+                "SkipNext", "SkipPrev" -> {
+                    runCatching {
+                        applySkipOverrides(payload)
+                    }
+                }
             }
         } else if (service == "spotify.playlist_esperanto.proto.PlaylistPlayService") {
             if (methodName == "Play") {
@@ -852,12 +862,34 @@ object PlayerShuffleHook {
             }
         }
 
+        val licenseField = runCatching { prepOptionsClass.getDeclaredField("license_").apply { isAccessible = true } }.getOrNull()
+        licenseField?.set(options, "premium")
+
         resetMemoizedSize(optBool)
         resetMemoizedSize(overrides)
         resetMemoizedSize(options)
         if (prepReq != null) {
             resetMemoizedSize(prepReq)
         }
+        resetMemoizedSize(payload)
+    }
+
+    private fun applySkipOverrides(payload: Any) {
+        val cl = payload.javaClass.classLoader ?: return
+        val optClass = Class.forName("com.spotify.player.esperanto.proto.EsCommandOptions\$CommandOptions", false, cl)
+        val optField = runCatching { payload.javaClass.getDeclaredField("options_").apply { isAccessible = true } }.getOrNull() ?: return
+        var opt = optField.get(payload)
+        if (opt == null) {
+            opt = optClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
+            optField.set(payload, opt)
+            runCatching {
+                val bitField = payload.javaClass.getDeclaredField("bitField0_").apply { isAccessible = true }
+                bitField.setInt(payload, bitField.getInt(payload) or 1)
+            }
+        }
+        val overField = runCatching { optClass.getDeclaredField("overrideRestrictions_").apply { isAccessible = true } }.getOrNull()
+        overField?.setBoolean(opt, true)
+        resetMemoizedSize(opt)
         resetMemoizedSize(payload)
     }
 

@@ -25,6 +25,14 @@ object ProductStateHook {
         "tablet-free" to true
     )
 
+    val PLAYER_LOCAL_SPOOFS: Map<String, Any> = mapOf(
+        "type" to "premium",
+        "catalogue" to "premium",
+        "player-license" to "premium",
+        "player-license-v2" to "premium",
+        "financial-product" to "pr:premium,tc:0"
+    )
+
     val KEYS_TO_STRIP: Set<String> = setOf(
         "payment-state",
         "last-premium-activation-date",
@@ -86,6 +94,7 @@ object ProductStateHook {
                 (map as Map<Any?, Any?>).toMutableMap().apply {
                     KEYS_TO_STRIP.forEach { remove(it) }
                     putAll(LEGACY_SPOOFS)
+                    PLAYER_LOCAL_SPOOFS.forEach { (k, v) -> put(k, v.toString()) }
                 }
             }
     }
@@ -108,6 +117,8 @@ object ProductStateHook {
             it.type == java.lang.Integer.TYPE && !java.lang.reflect.Modifier.isStatic(it.modifiers)
         }?.apply { isAccessible = true }
 
+        val allSpoofs = TYPED_SPOOFS + PLAYER_LOCAL_SPOOFS
+
         module.deoptimize(accessor)
         module.hook(accessor)
             .setId("product_state_attribute_objects")
@@ -126,7 +137,7 @@ object ProductStateHook {
                                 valueField.set(attribute, null)
                             }
                         } else {
-                            val spoof = TYPED_SPOOFS[key as? String]
+                            val spoof = allSpoofs[key as? String]
                             if (spoof != null) {
                                 runCatching {
                                     when (spoof) {
