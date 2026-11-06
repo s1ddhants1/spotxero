@@ -50,13 +50,17 @@ fun HomeDashboard(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
     ) {
         FrameworkStatusBanner(uiState = uiState, onRequestScope = onRequestScope)
-        EnablePremiumCard(
-            enabled = uiState.isPremiumEnabled,
-            onToggle = onTogglePremium
+        FeatureModuleCard(
+            title = stringResource(R.string.pref_unrestricted_playback_title),
+            subtitle = stringResource(R.string.pref_unrestricted_playback_desc),
+            checked = uiState.isPremiumEnabled,
+            enabled = true,
+            onCheckedChange = onTogglePremium
         )
 
         FeatureModuleCard(
             title = stringResource(R.string.feature_clean_sharing_title),
+            subtitle = stringResource(R.string.feature_clean_sharing_desc),
             checked = uiState.isCleanSharingEnabled,
             enabled = true,
             onCheckedChange = onCleanSharingToggle
@@ -64,6 +68,7 @@ fun HomeDashboard(
 
         FeatureModuleCard(
             title = stringResource(R.string.feature_hide_podcasts_title),
+            subtitle = stringResource(R.string.feature_hide_podcasts_desc),
             checked = uiState.isHidePodcastsEnabled,
             enabled = true,
             onCheckedChange = onHidePodcastsToggle
@@ -71,6 +76,7 @@ fun HomeDashboard(
 
         FeatureModuleCard(
             title = stringResource(R.string.feature_spotify_amoled_title),
+            subtitle = stringResource(R.string.feature_spotify_amoled_desc),
             checked = uiState.isSpotifyAmoledEnabled,
             enabled = true,
             onCheckedChange = onSpotifyAmoledToggle
@@ -81,6 +87,7 @@ fun HomeDashboard(
 @Composable
 private fun FeatureModuleCard(
     title: String,
+    subtitle: String,
     checked: Boolean,
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit
@@ -111,77 +118,27 @@ private fun FeatureModuleCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = cardAlpha),
-                modifier = Modifier.weight(1f)
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = cardAlpha)
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = cardAlpha)
+                )
+            }
             Switch(
                 checked = checked,
                 enabled = enabled,
                 onCheckedChange = null,
                 thumbContent = if (checked) {
-                    {
-                        Icon(
-                            imageVector = Icons.Filled.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(SwitchDefaults.IconSize)
-                        )
-                    }
-                } else null,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                    checkedTrackColor = MaterialTheme.colorScheme.primary,
-                    checkedIconColor = MaterialTheme.colorScheme.primary,
-                    uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                )
-            )
-        }
-    }
-}
-
-@Composable
-private fun EnablePremiumCard(
-    enabled: Boolean,
-    onToggle: (Boolean) -> Unit
-) {
-    Card(
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.extraLarge)
-            .toggleable(
-                value = enabled,
-                role = Role.Switch,
-                onValueChange = onToggle
-            )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.pref_enable_premium_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
-            Switch(
-                checked = enabled,
-                onCheckedChange = null,
-                thumbContent = if (enabled) {
                     {
                         Icon(
                             imageVector = Icons.Filled.Check,
