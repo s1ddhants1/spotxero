@@ -101,7 +101,7 @@ jobs:
           } > keystore.properties
 
       - name: Build Release APK
-        run: ./gradlew --console=plain assembleRelease --warning-mode summary
+        run: ./gradlew --console=plain assembleRelease -Pnightly --warning-mode summary
         env:
           BUILD_COMMIT: ${{ github.sha }}
           PULL_REQUEST: "false"
@@ -215,7 +215,7 @@ jobs:
           } > keystore.properties
 
       - name: Build Debug APK
-        run: ./gradlew --console=plain assembleDebug --warning-mode summary
+        run: ./gradlew --console=plain assembleDebug -Pnightly --warning-mode summary
         env:
           BUILD_COMMIT: ${{ github.sha }}
           PULL_REQUEST: "false"

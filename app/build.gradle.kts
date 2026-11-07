@@ -10,8 +10,18 @@ val versionMajor = 2
 val versionMinor = 0
 val versionPatch = 2
 
-val appVersionCode = versionMajor * 100 + versionMinor * 10 + versionPatch
-val appVersionName = if (versionPatch == 0) "$versionMajor.$versionMinor" else "$versionMajor.$versionMinor.$versionPatch"
+val isNightly = project.hasProperty("nightly") ||
+    System.getenv("NIGHTLY") == "true" ||
+    System.getenv("IS_NIGHTLY") == "true" ||
+    (project.findProperty("appVersionName") as? String) == "nightly"
+
+val appVersionCode = (project.findProperty("appVersionCode") as? String)?.toIntOrNull()
+    ?: (versionMajor * 100 + versionMinor * 10 + versionPatch)
+
+val appVersionName = (project.findProperty("appVersionName") as? String)
+    ?: if (isNightly) "nightly"
+    else if (versionPatch == 0) "$versionMajor.$versionMinor"
+    else "$versionMajor.$versionMinor.$versionPatch"
 
 android {
     namespace = "app.spotxero"
