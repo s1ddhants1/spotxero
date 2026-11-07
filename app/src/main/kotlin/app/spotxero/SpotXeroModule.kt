@@ -106,6 +106,8 @@ class SpotXeroModule : XposedModule() {
         }
     }
 
+    private external fun triggerNativePatch(): Boolean
+
     override fun onModuleLoaded(param: ModuleLoadedParam) {
     }
 
@@ -159,6 +161,7 @@ class SpotXeroModule : XposedModule() {
                         registerReceiverSafely(app)
                         PreferencesManager.initTarget(app)
                     }
+                    runCatching { triggerNativePatch() }
                     val application = chain.getThisObject() as? Application
                     application?.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
                         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
@@ -166,6 +169,7 @@ class SpotXeroModule : XposedModule() {
                         }
                         override fun onActivityStarted(activity: Activity) {
                             activeActivities.add(activity)
+                            runCatching { triggerNativePatch() }
                         }
                         override fun onActivityResumed(activity: Activity) {
                             activeActivities.add(activity)
@@ -213,6 +217,7 @@ class SpotXeroModule : XposedModule() {
 
         runCatching {
             System.loadLibrary("spotxero_native")
+            triggerNativePatch()
         }
 
         runCatching {
