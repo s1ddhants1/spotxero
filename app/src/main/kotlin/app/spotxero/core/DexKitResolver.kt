@@ -50,10 +50,18 @@ object DexKitResolver {
     const val KEY_CONTEXT_CAPABILITY_INIT = "context_capability_init"
     const val KEY_CLIENT_BASE_CALL_SINGLE = "client_base_call_single"
     const val KEY_COROUTINE_CLIENT_BASE_CALL_SINGLE = "coroutine_client_base_call_single"
+    const val KEY_CLIENT_BASE_CALL_STREAM = "client_base_call_stream"
+    const val KEY_COROUTINE_CLIENT_BASE_CALL_STREAM = "coroutine_client_base_call_stream"
     const val KEY_MFT_DISALLOW_RESTRICTION_HANDLER = "mft_disallow_restriction_handler"
     const val KEY_OPTIONAL_ABSENT_INSTANCE = "optional_absent_instance"
     const val KEY_UCS_ACCOUNT_ATTRIBUTES_GETTER = "ucs_account_attributes_getter"
     const val KEY_RCS_CONFIGURATION_ASSIGNED_VALUES = "rcs_configuration_assigned_values"
+    const val KEY_RCS_MAP_LOADER = "rcs_map_loader"
+    const val KEY_RCS_PROPERTY_LOOKUP = "rcs_property_lookup"
+    const val KEY_PLAYER_SECTION_LIST = "player_section_list_getter"
+    const val KEY_OKHTTP_REQUEST_TO_STRING = "okhttp_request_to_string"
+    const val KEY_OKHTTP_RESPONSE_BUILDER_BUILD = "okhttp_response_builder_build"
+    const val KEY_OKHTTP_REAL_CALL_CHAIN = "okhttp_real_call_chain"
 
     private const val CLIENT_BASE = "com.spotify.esperanto.esperanto.ClientBase"
     private const val COROUTINE_CLIENT_BASE = "com.spotify.esperanto.esperanto.CoroutineClientBase"
@@ -64,6 +72,7 @@ object DexKitResolver {
     private val GET_ADS_CALL = listOf("spotify.ads.esperanto.proto.Ads", "GetAds")
     private const val HOME_STRUCTURE = "com.spotify.casita.v1.resolved.HomeStructure"
     private const val BROWSE_STRUCTURE = "com.spotify.browsita.v1.resolved.BrowseStructure"
+    private const val PLAYER_STRUCTURE = "com.spotify.scrollsita.v1.NpvScrollStructure"
     private const val PROVIDED = "com.spotify.casita.v1.resolved.Provided"
     private const val PLAYER_SECTION = "com.spotify.scrollsita.v1.Section"
     private const val CONTEXT_TRACK = "com.spotify.player.model.ContextTrack"
@@ -118,6 +127,7 @@ object DexKitResolver {
         resolveIsAdvertisementCheck(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveSectionList(KEY_HOME_SECTION_LIST, HOME_STRUCTURE, classLoader, cachedSignatures, signatures, members)
         resolveSectionList(KEY_BROWSE_SECTION_LIST, BROWSE_STRUCTURE, classLoader, cachedSignatures, signatures, members)
+        resolveSectionList(KEY_PLAYER_SECTION_LIST, PLAYER_STRUCTURE, classLoader, cachedSignatures, signatures, members)
         resolveSectionList(KEY_PROVIDED_ITEMS_LIST, PROVIDED, classLoader, cachedSignatures, signatures, members)
         resolveImageAdPredicate(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveSmartShuffleFlags(dexKit, classLoader, cachedSignatures, signatures, members)
@@ -125,6 +135,9 @@ object DexKitResolver {
         resolveProductStateAttributeSeam(classLoader, cachedSignatures, signatures, members)
         resolveUcsAccountAttributesGetter(classLoader, cachedSignatures, signatures, members)
         resolveRcsConfigurationAssignedValues(classLoader, cachedSignatures, signatures, members)
+        resolveRcsMapLoader(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveRcsPropertyLookup(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveOkHttpNetwork(dexKit, classLoader, cachedSignatures, signatures, members)
         resolvePlayerRestrictions(classLoader, cachedSignatures, signatures, members)
         resolvePlayerRestrictionsConverter(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveMftDisallowRestrictionHandler(dexKit, classLoader, cachedSignatures, signatures, members)
@@ -146,6 +159,8 @@ object DexKitResolver {
         resolveContextCapabilityInit(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveClientBaseCallSingle(classLoader, cachedSignatures, signatures, members)
         resolveCoroutineClientBaseCallSingle(classLoader, cachedSignatures, signatures, members)
+        resolveEsperantoCall(CLIENT_BASE, "callStream", 3, KEY_CLIENT_BASE_CALL_STREAM, classLoader, cachedSignatures, signatures, members)
+        resolveEsperantoCall(COROUTINE_CLIENT_BASE, "callStream", 3, KEY_COROUTINE_CLIENT_BASE_CALL_STREAM, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -1264,4 +1279,173 @@ object DexKitResolver {
             method.parameterCount == 4 &&
             method.parameterTypes[0] == String::class.java &&
             method.parameterTypes[1] == String::class.java
+
+    private fun resolveEsperantoCall(
+        className: String,
+        methodName: String,
+        paramCount: Int,
+        key: String,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val validate: (Method) -> Boolean = { m ->
+            m.declaringClass.name == className &&
+                m.name == methodName &&
+                m.parameterCount == paramCount &&
+                m.parameterTypes[0] == String::class.java &&
+                m.parameterTypes[1] == String::class.java
+        }
+        val method = cachedMethod(cached, key, classLoader, validate)
+            ?: runCatching {
+                Class.forName(className, false, classLoader).declaredMethods.firstOrNull(validate)
+            }.getOrNull()
+        store(key, method, sigs, members)
+    }
+
+    private fun resolveRcsMapLoader(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_RCS_MAP_LOADER, classLoader, ::isRcsMapLoader)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("http://go/rc-and-access-before-activation"), StringMatchType.Contains)
+                        paramTypes(listOf("java.lang.String"))
+                    }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isRcsMapLoader)
+        store(KEY_RCS_MAP_LOADER, method, sigs, members)
+    }
+
+    private fun isRcsMapLoader(method: Method): Boolean {
+        if (java.lang.reflect.Modifier.isStatic(method.modifiers)) return false
+        if (method.parameterCount != 1 || method.parameterTypes[0] != String::class.java) return false
+        val ret = method.returnType
+        if (ret.isPrimitive) return false
+        val hasCtor = ret.declaredConstructors.any { ctor ->
+            val p = ctor.parameterTypes
+            p.size == 2 && !p[0].isPrimitive && Map::class.java.isAssignableFrom(p[1])
+        }
+        return hasCtor && ret.declaredFields.any { Map::class.java.isAssignableFrom(it.type) }
+    }
+
+    private fun resolveRcsPropertyLookup(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_RCS_PROPERTY_LOOKUP, classLoader, ::isRcsPropertyLookup)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("Not possible for UnAuthResolver"), StringMatchType.Equals)
+                        paramTypes(listOf("java.lang.String", "java.lang.String"))
+                    }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isRcsPropertyLookup)
+        store(KEY_RCS_PROPERTY_LOOKUP, method, sigs, members)
+    }
+
+    private fun isRcsPropertyLookup(method: Method): Boolean {
+        if (java.lang.reflect.Modifier.isStatic(method.modifiers)) return false
+        if (method.parameterCount != 2 || method.parameterTypes[0] != String::class.java || method.parameterTypes[1] != String::class.java) {
+            return false
+        }
+        val ret = method.returnType
+        return ret.declaredConstructors.any { ctor ->
+            val p = ctor.parameterTypes
+            p.size == 7 &&
+                p[0] == String::class.java &&
+                p[1] == String::class.java &&
+                p[2] == Boolean::class.javaObjectType &&
+                p[3] == Int::class.javaObjectType &&
+                p[4] == String::class.java &&
+                p[5] == Long::class.javaPrimitiveType &&
+                p[6] == Long::class.javaPrimitiveType
+        }
+    }
+
+    private fun resolveOkHttpNetwork(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val requestToString = cachedMethod(cached, KEY_OKHTTP_REQUEST_TO_STRING, classLoader, ::isOkHttpRequestToString)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("Request{method="), StringMatchType.Contains)
+                        paramCount(0)
+                        returnType("java.lang.String")
+                    }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isOkHttpRequestToString)
+        store(KEY_OKHTTP_REQUEST_TO_STRING, requestToString, sigs, members)
+
+        val requestClass = requestToString?.declaringClass ?: return
+        val responseBuilderBuild = cachedMethod(cached, KEY_OKHTTP_RESPONSE_BUILDER_BUILD, classLoader) {
+            isOkHttpResponseBuilderBuild(it, requestClass)
+        } ?: runCatching {
+            dexKit.findMethod {
+                matcher {
+                    usingStrings(listOf("protocol == null"), StringMatchType.Equals)
+                    paramCount(0)
+                }
+            }.singleOrNull()?.getMethodInstance(classLoader)
+        }.getOrNull()?.takeIf { isOkHttpResponseBuilderBuild(it, requestClass) }
+        store(KEY_OKHTTP_RESPONSE_BUILDER_BUILD, responseBuilderBuild, sigs, members)
+
+        val responseClass = responseBuilderBuild?.returnType ?: return
+        val realCallChain = cachedMethod(cached, KEY_OKHTTP_REAL_CALL_CHAIN, classLoader) {
+            isOkHttpRealCallChain(it, requestClass, responseClass)
+        } ?: runCatching {
+            dexKit.findMethod {
+                matcher {
+                    usingStrings(listOf("Canceled"), StringMatchType.Equals)
+                    paramCount(0)
+                    returnType(responseClass.name)
+                }
+            }.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                .singleOrNull { isOkHttpRealCallChain(it, requestClass, responseClass) }
+        }.getOrNull()?.takeIf { isOkHttpRealCallChain(it, requestClass, responseClass) }
+        store(KEY_OKHTTP_REAL_CALL_CHAIN, realCallChain, sigs, members)
+    }
+
+    private fun isOkHttpRequestToString(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.name == "toString" &&
+            method.parameterCount == 0 &&
+            method.returnType == String::class.java &&
+            method.declaringClass.declaredFields.any { f ->
+                !f.type.isPrimitive && f.type.declaredMethods.any { m -> m.returnType == java.net.URI::class.java }
+            }
+
+    private fun isOkHttpResponseBuilderBuild(method: Method, requestClass: Class<*>): Boolean {
+        if (java.lang.reflect.Modifier.isStatic(method.modifiers)) return false
+        if (method.parameterCount != 0 || method.returnType.isPrimitive) return false
+        val cls = method.declaringClass
+        val hasZeroCtor = cls.declaredConstructors.any { it.parameterCount == 0 }
+        val fields = cls.declaredFields
+        return hasZeroCtor &&
+            fields.any { it.type == requestClass } &&
+            fields.any { it.type == Int::class.javaPrimitiveType } &&
+            fields.any { it.type == String::class.java } &&
+            fields.any { it.type.isEnum && it.type.enumConstants?.any { c -> c.toString() == "http/1.1" } == true }
+    }
+
+    private fun isOkHttpRealCallChain(method: Method, requestClass: Class<*>, responseClass: Class<*>): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 0 &&
+            method.returnType == responseClass &&
+            method.declaringClass.declaredFields.any { it.type == requestClass }
 }

@@ -49,17 +49,54 @@ object ProductStateHook {
     val MFT_FLAGS_TO_REMOVE: Set<String> = setOf(
         "enable_mft_plus_queue",
         "enable_mft_plus_extended_queue",
+        "enable_mft_fallback_loader",
         "is_remove_from_queue_enabled_for_mft_plus",
         "is_reordering_for_mft_plus_allowed",
         "enable_common_capping",
         "enable_pns_common_capping",
         "enable_pick_and_shuffle_common_capping",
         "enable_pick_and_shuffle_dynamic_cap",
+        "enable_pick_and_shuffle_remote_cap_parameters",
         "pick_and_shuffle_timecap",
+        "enable_repeat_track_limit",
+        "enable_audiobooks_common_capping",
         "enable_free_on_demand_experiment",
         "enable_free_on_demand_context_menu_experiment",
         "enable_playback_timeout_service",
-        "enable_playback_timeout_error_ui"
+        "enable_playback_timeout_error_ui",
+        "playback_timeout_action",
+        "ad_clips_per_free_tier_ad_break",
+        "ad_clips_per_podcast_segment"
+    )
+
+    private val RCS_SCOPED_OVERRIDES: Map<String, Any> = mapOf(
+        "core-common-capping:enable_common_capping" to false,
+        "android-libs-lyrics:enable_common_capping" to false,
+        "core-player:enable_pick_and_shuffle_dynamic_cap" to false,
+        "core-player:enable_pick_and_shuffle_remote_cap_parameters" to false,
+        "core-player:enable_pick_and_shuffle_common_capping" to "Disabled",
+        "core-player:pick_and_shuffle_timecap" to 1440,
+        "core-player:enable_mft_plus_queue" to false,
+        "core-player:enable_mft_plus_extended_queue" to false,
+        "android-feature-nowplaying-queue-bottom-sheet:enable_mft_plus_queue" to false,
+        "android-feature-freeondemand:enable_free_on_demand_experiment" to false,
+        "core-restrictions:enable_pns_common_capping" to "Disabled",
+        "core-restrictions:enable_mft_fallback_loader" to "Disabled",
+        "core-restrictions:enable_repeat_track_limit" to "Disabled",
+        "core-restrictions:enable_audiobooks_common_capping" to "Disabled",
+        "cpp-player-rendering-renderer:playback_timeout_action" to "Nothing",
+        "core-list-player:ad_clips_per_free_tier_ad_break" to 0,
+        "core-list-player:ad_clips_per_podcast_segment" to 0
+    )
+
+    private val RCS_INT_BY_NAME: Map<String, Int> = mapOf(
+        "pick_and_shuffle_timecap" to 1440,
+        "ad_clips_per_free_tier_ad_break" to 0,
+        "ad_clips_per_podcast_segment" to 0
+    )
+
+    private val RCS_ENUM_BY_NAME: Map<String, String> = mapOf(
+        "playback_timeout_action" to "Nothing"
     )
 
     val LEGACY_SPOOFS: Map<String, String> = TYPED_SPOOFS.mapValues { (_, value) ->
@@ -75,6 +112,8 @@ object ProductStateHook {
         installAttributeSeam(module)
         installUcsAttributeSeam(module)
         installRcsConfigurationSeam(module)
+        installRcsMapSeam(module)
+        installRcsLookupSeam(module)
     }
 
     private fun installMapSeam(module: XposedModule) {
@@ -246,6 +285,116 @@ object ProductStateHook {
                     val name = propId.javaClass.getMethod("getName").invoke(propId) as? String
                     name != null && MFT_FLAGS_TO_REMOVE.contains(name)
                 }
+            }
+    }
+
+    private fun buildRcsValue(
+        ctor: java.lang.reflect.Constructor<*>,
+        name: String,
+        scope: String,
+        value: Any
+    ): Any? = runCatching {
+        ctor.newInstance(
+            name,
+            scope,
+            value as? Boolean,
+            value as? Int,
+            value as? String,
+            0L,
+            0L
+        )
+    }.getOrNull()
+
+    private fun resolveRcsValueConstructor(): java.lang.reflect.Constructor<*>? {
+        val lookup = DexKitResolver.get<Method>(DexKitResolver.KEY_RCS_PROPERTY_LOOKUP) ?: return null
+        return lookup.returnType.declaredConstructors.firstOrNull { c ->
+            val p = c.parameterTypes
+            p.size == 7 &&
+                p[0] == String::class.java &&
+                p[1] == String::class.java &&
+                p[2] == Boolean::class.javaObjectType &&
+                p[3] == Int::class.javaObjectType &&
+                p[4] == String::class.java &&
+                p[5] == Long::class.javaPrimitiveType &&
+                p[6] == Long::class.javaPrimitiveType
+        }?.apply { isAccessible = true }
+    }
+
+    private fun installRcsMapSeam(module: XposedModule) {
+        val loader = DexKitResolver.get<Method>(DexKitResolver.KEY_RCS_MAP_LOADER) ?: return
+        val r27Ctor = resolveRcsValueConstructor() ?: return
+        val r27Class = r27Ctor.declaringClass
+        val boolField = r27Class.declaredFields.firstOrNull { it.type == Boolean::class.javaObjectType }?.apply { isAccessible = true }
+        val intField = r27Class.declaredFields.firstOrNull { it.type == Int::class.javaObjectType }?.apply { isAccessible = true }
+        val stringFields = r27Class.declaredFields.filter { it.type == String::class.java }.onEach { it.isAccessible = true }
+
+        val snapshotClass = loader.returnType
+        val snapshotCtor = snapshotClass.declaredConstructors.firstOrNull { c ->
+            c.parameterCount == 2 && !c.parameterTypes[0].isPrimitive && Map::class.java.isAssignableFrom(c.parameterTypes[1])
+        }?.apply { isAccessible = true } ?: return
+        val headerField = snapshotClass.declaredFields.firstOrNull { it.type == snapshotCtor.parameterTypes[0] }?.apply { isAccessible = true } ?: return
+        val mapField = snapshotClass.declaredFields.firstOrNull { Map::class.java.isAssignableFrom(it.type) }?.apply { isAccessible = true } ?: return
+
+        module.deoptimize(loader)
+        module.hook(loader)
+            .setId("rcs_map_loader")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val snapshot = chain.proceed() ?: return@intercept null
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept snapshot
+                }
+                val origHeader = headerField.get(snapshot) ?: return@intercept snapshot
+                @Suppress("UNCHECKED_CAST")
+                val origMap = mapField.get(snapshot) as? Map<String, Any?> ?: return@intercept snapshot
+                val patched = HashMap<String, Any?>(origMap.size + RCS_SCOPED_OVERRIDES.size)
+                patched.putAll(origMap)
+
+                for ((fullKey, existing) in origMap) {
+                    val sep = fullKey.indexOf(':')
+                    if (sep <= 0 || existing == null) continue
+                    val scope = fullKey.substring(0, sep)
+                    val name = fullKey.substring(sep + 1)
+                    if (!MFT_FLAGS_TO_REMOVE.contains(name)) continue
+                    val overrideVal: Any? = when {
+                        boolField?.get(existing) != null -> false
+                        intField?.get(existing) != null -> RCS_INT_BY_NAME[name]
+                        stringFields.count { it.get(existing) != null } >= 3 -> RCS_ENUM_BY_NAME[name] ?: "Disabled"
+                        else -> null
+                    }
+                    if (overrideVal != null) {
+                        buildRcsValue(r27Ctor, name, scope, overrideVal)?.let { patched[fullKey] = it }
+                    }
+                }
+
+                for ((fullKey, value) in RCS_SCOPED_OVERRIDES) {
+                    val sep = fullKey.indexOf(':')
+                    val scope = fullKey.substring(0, sep)
+                    val name = fullKey.substring(sep + 1)
+                    buildRcsValue(r27Ctor, name, scope, value)?.let { patched[fullKey] = it }
+                }
+
+                snapshotCtor.newInstance(origHeader, java.util.Collections.unmodifiableMap(patched))
+            }
+    }
+
+    private fun installRcsLookupSeam(module: XposedModule) {
+        val lookup = DexKitResolver.get<Method>(DexKitResolver.KEY_RCS_PROPERTY_LOOKUP) ?: return
+        val r27Ctor = resolveRcsValueConstructor() ?: return
+
+        module.deoptimize(lookup)
+        module.hook(lookup)
+            .setId("rcs_property_lookup")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val result = chain.proceed()
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept result
+                }
+                val scope = chain.getArg(0) as? String ?: return@intercept result
+                val name = chain.getArg(1) as? String ?: return@intercept result
+                val overrideVal = RCS_SCOPED_OVERRIDES["$scope:$name"] ?: return@intercept result
+                buildRcsValue(r27Ctor, name, scope, overrideVal) ?: result
             }
     }
 }

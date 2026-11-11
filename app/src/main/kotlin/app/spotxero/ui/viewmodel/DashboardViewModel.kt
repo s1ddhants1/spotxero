@@ -88,52 +88,29 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             }
             service != null -> {
                 val currentScope = service.scope.orEmpty()
-                val isLSPatch = name.contains("LSPatch", ignoreCase = true)
-
-                if (isLSPatch) {
-                    val isInScope = currentScope.any { it in CommonUtils.SUPPORTED_PACKAGES }
-                    if (!isInScope) {
-                        BannerEvaluationData(
-                            titleRes = R.string.framework_spotify_not_in_scope_title,
-                            titleArgs = emptyList(),
-                            descRes = R.string.framework_spotify_not_in_scope_desc,
-                            descArgs = emptyList(),
-                            isInjectable = false
-                        )
-                    } else {
-                        BannerEvaluationData(
-                            titleRes = R.string.framework_active_title_dynamic,
-                            titleArgs = listOf(name),
-                            descRes = R.string.framework_active_desc,
-                            descArgs = listOf(name, version),
-                            isInjectable = true
-                        )
-                    }
+                val isLSPosed = name.contains("LSPosed", ignoreCase = true)
+                val isInScope = if (isLSPosed) {
+                    currentScope.any { it in CommonUtils.SUPPORTED_PACKAGES }
                 } else {
-                    val isLSPosed = name.contains("LSPosed", ignoreCase = true)
-                    val isInScope = if (isLSPosed) {
-                        currentScope.any { it in CommonUtils.SUPPORTED_PACKAGES }
-                    } else {
-                        currentScope.isEmpty() || currentScope.any { it in CommonUtils.SUPPORTED_PACKAGES }
-                    }
+                    currentScope.isEmpty() || currentScope.any { it in CommonUtils.SUPPORTED_PACKAGES }
+                }
 
-                    if (!isInScope) {
-                        BannerEvaluationData(
-                            titleRes = if (isLSPosed) R.string.framework_lsposed_not_in_scope_title else R.string.framework_spotify_not_in_scope_title,
-                            titleArgs = emptyList(),
-                            descRes = if (isLSPosed) R.string.framework_lsposed_not_in_scope_desc else R.string.framework_spotify_not_in_scope_desc,
-                            descArgs = emptyList(),
-                            isInjectable = false
-                        )
-                    } else {
-                        BannerEvaluationData(
-                            titleRes = R.string.framework_active_title_dynamic,
-                            titleArgs = listOf(name),
-                            descRes = R.string.framework_active_desc,
-                            descArgs = listOf(name, version),
-                            isInjectable = true
-                        )
-                    }
+                if (!isInScope) {
+                    BannerEvaluationData(
+                        titleRes = R.string.framework_lsposed_not_in_scope_title,
+                        titleArgs = emptyList(),
+                        descRes = R.string.framework_lsposed_not_in_scope_desc,
+                        descArgs = emptyList(),
+                        isInjectable = false
+                    )
+                } else {
+                    BannerEvaluationData(
+                        titleRes = R.string.framework_active_title_dynamic,
+                        titleArgs = listOf(name),
+                        descRes = R.string.framework_active_desc,
+                        descArgs = listOf(name, version),
+                        isInjectable = true
+                    )
                 }
             }
             isModuleActive -> {

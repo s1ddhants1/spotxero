@@ -4,6 +4,7 @@ import android.content.pm.ApplicationInfo
 import app.spotxero.hooks.ads.AdResponseHook
 import app.spotxero.hooks.ads.AdSkipHook
 import app.spotxero.hooks.ads.BrandAdsHook
+import app.spotxero.hooks.ads.NetworkAdBlockHook
 import app.spotxero.hooks.ads.PlayerAdCardsHook
 import app.spotxero.hooks.content.HidePodcastsHook
 import app.spotxero.hooks.navigation.HidePremiumTabHook
@@ -59,6 +60,7 @@ object HookRegistry {
             "HidePremiumTab" to { HidePremiumTabHook.install(module) },
             "AdSkip" to { AdSkipHook.install(module) },
             "AdResponse" to { AdResponseHook.install(module) },
+            "NetworkAdBlock" to { NetworkAdBlockHook.install(module) },
             "BrandAds" to { BrandAdsHook.install(module) },
             "PlayerAdCards" to { PlayerAdCardsHook.install(module) },
             "HidePodcasts" to { HidePodcastsHook.install(module) },

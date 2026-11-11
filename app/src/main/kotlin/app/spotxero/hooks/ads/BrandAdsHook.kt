@@ -10,15 +10,21 @@ import java.lang.reflect.Method
 object BrandAdsHook {
 
     fun install(module: XposedModule) {
-        hookHomeSections(module)
-        hookBrowseSections(module)
+        hookSections(module, DexKitResolver.KEY_HOME_SECTION_LIST, "hide_home_brand_ads", AdSectionFilter::filterHome)
+        hookSections(module, DexKitResolver.KEY_BROWSE_SECTION_LIST, "hide_browse_brand_ads", AdSectionFilter::filterBrowse)
+        hookSections(module, DexKitResolver.KEY_PLAYER_SECTION_LIST, "hide_player_ad_sections", AdSectionFilter::filterPlayer)
     }
 
-    private fun hookHomeSections(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_HOME_SECTION_LIST) ?: return
+    private fun hookSections(
+        module: XposedModule,
+        resolverKey: String,
+        hookId: String,
+        filter: (List<*>?) -> List<*>?
+    ) {
+        val method = DexKitResolver.get<Method>(resolverKey) ?: return
         module.deoptimize(method)
         module.hook(method)
-            .setId("hide_home_brand_ads")
+            .setId(hookId)
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val result = chain.proceed()
@@ -26,23 +32,7 @@ object BrandAdsHook {
                     return@intercept result
                 }
                 val list = result as? List<*> ?: return@intercept result
-                AdSectionFilter.filterHome(list)
-            }
-    }
-
-    private fun hookBrowseSections(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_BROWSE_SECTION_LIST) ?: return
-        module.deoptimize(method)
-        module.hook(method)
-            .setId("hide_browse_brand_ads")
-            .setExceptionMode(ExceptionMode.PROTECTIVE)
-            .intercept { chain ->
-                val result = chain.proceed()
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                    return@intercept result
-                }
-                val list = result as? List<*> ?: return@intercept result
-                AdSectionFilter.filterBrowse(list)
+                filter(list)
             }
     }
 }

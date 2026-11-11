@@ -14,6 +14,29 @@ object PlayerShuffleHook {
     private const val STATION_PREFIX = "spotify:station:"
     private const val BASE_PREFIX = "spotify:"
 
+    private val AD_SUPPRESSIONS = setOf("ad", "podcast_ad")
+
+    private val MFT_SUPPRESSIONS = setOf(
+        "mft",
+        "mft/core",
+        "mft/apply_restrictions",
+        "mft/force_shuffle",
+        "mft/context_switch",
+        "mft/disallow_restart_play",
+        "mft/inject_random_tracks",
+        "mft/inject_random_tracks/fallback",
+        "mft/inject_random_tracks/increase_recs",
+        "mft/inject_filler_tracks",
+        "mft/inject_filler_tracks/fallback",
+        "mft/inject_filler_tracks/future",
+        "mft/inject_track_on_start_play",
+        "mft-lens/mft/inject_filler_tracks/fallback",
+        "album/inject_filler_tracks"
+    )
+
+    private fun suppressionProviders(shuffleEnabled: Boolean): Set<String> =
+        if (shuffleEnabled) AD_SUPPRESSIONS else AD_SUPPRESSIONS + MFT_SUPPRESSIONS
+
     @Volatile
     private var userShuffleState: Boolean? = null
 
@@ -148,13 +171,9 @@ object PlayerShuffleHook {
                     if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                         return@intercept result
                     }
-                    if (!isShuffleEnabled()) {
-                        val thisObj = chain.getThisObject() ?: return@intercept result
-                        val cl = thisObj.javaClass.classLoader
-                        buildSuppressionsOptional(cl, result) ?: result
-                    } else {
-                        result
-                    }
+                    val thisObj = chain.getThisObject() ?: return@intercept result
+                    val cl = thisObj.javaClass.classLoader
+                    buildSuppressionsOptional(cl, result, isShuffleEnabled()) ?: result
                 }
         }
     }
@@ -317,57 +336,43 @@ object PlayerShuffleHook {
         }?.apply { isAccessible = true }
         licenseMethod?.invoke(builderObj, "premium")
 
-        if (!shuffleEnabled) {
-            val suppOpt = getFieldValue(builderObj, "suppressions")
-            val currentSuppressions = if (suppOpt != null) {
-                val hasValueMethod = suppOpt.javaClass.methods.firstOrNull {
-                    it.parameterCount == 0 && it.returnType == Boolean::class.javaPrimitiveType
-                }?.apply { isAccessible = true }
-                if (hasValueMethod?.invoke(suppOpt) == true) {
-                    val getMethod = suppOpt.javaClass.methods.firstOrNull {
-                        it.parameterCount == 0 && it.returnType != Boolean::class.javaPrimitiveType && it.returnType != Void.TYPE
-                    }?.apply { isAccessible = true }
-                    getMethod?.invoke(suppOpt)
-                } else null
-            } else null
-
-            val providers = mutableSetOf(
-                "mft",
-                "mft/inject_random_tracks",
-                "mft/inject_filler_tracks",
-                "mft/inject_track_on_start_play",
-                "mft/disallow_restart_play"
-            )
-            if (currentSuppressions != null) {
-                val providersMethod = currentSuppressions.javaClass.methods.firstOrNull {
-                    it.parameterCount == 0 && Set::class.java.isAssignableFrom(it.returnType)
-                }?.apply { isAccessible = true }
-                @Suppress("UNCHECKED_CAST")
-                val existing = providersMethod?.invoke(currentSuppressions) as? Set<String>
-                if (existing != null) {
-                    providers.addAll(existing)
-                }
-            }
-            val createSuppressionsMethod = suppressionsClass.getMethod("create", Set::class.java).apply { isAccessible = true }
-            val newSuppressions = createSuppressionsMethod.invoke(null, providers)
-            val setSuppressionsMethod = builderObj.javaClass.methods.firstOrNull {
-                it.name == "suppressions" && it.parameterCount == 1 && it.parameterTypes[0].isAssignableFrom(newSuppressions.javaClass)
+        val suppOpt = getFieldValue(builderObj, "suppressions")
+        val currentSuppressions = if (suppOpt != null) {
+            val hasValueMethod = suppOpt.javaClass.methods.firstOrNull {
+                it.parameterCount == 0 && it.returnType == Boolean::class.javaPrimitiveType
             }?.apply { isAccessible = true }
-            setSuppressionsMethod?.invoke(builderObj, newSuppressions)
+            if (hasValueMethod?.invoke(suppOpt) == true) {
+                val getMethod = suppOpt.javaClass.methods.firstOrNull {
+                    it.parameterCount == 0 && it.returnType != Boolean::class.javaPrimitiveType && it.returnType != Void.TYPE
+                }?.apply { isAccessible = true }
+                getMethod?.invoke(suppOpt)
+            } else null
+        } else null
+
+        val providers = suppressionProviders(shuffleEnabled).toMutableSet()
+        if (currentSuppressions != null) {
+            val providersMethod = currentSuppressions.javaClass.methods.firstOrNull {
+                it.parameterCount == 0 && Set::class.java.isAssignableFrom(it.returnType)
+            }?.apply { isAccessible = true }
+            @Suppress("UNCHECKED_CAST")
+            val existing = providersMethod?.invoke(currentSuppressions) as? Set<String>
+            if (existing != null) {
+                providers.addAll(existing)
+            }
         }
+        val createSuppressionsMethod = suppressionsClass.getMethod("create", Set::class.java).apply { isAccessible = true }
+        val newSuppressions = createSuppressionsMethod.invoke(null, providers)
+        val setSuppressionsMethod = builderObj.javaClass.methods.firstOrNull {
+            it.name == "suppressions" && it.parameterCount == 1 && it.parameterTypes[0].isAssignableFrom(newSuppressions.javaClass)
+        }?.apply { isAccessible = true }
+        setSuppressionsMethod?.invoke(builderObj, newSuppressions)
     }
 
-    private fun buildSuppressionsOptional(cl: ClassLoader?, result: Any?): Any? {
+    private fun buildSuppressionsOptional(cl: ClassLoader?, result: Any?, shuffleEnabled: Boolean): Any? {
         if (result == null || cl == null) return null
         return runCatching {
             val suppressionsClass = Class.forName("com.spotify.player.model.Suppressions", false, cl)
-            val providers = mutableSetOf(
-                "mft",
-                "mft/inject_random_tracks",
-                "mft/inject_filler_tracks",
-                "mft/inject_track_on_start_play",
-                "mft/disallow_restart_play"
-            )
+            val providers = suppressionProviders(shuffleEnabled).toMutableSet()
             val currentOpt = result
             val hasValueMethod = currentOpt.javaClass.methods.firstOrNull {
                 it.parameterCount == 0 && it.returnType == Boolean::class.javaPrimitiveType
@@ -838,19 +843,10 @@ object PlayerShuffleHook {
         val overBitField = overridesClass.getDeclaredField("bitField0_").apply { isAccessible = true }
         overBitField.setInt(overrides, overBitField.getInt(overrides) or 1)
 
-        if (!shuffleEnabled) {
-            val suppProviders = setOf(
-                "mft",
-                "mft/inject_random_tracks",
-                "mft/inject_filler_tracks",
-                "mft/inject_track_on_start_play",
-                "mft/disallow_restart_play"
-            )
-            val addSuppMethod = prepOptionsClass.declaredMethods.firstOrNull {
-                it.parameterCount == 1 && Iterable::class.java.isAssignableFrom(it.parameterTypes[0])
-            }?.apply { isAccessible = true }
-            addSuppMethod?.invoke(options, suppProviders)
-        }
+        val addSuppMethod = prepOptionsClass.declaredMethods.firstOrNull {
+            it.parameterCount == 1 && Iterable::class.java.isAssignableFrom(it.parameterTypes[0])
+        }?.apply { isAccessible = true }
+        addSuppMethod?.invoke(options, suppressionProviders(shuffleEnabled))
 
         if (isPlaylistPlay) {
             val queryField = runCatching { payload.javaClass.getDeclaredField("playlistQuery_") }.getOrNull()?.apply { isAccessible = true }
