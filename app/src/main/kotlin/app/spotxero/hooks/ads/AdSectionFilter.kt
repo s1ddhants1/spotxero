@@ -1,13 +1,11 @@
 package app.spotxero.hooks.ads
 
-import android.util.Log
 import app.spotxero.core.ProtoLists
 import java.lang.reflect.Field
 import java.util.concurrent.ConcurrentHashMap
 
 object AdSectionFilter {
 
-    private const val TAG = "SpotXero.BrandAds"
     private const val HOME_SECTION = "com.spotify.casita.v1.resolved.Section"
     private const val BROWSE_SECTION = "com.spotify.browsita.v1.resolved.Section"
     private const val PLAYER_SECTION = "com.spotify.scrollsita.v1.Section"
@@ -15,9 +13,37 @@ object AdSectionFilter {
     private const val BROWSE_TYPE_FIELD = "sectionTypeCase_"
     private const val PLAYER_TYPE_FIELD = "sectionTypeCase_"
 
-    private val HOME_AD_FIELDS = listOf("IMAGE_BRAND_AD_FIELD_NUMBER", "VIDEO_BRAND_AD_FIELD_NUMBER")
-    private val BROWSE_AD_FIELDS = listOf("BRAND_ADS_FIELD_NUMBER")
-    private val PLAYER_AD_FIELDS = listOf("IMAGE_BRAND_AD_FIELD_NUMBER", "LIVE_UPSELL_FIELD_NUMBER", "LEAVEBEHINDS_FIELD_NUMBER")
+    private val HOME_AD_FIELDS = listOf(
+        "IMAGE_BRAND_AD_FIELD_NUMBER",
+        "VIDEO_BRAND_AD_FIELD_NUMBER",
+        "SHOWCASE_FIELD_NUMBER",
+        "PROMOTION_V1_FIELD_NUMBER",
+        "PROMOTION_V3_FIELD_NUMBER",
+        "AUDIO_PROMO_FIELD_NUMBER",
+        "VIDEO_PROMO_FIELD_NUMBER",
+        "PLAY_LINK_PROMO_FIELD_NUMBER",
+        "CAMPAIGN_LINK_CAROUSEL_FIELD_NUMBER",
+        "PREVIEW_PROMOTION_CAROUSEL_FIELD_NUMBER",
+        "CONCERT_CAMPAIGN_FIELD_NUMBER"
+    )
+
+    private val BROWSE_AD_FIELDS = listOf(
+        "BRAND_ADS_FIELD_NUMBER",
+        "SHOWCASE_FIELD_NUMBER",
+        "PROMOTION_V1_FIELD_NUMBER",
+        "PROMOTION_V3_FIELD_NUMBER",
+        "AUDIO_PROMO_FIELD_NUMBER",
+        "VIDEO_PROMO_FIELD_NUMBER",
+        "PLAY_LINK_PROMO_FIELD_NUMBER",
+        "PREVIEW_PROMOTION_CAROUSEL_FIELD_NUMBER"
+    )
+
+    private val PLAYER_AD_FIELDS = listOf(
+        "IMAGE_BRAND_AD_FIELD_NUMBER",
+        "LIVE_UPSELL_FIELD_NUMBER",
+        "LEAVEBEHINDS_FIELD_NUMBER",
+        "CONCERT_CAMPAIGN_FIELD_NUMBER"
+    )
 
     private val typeFields = ConcurrentHashMap<Class<*>, Field>()
     private val adTypes = ConcurrentHashMap<Class<*>, Set<Int>>()
@@ -66,19 +92,28 @@ object AdSectionFilter {
                 f.isAccessible = true
                 f.get(section)
             }.getOrNull() ?: continue
-            if (hasAdMarker(child)) return true
+            val childName = child.javaClass.name
+            if (childName.contains("Showcase") ||
+                childName.contains("BrandAd") ||
+                childName.contains("Sponsored") ||
+                hasAdMarker(child)
+            ) return true
         }
         return false
     }
 
     private fun hasAdMarker(node: Any): Boolean {
-        val cls = node.javaClass
-        if (cls.name.endsWith(".SponsoredHeading")) return true
-        for (f in cls.declaredFields) {
+        val clsName = node.javaClass.name
+        if (clsName.endsWith(".SponsoredHeading") ||
+            clsName.contains("Showcase") ||
+            clsName.contains("BrandAd") ||
+            clsName.contains("Sponsored")
+        ) return true
+        for (f in node.javaClass.declaredFields) {
             if (java.lang.reflect.Modifier.isStatic(f.modifiers)) continue
             val t = f.type
             val name = t.name
-            if (name.endsWith(".EmbeddedAdMetadata")) {
+            if (name.endsWith("AdMetadata") || name.contains("CreativeAd")) {
                 val meta = runCatching {
                     f.isAccessible = true
                     f.get(node)
@@ -103,14 +138,8 @@ object AdSectionFilter {
         return msg == def
     }
 
-    private fun resolveAdTypes(sectionClass: Class<*>, adFields: List<String>): Set<Int> {
-        val values = adFields.mapNotNull { name ->
+    private fun resolveAdTypes(sectionClass: Class<*>, adFields: List<String>): Set<Int> =
+        adFields.mapNotNull { name ->
             runCatching { sectionClass.getField(name).getInt(null) }.getOrNull()
-        }
-        if (values.size != adFields.size) {
-            Log.w(TAG, "Ad section types unresolved for ${sectionClass.name}")
-            return emptySet()
-        }
-        return values.toSet()
-    }
+        }.toSet()
 }

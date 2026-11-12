@@ -46,7 +46,9 @@ object NetworkAdBlockHook {
         "/upsell/v1/",
         "/capping-api/",
         "/sponsoredplaylist/",
-        "/adpreview/"
+        "/adpreview/",
+        "/showcase/",
+        "/brandads/"
     )
 
     private const val APP_OPEN_AD_PATH = "/appopen/v1/getad"

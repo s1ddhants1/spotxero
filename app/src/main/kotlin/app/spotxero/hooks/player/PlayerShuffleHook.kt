@@ -14,28 +14,11 @@ object PlayerShuffleHook {
     private const val STATION_PREFIX = "spotify:station:"
     private const val BASE_PREFIX = "spotify:"
 
-    private val AD_SUPPRESSIONS = setOf("ad", "podcast_ad")
-
-    private val MFT_SUPPRESSIONS = setOf(
-        "mft",
-        "mft/core",
-        "mft/apply_restrictions",
-        "mft/force_shuffle",
-        "mft/context_switch",
-        "mft/disallow_restart_play",
-        "mft/inject_random_tracks",
-        "mft/inject_random_tracks/fallback",
-        "mft/inject_random_tracks/increase_recs",
-        "mft/inject_filler_tracks",
-        "mft/inject_filler_tracks/fallback",
-        "mft/inject_filler_tracks/future",
-        "mft/inject_track_on_start_play",
-        "mft-lens/mft/inject_filler_tracks/fallback",
-        "album/inject_filler_tracks"
-    )
+    private val BASE_SUPPRESSIONS = setOf("ad", "podcast_ad", "mft/apply_restrictions")
+    private val SHUFFLE_OFF_SUPPRESSIONS = setOf("mft/force_shuffle")
 
     private fun suppressionProviders(shuffleEnabled: Boolean): Set<String> =
-        if (shuffleEnabled) AD_SUPPRESSIONS else AD_SUPPRESSIONS + MFT_SUPPRESSIONS
+        if (shuffleEnabled) BASE_SUPPRESSIONS else BASE_SUPPRESSIONS + SHUFFLE_OFF_SUPPRESSIONS
 
     @Volatile
     private var userShuffleState: Boolean? = null
@@ -748,6 +731,69 @@ object PlayerShuffleHook {
         }
     }
 
+    private fun sanitizeContext(payload: Any) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) return
+        val (container, context) = locateContext(payload) ?: return
+        var changed = cleanMetadata(context)
+
+        runCatching {
+            val pagesField = context.javaClass.getDeclaredField("pages_").apply { isAccessible = true }
+            val pages = pagesField.get(context) as? List<*>
+            if (!pages.isNullOrEmpty()) {
+                for (page in pages) {
+                    if (page != null && cleanMetadata(page)) {
+                        changed = true
+                    }
+                }
+            }
+        }
+
+        runCatching {
+            val restrField = context.javaClass.getDeclaredField("restrictions_").apply { isAccessible = true }
+            if (restrField.get(context) != null) {
+                restrField.set(context, null)
+                val bitField = context.javaClass.getDeclaredField("bitField0_").apply { isAccessible = true }
+                bitField.setInt(context, bitField.getInt(context) and 1.inv())
+                changed = true
+            }
+        }
+
+        if (changed) {
+            resetMemoizedSize(context)
+            if (container !== payload) {
+                resetMemoizedSize(container)
+            }
+            resetMemoizedSize(payload)
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun cleanMetadata(obj: Any): Boolean {
+        val metaField = runCatching { obj.javaClass.getDeclaredField("metadata_").apply { isAccessible = true } }.getOrNull() ?: return false
+        val map = metaField.get(obj) as? MutableMap<Any?, Any?> ?: return false
+
+        for (field in map.javaClass.declaredFields) {
+            if (field.type == java.lang.Boolean.TYPE) {
+                field.isAccessible = true
+                field.setBoolean(map, true)
+            }
+        }
+
+        var modified = false
+        if (map["autoplay_candidate"] != "true") {
+            map["autoplay_candidate"] = "true"
+            modified = true
+        }
+        if (map.containsKey("end_of_context_action")) {
+            map.remove("end_of_context_action")
+            modified = true
+        }
+        if (modified) {
+            resetMemoizedSize(obj)
+        }
+        return modified
+    }
+
     private fun locateContext(payload: Any): Pair<Any, Any>? {
         runCatching {
             val field = payload.javaClass.getDeclaredField("context_").apply { isAccessible = true }
@@ -777,6 +823,7 @@ object PlayerShuffleHook {
 
     private fun applyPlayOverrides(payload: Any) {
         deStationContext(payload)
+        sanitizeContext(payload)
         val cl = payload.javaClass.classLoader ?: return
         val prepPlayClass = Class.forName("com.spotify.player.esperanto.proto.EsPreparePlay\$PreparePlayRequest", false, cl)
         val prepOptionsClass = Class.forName("com.spotify.player.esperanto.proto.EsPreparePlayOptions\$PreparePlayOptions", false, cl)
@@ -853,10 +900,10 @@ object PlayerShuffleHook {
             val query = queryField?.get(payload)
             if (query != null) {
                 runCatching {
-                    val recField = query.javaClass.getDeclaredField("loadRecommendations_").apply { isAccessible = true }
-                    recField.setBoolean(query, false)
-                    resetMemoizedSize(query)
+                    val incPremField = query.javaClass.getDeclaredField("includePremiumContent_").apply { isAccessible = true }
+                    incPremField.setBoolean(query, true)
                 }
+                resetMemoizedSize(query)
             }
         }
 

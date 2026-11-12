@@ -15,6 +15,7 @@ object ProductStateHook {
         "shuffle" to false,
         "on-demand" to true,
         "pick-and-shuffle" to false,
+        "streaming" to true,
         "streaming-rules" to "",
         "previous-streaming-rules" to "",
         "nft-disabled" to "1",
@@ -22,7 +23,7 @@ object ProductStateHook {
         "unrestricted" to true,
         "shuffle-eligible" to true,
         "high-bitrate" to true,
-        "tablet-free" to true
+        "tablet-free" to false
     )
 
     val PLAYER_LOCAL_SPOOFS: Map<String, Any> = mapOf(
@@ -40,16 +41,12 @@ object ProductStateHook {
         "on-demand-trial-in-progress",
         "smart-shuffle",
         "at-signal",
-        "feature-set-id-masked",
         "strider-key",
         "is-eligible-for-trial",
         "is-eligible-for-upsell"
     )
 
     val MFT_FLAGS_TO_REMOVE: Set<String> = setOf(
-        "enable_mft_plus_queue",
-        "enable_mft_plus_extended_queue",
-        "enable_mft_fallback_loader",
         "is_remove_from_queue_enabled_for_mft_plus",
         "is_reordering_for_mft_plus_allowed",
         "enable_common_capping",
@@ -76,12 +73,8 @@ object ProductStateHook {
         "core-player:enable_pick_and_shuffle_remote_cap_parameters" to false,
         "core-player:enable_pick_and_shuffle_common_capping" to "Disabled",
         "core-player:pick_and_shuffle_timecap" to 1440,
-        "core-player:enable_mft_plus_queue" to false,
-        "core-player:enable_mft_plus_extended_queue" to false,
-        "android-feature-nowplaying-queue-bottom-sheet:enable_mft_plus_queue" to false,
         "android-feature-freeondemand:enable_free_on_demand_experiment" to false,
         "core-restrictions:enable_pns_common_capping" to "Disabled",
-        "core-restrictions:enable_mft_fallback_loader" to "Disabled",
         "core-restrictions:enable_repeat_track_limit" to "Disabled",
         "core-restrictions:enable_audiobooks_common_capping" to "Disabled",
         "cpp-player-rendering-renderer:playback_timeout_action" to "Nothing",
