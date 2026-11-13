@@ -283,13 +283,26 @@ object ProductStateHook {
                 if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept result
                 }
-                list.filterNot { assignedValue ->
+                val filtered = list.filterNot { assignedValue ->
                     if (assignedValue == null) return@filterNot false
                     val propId = assignedValue.javaClass.methods.firstOrNull {
                         it.parameterCount == 0 && it.returnType.name == "com.spotify.rcs.admin.grpc.v0.PropertyDefinition\$Identifier"
                     }?.invoke(assignedValue) ?: return@filterNot false
                     val name = propId.javaClass.getMethod("getName").invoke(propId) as? String
                     name != null && MFT_FLAGS_TO_REMOVE.contains(name)
+                }
+                if (getter.returnType.isInstance(filtered)) {
+                    filtered
+                } else {
+                    java.lang.reflect.Proxy.newProxyInstance(
+                        getter.returnType.classLoader ?: java.lang.reflect.Proxy::class.java.classLoader,
+                        arrayOf(getter.returnType, java.util.List::class.java, java.util.RandomAccess::class.java)
+                    ) { _, method, args ->
+                        if (method.name == "j" && method.parameterCount == 1) {
+                            return@newProxyInstance result
+                        }
+                        if (args != null) method.invoke(filtered, *args) else method.invoke(filtered)
+                    }
                 }
             }
     }
