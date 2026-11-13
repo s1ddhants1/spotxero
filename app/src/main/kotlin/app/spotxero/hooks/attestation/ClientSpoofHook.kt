@@ -52,7 +52,6 @@ object ClientSpoofHook {
         }
         Log.i(TAG, "Installing ClientSpoofHook (enabled=${enabled()})...")
         hookNativeHttpConnection(module, cl)
-        hookApplicationScopeConfiguration(module, cl)
         hookPlayIntegrity(module)
     }
 
