@@ -319,6 +319,16 @@ object PlayerShuffleHook {
         }?.apply { isAccessible = true }
         licenseMethod?.invoke(builderObj, "premium")
 
+        val initPausedMethod = builderObj.javaClass.methods.firstOrNull {
+            it.name == "initiallyPaused" && it.parameterCount == 1 && it.parameterTypes[0] == Boolean::class.javaPrimitiveType
+        }?.apply { isAccessible = true }
+        initPausedMethod?.invoke(builderObj, false)
+
+        val alwaysPlayMethod = builderObj.javaClass.methods.firstOrNull {
+            it.name == "alwaysPlaySomething" && it.parameterCount == 1 && it.parameterTypes[0] == Boolean::class.javaPrimitiveType
+        }?.apply { isAccessible = true }
+        alwaysPlayMethod?.invoke(builderObj, true)
+
         val suppOpt = getFieldValue(builderObj, "suppressions")
         val currentSuppressions = if (suppOpt != null) {
             val hasValueMethod = suppOpt.javaClass.methods.firstOrNull {
@@ -677,7 +687,7 @@ object PlayerShuffleHook {
                         }
                     }
                 }
-                "SkipNext", "SkipPrev" -> {
+                "SkipNext", "SkipPrev", "PlayPrepared" -> {
                     runCatching {
                         applySkipOverrides(payload)
                     }
@@ -775,8 +785,8 @@ object PlayerShuffleHook {
             map["autoplay_candidate"] = "true"
             modified = true
         }
-        if (map.containsKey("end_of_context_action")) {
-            map.remove("end_of_context_action")
+        if (map["end_of_context_action"] != "autoplay") {
+            map["end_of_context_action"] = "autoplay"
             modified = true
         }
         if (modified) {
@@ -901,6 +911,12 @@ object PlayerShuffleHook {
         val licenseField = runCatching { prepOptionsClass.getDeclaredField("license_").apply { isAccessible = true } }.getOrNull()
         licenseField?.set(options, "premium")
 
+        val alwaysPlayField = runCatching { prepOptionsClass.getDeclaredField("alwaysPlaySomething_").apply { isAccessible = true } }.getOrNull()
+        alwaysPlayField?.setBoolean(options, true)
+
+        val initPausedField = runCatching { prepOptionsClass.getDeclaredField("initiallyPaused_").apply { isAccessible = true } }.getOrNull()
+        initPausedField?.setBoolean(options, false)
+
         resetMemoizedSize(optBool)
         resetMemoizedSize(overrides)
         resetMemoizedSize(options)
@@ -920,7 +936,8 @@ object PlayerShuffleHook {
             optField.set(payload, opt)
             runCatching {
                 val bitField = payload.javaClass.getDeclaredField("bitField0_").apply { isAccessible = true }
-                bitField.setInt(payload, bitField.getInt(payload) or 1)
+                val bitMask = if (payload.javaClass.name.endsWith("PlayPreparedRequest")) 2 else 1
+                bitField.setInt(payload, bitField.getInt(payload) or bitMask)
             }
         }
         val overField = runCatching { optClass.getDeclaredField("overrideRestrictions_").apply { isAccessible = true } }.getOrNull()

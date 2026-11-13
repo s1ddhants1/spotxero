@@ -24,7 +24,12 @@ object AdSectionFilter {
         "PLAY_LINK_PROMO_FIELD_NUMBER",
         "CAMPAIGN_LINK_CAROUSEL_FIELD_NUMBER",
         "PREVIEW_PROMOTION_CAROUSEL_FIELD_NUMBER",
-        "CONCERT_CAMPAIGN_FIELD_NUMBER"
+        "CONCERT_CAMPAIGN_FIELD_NUMBER",
+        "BANNER_FIELD_NUMBER",
+        "BANNER_WITH_ANIMATIONS_FIELD_NUMBER",
+        "FULL_BLEED_BANNER_FIELD_NUMBER",
+        "INLINE_CARD_FIELD_NUMBER",
+        "AUDIO_SPOTLIGHT_FIELD_NUMBER"
     )
 
     private val BROWSE_AD_FIELDS = listOf(
@@ -35,7 +40,8 @@ object AdSectionFilter {
         "AUDIO_PROMO_FIELD_NUMBER",
         "VIDEO_PROMO_FIELD_NUMBER",
         "PLAY_LINK_PROMO_FIELD_NUMBER",
-        "PREVIEW_PROMOTION_CAROUSEL_FIELD_NUMBER"
+        "PREVIEW_PROMOTION_CAROUSEL_FIELD_NUMBER",
+        "AUDIO_SPOTLIGHT_FIELD_NUMBER"
     )
 
     private val PLAYER_AD_FIELDS = listOf(
@@ -44,6 +50,10 @@ object AdSectionFilter {
         "LEAVEBEHINDS_FIELD_NUMBER",
         "CONCERT_CAMPAIGN_FIELD_NUMBER"
     )
+
+    private val AD_NAME_MARKERS = listOf("AdMetadata", "CreativeAd", "AdTrackingUrls", "adMetadata", "ad_metadata")
+    private val AD_TEXT_MARKERS = listOf("Реклама", "Advertisement", "Sponsored", "Anzeige", "Publicité", "Publicidad", "spotify:ad:")
+    private val DEFAULT_SENTINEL = Any()
 
     private val typeFields = ConcurrentHashMap<Class<*>, Field>()
     private val adTypes = ConcurrentHashMap<Class<*>, Set<Int>>()
@@ -107,35 +117,46 @@ object AdSectionFilter {
         if (clsName.endsWith(".SponsoredHeading") ||
             clsName.contains("Showcase") ||
             clsName.contains("BrandAd") ||
-            clsName.contains("Sponsored")
+            clsName.contains("Sponsored") ||
+            clsName.contains("AdMetadata")
         ) return true
         for (f in node.javaClass.declaredFields) {
             if (java.lang.reflect.Modifier.isStatic(f.modifiers)) continue
             val t = f.type
-            val name = t.name
-            if (name.endsWith("AdMetadata") || name.contains("CreativeAd")) {
+            val typeName = t.name
+            val fieldName = f.name
+            if (AD_NAME_MARKERS.any { typeName.contains(it) || fieldName.contains(it) }) {
                 val meta = runCatching {
                     f.isAccessible = true
                     f.get(node)
                 }.getOrNull() ?: continue
                 if (!isDefaultInstance(meta)) return true
-            } else if (name.endsWith(".Heading") || t == Any::class.java) {
+            } else if (typeName.endsWith(".Heading") || typeName.endsWith("Heading") || t == Any::class.java) {
                 val sub = runCatching {
                     f.isAccessible = true
                     f.get(node)
                 }.getOrNull() ?: continue
-                if (sub.javaClass.name.endsWith(".SponsoredHeading")) return true
-                if (name.endsWith(".Heading") && hasAdMarker(sub)) return true
+                val subClsName = sub.javaClass.name
+                if (subClsName.contains("Sponsored")) return true
+                if (hasAdMarker(sub)) return true
+            } else if (t == String::class.java) {
+                val str = runCatching {
+                    f.isAccessible = true
+                    f.get(node) as? String
+                }.getOrNull()
+                if (str != null && AD_TEXT_MARKERS.any { str.contains(it, ignoreCase = true) }) return true
             }
         }
         return false
     }
 
     private fun isDefaultInstance(msg: Any): Boolean {
-        val def = defaultInstances[msg.javaClass] ?: runCatching {
-            msg.javaClass.getMethod("getDefaultInstanceForType").invoke(msg)
-        }.getOrNull()?.also { defaultInstances[msg.javaClass] = it } ?: return true
-        return msg == def
+        val def = defaultInstances.computeIfAbsent(msg.javaClass) { cls ->
+            runCatching {
+                cls.getDeclaredField("DEFAULT_INSTANCE").apply { isAccessible = true }.get(null)
+            }.getOrNull() ?: DEFAULT_SENTINEL
+        }
+        return msg === def || (def !== DEFAULT_SENTINEL && msg == def)
     }
 
     private fun resolveAdTypes(sectionClass: Class<*>, adFields: List<String>): Set<Int> =

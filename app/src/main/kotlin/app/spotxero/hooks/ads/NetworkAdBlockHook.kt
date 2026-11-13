@@ -20,6 +20,8 @@ object NetworkAdBlockHook {
     private val BLOCKED_HOSTS = setOf(
         "ads.spotify.com",
         "ads-fa.spotify.com",
+        "adeventtracker.spotify.com",
+        "adstudio.spotify.com",
         "aet.spotify.com",
         "pixel.spotify.com",
         "doubleclick.net",
@@ -41,6 +43,12 @@ object NetworkAdBlockHook {
     private val PROTO_BLOCKED_PATHS = listOf(
         "/ads/",
         "/ad-logic/",
+        "/hpto/",
+        "/home-ads/",
+        "/commercial-hop/",
+        "/ad-formats/",
+        "/embeddedad/",
+        "/embedded-ad/",
         "/pendragon/com.spotify.pendragon.v1.clientmessageservice/",
         "/premium-marketing/spotify.premiummarketing.v1.premiummarketingupsellservice/",
         "/upsell/v1/",
@@ -70,11 +78,17 @@ object NetworkAdBlockHook {
         if (BLOCKED_HOSTS.any { domain -> host == domain || host.endsWith(".$domain") }) {
             return 404
         }
-        val path = uri.path?.lowercase() ?: return null
+        val path = if (lower.startsWith("hm://")) {
+            lower.removePrefix("hm:/")
+        } else {
+            uri.path?.lowercase() ?: return null
+        }
         if (path.startsWith(APP_OPEN_AD_PATH) || path.contains(APP_OPEN_AD_PATH)) {
             return 404
         }
-        if (PROTO_BLOCKED_PATHS.any { prefix -> path.startsWith(prefix) || path.contains(prefix) }) {
+        if (PROTO_BLOCKED_PATHS.any { prefix ->
+            path.startsWith(prefix) || path.contains(prefix) || host == prefix.trim('/')
+        }) {
             return 200
         }
         return null
