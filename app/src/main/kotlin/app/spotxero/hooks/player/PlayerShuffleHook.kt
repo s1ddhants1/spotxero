@@ -465,16 +465,7 @@ object PlayerShuffleHook {
                     }
                     val linear = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_LINEAR)
                     val shuffle = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_SHUFFLE)
-                    val smartShuffle = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_SMART_SHUFFLE)
-                    if (linear != null && shuffle != null) {
-                        if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || smartShuffle == null) {
-                            setOf(linear, shuffle)
-                        } else {
-                            setOf(linear, shuffle, smartShuffle)
-                        }
-                    } else {
-                        original
-                    }
+                    if (linear != null && shuffle != null) setOf(linear, shuffle) else original
                 }
         }
 

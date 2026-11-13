@@ -43,7 +43,6 @@ object DexKitResolver {
     const val KEY_SHUFFLE_STATE_PARSE = "shuffle_state_parse"
     const val KEY_SHUFFLE_ENUM_LINEAR = "shuffle_enum_linear"
     const val KEY_SHUFFLE_ENUM_SHUFFLE = "shuffle_enum_shuffle"
-    const val KEY_SHUFFLE_ENUM_SMART_SHUFFLE = "shuffle_enum_smart_shuffle"
     const val KEY_SHUFFLE_CONTEXT_MODES_GETTER = "shuffle_context_modes_getter"
     const val KEY_SHUFFLE_CONTEXT_DEFAULT_GETTER = "shuffle_context_default_getter"
     const val KEY_SHUFFLE_CONTEXT_ENABLED_GETTER = "shuffle_context_enabled_getter"
@@ -1055,7 +1054,6 @@ object DexKitResolver {
             if (enumConstants != null && enumConstants.size >= 3) {
                 members[KEY_SHUFFLE_ENUM_LINEAR] = enumConstants[0]
                 members[KEY_SHUFFLE_ENUM_SHUFFLE] = enumConstants[1]
-                members[KEY_SHUFFLE_ENUM_SMART_SHUFFLE] = enumConstants[2]
             }
             store(KEY_SHUFFLE_CONTEXT_MODES_GETTER, modesMethod, sigs, members)
             store(KEY_SHUFFLE_CONTEXT_DEFAULT_GETTER, defaultMethod, sigs, members)
@@ -1109,10 +1107,8 @@ object DexKitResolver {
         if (resolved != null) {
             val linear = resolved.enums[0]
             val shuffle = resolved.enums[1]
-            val smartShuffle = resolved.enums[2]
             if (linear != null) members[KEY_SHUFFLE_ENUM_LINEAR] = linear
             if (shuffle != null) members[KEY_SHUFFLE_ENUM_SHUFFLE] = shuffle
-            if (smartShuffle != null) members[KEY_SHUFFLE_ENUM_SMART_SHUFFLE] = smartShuffle
             store(KEY_SHUFFLE_CONTEXT_MODES_GETTER, resolved.modes, sigs, members)
             store(KEY_SHUFFLE_CONTEXT_DEFAULT_GETTER, resolved.defaultMode, sigs, members)
             store(KEY_SHUFFLE_CONTEXT_ENABLED_GETTER, resolved.enabled, sigs, members)

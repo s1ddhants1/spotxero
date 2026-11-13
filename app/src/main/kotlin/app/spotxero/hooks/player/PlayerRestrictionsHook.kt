@@ -82,6 +82,7 @@ object PlayerRestrictionsHook {
     private fun installMftDisallowHandlerHook(module: XposedModule) {
         val handler = DexKitResolver.get<Method>(DexKitResolver.KEY_MFT_DISALLOW_RESTRICTION_HANDLER) ?: return
         val absentInstance = DexKitResolver.get<Any>(DexKitResolver.KEY_OPTIONAL_ABSENT_INSTANCE)
+        val optionalBase = absentInstance?.javaClass?.superclass?.takeIf { it != Any::class.java }
 
         module.deoptimize(handler)
         module.hook(handler)
@@ -91,7 +92,6 @@ object PlayerRestrictionsHook {
                 if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept chain.proceed()
                 }
-                var hadMftDisallow = false
                 for (arg in chain.args) {
                     if (arg == null) continue
                     var currentClass: Class<*>? = arg.javaClass
@@ -102,9 +102,7 @@ object PlayerRestrictionsHook {
                                     field.isAccessible = true
                                     val list = field.get(arg) as? List<*>
                                     if (list != null && list.contains("mft_disallow")) {
-                                        hadMftDisallow = true
-                                        val filtered = list.filter { it != "mft_disallow" }
-                                        field.set(arg, filtered)
+                                        field.set(arg, list.filter { it != "mft_disallow" })
                                     }
                                 }
                             }
@@ -113,20 +111,11 @@ object PlayerRestrictionsHook {
                     }
                 }
                 val result = chain.proceed()
-                if (absentInstance != null) {
-                    val containsValue = runCatching {
-                        val isPresentMethod = result?.javaClass?.methods?.firstOrNull {
-                            it.name == "c" && it.parameterCount == 0 && it.returnType == Boolean::class.javaPrimitiveType
-                        } ?: result?.javaClass?.methods?.firstOrNull {
-                            it.name == "isPresent" && it.parameterCount == 0 && it.returnType == Boolean::class.javaPrimitiveType
-                        }
-                        isPresentMethod?.invoke(result) as? Boolean
-                    }.getOrNull()
-                    if (containsValue == true) {
-                        return@intercept absentInstance
-                    }
+                if (optionalBase != null && optionalBase.isInstance(result) && result !== absentInstance) {
+                    absentInstance
+                } else {
+                    result
                 }
-                result
             }
     }
 

@@ -33,8 +33,6 @@ out/
 *.code-workspace
 
 captures/
-.externalNativeBuild/
-.cxx/
 
 *.jks
 *.keystore
