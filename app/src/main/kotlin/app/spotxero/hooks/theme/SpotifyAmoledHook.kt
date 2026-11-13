@@ -20,6 +20,32 @@ object SpotifyAmoledHook {
         0xFF333333.toInt()
     )
 
+    private val SURFACE_ENTRY_NAME_KEYWORDS = listOf(
+        "background",
+        "surface",
+        "canvas",
+        "base",
+        "card",
+        "window",
+        "decor"
+    )
+
+    private fun isSurfaceResource(res: Resources, id: Int): Boolean {
+        val entryName = runCatching { res.getResourceEntryName(id) }.getOrNull()?.lowercase() ?: return true
+        // If entryName has explicit keywords indicating foreground/text/icon/divider, skip
+        if (entryName.contains("text") ||
+            entryName.contains("icon") ||
+            entryName.contains("tint") ||
+            entryName.contains("highlight") ||
+            entryName.contains("divider") ||
+            entryName.contains("border") ||
+            entryName.contains("stroke")
+        ) {
+            return false
+        }
+        return SURFACE_ENTRY_NAME_KEYWORDS.any { entryName.contains(it) }
+    }
+
     fun install(module: XposedModule) {
         hookResourcesGetColor(module)
     }
@@ -40,7 +66,13 @@ object SpotifyAmoledHook {
                         return@intercept result
                     }
                     val color = result as? Int ?: return@intercept result
-                    if (color in DARK_COLORS) Color.BLACK else color
+                    val res = chain.getThisObject() as? Resources
+                    val id = chain.getArg(0) as? Int
+                    if (color in DARK_COLORS && (res == null || id == null || isSurfaceResource(res, id))) {
+                        Color.BLACK
+                    } else {
+                        color
+                    }
                 }
         }
 
@@ -60,7 +92,13 @@ object SpotifyAmoledHook {
                         return@intercept result
                     }
                     val color = result as? Int ?: return@intercept result
-                    if (color in DARK_COLORS) Color.BLACK else color
+                    val res = chain.getThisObject() as? Resources
+                    val id = chain.getArg(0) as? Int
+                    if (color in DARK_COLORS && (res == null || id == null || isSurfaceResource(res, id))) {
+                        Color.BLACK
+                    } else {
+                        color
+                    }
                 }
         }
     }

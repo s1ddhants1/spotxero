@@ -10,10 +10,6 @@ import java.lang.reflect.Method
 object CleanSharingHook {
 
     fun install(module: XposedModule) {
-        if (!PreferencesManager.isEnabled(PrefKeys.KEY_CLEAN_SHARING, true)) {
-            return
-        }
-
         val targets = buildList {
             DexKitResolver.get<Method>(DexKitResolver.KEY_SHARE_URL_BUILDER)
                 ?.takeIf(::carriesUrl)

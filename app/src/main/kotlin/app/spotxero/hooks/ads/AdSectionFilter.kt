@@ -117,7 +117,6 @@ object AdSectionFilter {
         if (clsName.endsWith(".SponsoredHeading") ||
             clsName.contains("Showcase") ||
             clsName.contains("BrandAd") ||
-            clsName.contains("Sponsored") ||
             clsName.contains("AdMetadata")
         ) return true
         for (f in node.javaClass.declaredFields) {
@@ -131,7 +130,7 @@ object AdSectionFilter {
                     f.get(node)
                 }.getOrNull() ?: continue
                 if (!isDefaultInstance(meta)) return true
-            } else if (typeName.endsWith(".Heading") || typeName.endsWith("Heading") || t == Any::class.java) {
+            } else if (typeName.endsWith(".Heading") || typeName.endsWith("Heading")) {
                 val sub = runCatching {
                     f.isAccessible = true
                     f.get(node)
@@ -139,12 +138,15 @@ object AdSectionFilter {
                 val subClsName = sub.javaClass.name
                 if (subClsName.contains("Sponsored")) return true
                 if (hasAdMarker(sub)) return true
-            } else if (t == String::class.java) {
-                val str = runCatching {
+            } else if (f.name == "uri_" && t == String::class.java) {
+                // Check if protobuf URI is explicitly an ad URI
+                val uriStr = runCatching {
                     f.isAccessible = true
                     f.get(node) as? String
                 }.getOrNull()
-                if (str != null && AD_TEXT_MARKERS.any { str.contains(it, ignoreCase = true) }) return true
+                if (uriStr != null && (uriStr.startsWith("spotify:ad:") || uriStr.startsWith("spotify:promotion:"))) {
+                    return true
+                }
             }
         }
         return false
