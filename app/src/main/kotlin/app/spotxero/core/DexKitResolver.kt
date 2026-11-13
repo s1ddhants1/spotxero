@@ -1482,19 +1482,21 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val pitClass = runCatching { Class.forName("com.spotify.messages.PitResult", false, classLoader) }.getOrNull()
-        val method = if (pitClass != null) {
-            cachedMethod(cached, KEY_PLAY_INTEGRITY_RESULT_SINK, classLoader) { m ->
-                m.parameterCount == 1 && m.parameterTypes[0] == pitClass
-            } ?: runCatching {
-                dexKit.findMethod {
-                    matcher {
-                        paramTypes(listOf(pitClass.name))
-                    }
-                }.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
-                    .firstOrNull { !java.lang.reflect.Modifier.isStatic(it.modifiers) }
+        val piInit = members[KEY_PLAY_INTEGRITY_INIT] as? Method
+        val method = cachedMethod(cached, KEY_PLAY_INTEGRITY_RESULT_SINK, classLoader) { !java.lang.reflect.Modifier.isStatic(it.modifiers) }
+            ?: runCatching {
+                val declaringClass = piInit?.declaringClass
+                if (declaringClass != null) {
+                    dexKit.findMethod {
+                        matcher {
+                            declaredClass(declaringClass.name)
+                            paramCount(1)
+                            returnType("void")
+                        }
+                    }.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                        .firstOrNull { !java.lang.reflect.Modifier.isStatic(it.modifiers) && it != piInit }
+                } else null
             }.getOrNull()
-        } else null
         store(KEY_PLAY_INTEGRITY_RESULT_SINK, method, sigs, members)
     }
 }
