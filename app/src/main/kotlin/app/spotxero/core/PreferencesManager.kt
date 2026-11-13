@@ -127,6 +127,23 @@ object PreferencesManager {
         Log.i(TAG, "Bound LibXposed Remote Preferences with live listener")
     }
 
+    fun cleanup() {
+        runCatching {
+            remotePrefs?.unregisterOnSharedPreferenceChangeListener(changeListener)
+        }
+        runCatching {
+            localPrefs?.unregisterOnSharedPreferenceChangeListener(changeListener)
+        }
+        remotePrefs = null
+        localPrefs = null
+        targetPrefs = null
+        onPreferenceChangedListener = null
+        inMemoryBooleans.clear()
+        inMemoryStrings.clear()
+        inMemoryInts.clear()
+        Log.i(TAG, "Cleaned up PreferencesManager resources")
+    }
+
     fun getPrefs(context: Context? = null): SharedPreferences {
         if (context != null && localPrefs == null) {
             initLocal(context)

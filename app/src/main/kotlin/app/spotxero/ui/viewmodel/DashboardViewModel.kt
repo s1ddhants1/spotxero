@@ -195,7 +195,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             val msg = if (stopped) {
                 app.getString(R.string.msg_spotify_force_stopped)
             } else {
-                app.getString(R.string.msg_opened_spotify_settings)
+                app.getString(R.string.msg_spotify_not_running)
             }
             notifyEffect(DashboardUiEffect.ShowToast(msg))
         }

@@ -54,7 +54,10 @@ object HookRegistry {
         installAll(module)
     }
 
-    private fun installAll(module: XposedModule) {
+    val isResolved: Boolean
+        get() = DexKitResolver.isResolved
+
+    fun installAll(module: XposedModule) {
         val hooks = listOf(
             "CleanSharing" to { CleanSharingHook.install(module) },
             "HidePremiumTab" to { HidePremiumTabHook.install(module) },

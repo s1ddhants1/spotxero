@@ -40,6 +40,7 @@
     <string name="about_developer">Developer</string>
     <string name="about_role_lead_developer">Developer</string>
     <string name="msg_spotify_force_stopped">Spotify force-stopped</string>
+    <string name="msg_spotify_not_running">Spotify is not running</string>
     <string name="msg_opened_spotify_settings">Opened Spotify app settings</string>
     <string name="msg_spotify_not_installed">Spotify is not installed</string>
     <string name="variant_official">Official</string>

@@ -165,6 +165,13 @@ object DexKitResolver {
         return signatures
     }
 
+    val isResolved: Boolean
+        get() = resolved.isNotEmpty()
+
+    fun clear() {
+        resolved = emptyMap()
+    }
+
     fun <T> get(key: String): T? {
         @Suppress("UNCHECKED_CAST")
         return resolved[key] as? T

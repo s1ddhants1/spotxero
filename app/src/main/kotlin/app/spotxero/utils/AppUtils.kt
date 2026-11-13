@@ -45,30 +45,11 @@ object AppUtils {
         return procs?.any { it.processName == packageName || it.processName.startsWith("$packageName:") } == true
     }
 
-    private fun tryRootForceStop(packageName: String): Boolean {
-        val suPaths = listOf("su", "/system/bin/su", "/system/xbin/su", "/data/adb/ksu/bin/su", "/data/adb/magisk/su")
-        for (su in suPaths) {
-            val success = runCatching {
-                val process = Runtime.getRuntime().exec(arrayOf(su, "-c", "am force-stop $packageName"))
-                process.waitFor() == 0
-            }.getOrDefault(false)
-            if (success) return true
-        }
-        return false
-    }
-
     suspend fun forceStopPackage(
         context: Context,
         packageName: String,
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO
     ): Boolean {
-        val rootStopped = withContext(ioDispatcher) {
-            tryRootForceStop(packageName)
-        }
-        if (rootStopped) {
-            return true
-        }
-
         var broadcastHandled = false
         withContext(ioDispatcher) {
             runCatching {
@@ -99,23 +80,11 @@ object AppUtils {
             }.getOrNull()?.let { broadcastHandled = it }
         }
 
-        runCatching {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            am?.killBackgroundProcesses(packageName)
-        }
-
         if (broadcastHandled) {
             delay(300)
             return true
         }
 
-        attempt("open $packageName app settings") {
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.fromParts("package", packageName, null)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        }
         return false
     }
 

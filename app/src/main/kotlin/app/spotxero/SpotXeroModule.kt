@@ -21,6 +21,8 @@ import app.spotxero.core.PreferencesManager
 import app.spotxero.utils.core.CommonUtils
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.HotReloadedParam
+import io.github.libxposed.api.XposedModuleInterface.HotReloadingParam
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import java.util.Collections
@@ -32,6 +34,14 @@ class SpotXeroModule : XposedModule() {
     companion object {
         const val TAG = "SpotXero"
         const val ACTION_FORCE_STOP = "app.spotxero.FORCE_STOP"
+
+        @Volatile
+        var targetAppInfo: android.content.pm.ApplicationInfo? = null
+            internal set
+
+        @Volatile
+        var targetClassLoader: ClassLoader? = null
+            internal set
     }
 
     @Volatile
@@ -40,8 +50,8 @@ class SpotXeroModule : XposedModule() {
     private val activeActivities: MutableSet<Activity> = Collections.newSetFromMap(WeakHashMap())
     private val activeServices: MutableSet<Service> = Collections.newSetFromMap(WeakHashMap())
 
-    private fun terminateProcess(context: Context?) {
-        val ctx = context ?: appContext ?: runCatching {
+    private fun resolveTargetContext(): Context? {
+        return appContext ?: runCatching {
             val atClass = Class.forName("android.app.ActivityThread")
             val currentApp = atClass.getMethod("currentApplication").invoke(null) as? Context
             if (currentApp != null) currentApp else {
@@ -49,6 +59,10 @@ class SpotXeroModule : XposedModule() {
                 atClass.getMethod("getApplication").invoke(at) as? Context
             }
         }.getOrNull()
+    }
+
+    private fun terminateProcess(context: Context?) {
+        val ctx = context ?: resolveTargetContext()
 
         for (activity in activeActivities.toList()) {
             runCatching {
@@ -106,13 +120,74 @@ class SpotXeroModule : XposedModule() {
         }
     }
 
+    private fun unregisterReceiverSafely() {
+        val ctx = appContext ?: return
+        runCatching {
+            ctx.unregisterReceiver(forceStopReceiver)
+        }
+        appContext = null
+    }
+
     override fun onModuleLoaded(param: ModuleLoadedParam) {
+    }
+
+    override fun onHotReloading(param: HotReloadingParam): Boolean {
+        log(Log.INFO, TAG, "Preparing old module generation for hot reload...")
+        runCatching {
+            unregisterReceiverSafely()
+            activeActivities.clear()
+            activeServices.clear()
+            PreferencesManager.cleanup()
+        }
+        return true
+    }
+
+    override fun onHotReloaded(param: HotReloadedParam) {
+        log(Log.INFO, TAG, "New module generation active in: ${param.processName}")
+
+        // 1. Re-bind remote preferences in the new module instance
+        runCatching {
+            val remotePrefs = getRemotePreferences(PrefKeys.PREFS_NAME)
+            PreferencesManager.bindRemote(remotePrefs)
+        }
+
+        // 2. Unhook previous hooks
+        param.oldHookHandles.forEach { handle ->
+            val id = handle.id
+            // Keep framework-level lifecycle hooks active (attachBaseContext, onCreate, service tracking)
+            if (id != null && (id.startsWith("app_") || id.startsWith("service_"))) {
+                // Keep tracking hooks intact across reload
+                return@forEach
+            }
+            runCatching { handle.unhook() }
+        }
+
+        // 3. Re-install hooks
+        val context = resolveTargetContext()
+        val classLoader = context?.classLoader ?: runCatching {
+            Class.forName("android.app.ActivityThread").classLoader
+        }.getOrNull()
+        val appInfo = context?.applicationInfo
+
+        if (appInfo != null && classLoader != null) {
+            runCatching {
+                HookRegistry.resolveAndInstall(this, appInfo, classLoader)
+                log(Log.INFO, TAG, "Hot reloaded hooks re-installed successfully")
+            }.onFailure { t ->
+                log(Log.ERROR, TAG, "Failed to re-install hooks on hot reload: ${t.message}", t)
+            }
+        } else {
+            log(Log.WARN, TAG, "Could not resolve target Application context for hot reload hook installation")
+        }
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
         if (!CommonUtils.SUPPORTED_PACKAGES.contains(param.packageName) || !param.isFirstPackage) {
             return
         }
+
+        targetAppInfo = param.applicationInfo
+        targetClassLoader = param.classLoader
 
         runCatching {
             val remotePrefs = getRemotePreferences(PrefKeys.PREFS_NAME)
