@@ -29,6 +29,7 @@ object PreferencesManager {
     var isCleanSharingEnabled: Boolean = true
     var isSpotifyAmoledEnabled: Boolean = false
     var isHidePodcastsEnabled: Boolean = false
+    var isClientSpoofEnabled: Boolean = false
 
     var onPreferenceChangedListener: (() -> Unit)? = null
 
@@ -229,6 +230,8 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_SPOTIFY_AMOLED] = isSpotifyAmoledEnabled
         isHidePodcastsEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PODCASTS, false)
         inMemoryBooleans[PrefKeys.KEY_HIDE_PODCASTS] = isHidePodcastsEnabled
+        isClientSpoofEnabled = prefs.getBoolean(PrefKeys.KEY_CLIENT_SPOOF, false)
+        inMemoryBooleans[PrefKeys.KEY_CLIENT_SPOOF] = isClientSpoofEnabled
         isLauncherIconHidden = prefs.getBoolean(KEY_HIDE_LAUNCHER_ICON, false)
         inMemoryBooleans[KEY_HIDE_LAUNCHER_ICON] = isLauncherIconHidden
         val tp = getTargetPrefs()

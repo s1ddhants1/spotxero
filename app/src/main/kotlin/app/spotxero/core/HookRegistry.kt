@@ -6,6 +6,7 @@ import app.spotxero.hooks.ads.AdSkipHook
 import app.spotxero.hooks.ads.BrandAdsHook
 import app.spotxero.hooks.ads.NetworkAdBlockHook
 import app.spotxero.hooks.ads.PlayerAdCardsHook
+import app.spotxero.hooks.attestation.ClientSpoofHook
 import app.spotxero.hooks.content.HidePodcastsHook
 import app.spotxero.hooks.navigation.HidePremiumTabHook
 import app.spotxero.hooks.player.DisableSmartShuffleHook
@@ -67,6 +68,7 @@ object HookRegistry {
             "BrandAds" to { BrandAdsHook.install(module) },
             "PlayerAdCards" to { PlayerAdCardsHook.install(module) },
             "HidePodcasts" to { HidePodcastsHook.install(module) },
+            "ClientSpoof" to { ClientSpoofHook.install(module) },
             "SpotifyAmoled" to { SpotifyAmoledHook.install(module) },
             "DisableSmartShuffle" to { DisableSmartShuffleHook.install(module) },
             "ProductState" to { ProductStateHook.install(module) },

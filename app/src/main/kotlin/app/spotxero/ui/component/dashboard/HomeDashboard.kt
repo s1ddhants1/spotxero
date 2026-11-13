@@ -42,6 +42,7 @@ fun HomeDashboard(
     onCleanSharingToggle: (Boolean) -> Unit,
     onSpotifyAmoledToggle: (Boolean) -> Unit,
     onHidePodcastsToggle: (Boolean) -> Unit = {},
+    onClientSpoofToggle: (Boolean) -> Unit = {},
     onRequestScope: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -80,6 +81,14 @@ fun HomeDashboard(
             checked = uiState.isSpotifyAmoledEnabled,
             enabled = true,
             onCheckedChange = onSpotifyAmoledToggle
+        )
+
+        FeatureModuleCard(
+            title = stringResource(R.string.feature_client_spoof_title),
+            subtitle = stringResource(R.string.feature_client_spoof_desc),
+            checked = uiState.isClientSpoofEnabled,
+            enabled = true,
+            onCheckedChange = onClientSpoofToggle
         )
     }
 }

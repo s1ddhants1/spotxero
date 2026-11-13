@@ -66,7 +66,7 @@ object ProductStateHook {
         "ad_clips_per_podcast_segment"
     )
 
-    private val RCS_SCOPED_OVERRIDES: Map<String, Any> = mapOf(
+    val RCS_SCOPED_OVERRIDES: Map<String, Any> = mapOf(
         "core-common-capping:enable_common_capping" to false,
         "android-libs-lyrics:enable_common_capping" to false,
         "core-player:enable_pick_and_shuffle_dynamic_cap" to false,
@@ -81,6 +81,15 @@ object ProductStateHook {
         "core-list-player:ad_clips_per_free_tier_ad_break" to 0,
         "core-list-player:ad_clips_per_podcast_segment" to 0
     )
+
+    private const val RCS_INTEGRITY_VALIDATION_KEY = "android-integrity:validation_enabled"
+
+    private fun rcsScopedOverrides(): Map<String, Any> =
+        if (PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_SPOOF, false)) {
+            RCS_SCOPED_OVERRIDES + mapOf(RCS_INTEGRITY_VALIDATION_KEY to false)
+        } else {
+            RCS_SCOPED_OVERRIDES
+        }
 
     private val RCS_INT_BY_NAME: Map<String, Int> = mapOf(
         "pick_and_shuffle_timecap" to 1440,
@@ -340,7 +349,8 @@ object ProductStateHook {
                 val origHeader = headerField.get(snapshot) ?: return@intercept snapshot
                 @Suppress("UNCHECKED_CAST")
                 val origMap = mapField.get(snapshot) as? Map<String, Any?> ?: return@intercept snapshot
-                val patched = HashMap<String, Any?>(origMap.size + RCS_SCOPED_OVERRIDES.size)
+                val overrides = rcsScopedOverrides()
+                val patched = HashMap<String, Any?>(origMap.size + overrides.size)
                 patched.putAll(origMap)
 
                 for ((fullKey, existing) in origMap) {
@@ -360,7 +370,7 @@ object ProductStateHook {
                     }
                 }
 
-                for ((fullKey, value) in RCS_SCOPED_OVERRIDES) {
+                for ((fullKey, value) in overrides) {
                     val sep = fullKey.indexOf(':')
                     val scope = fullKey.substring(0, sep)
                     val name = fullKey.substring(sep + 1)
@@ -386,7 +396,7 @@ object ProductStateHook {
                 }
                 val scope = chain.getArg(0) as? String ?: return@intercept result
                 val name = chain.getArg(1) as? String ?: return@intercept result
-                val overrideVal = RCS_SCOPED_OVERRIDES["$scope:$name"] ?: return@intercept result
+                val overrideVal = rcsScopedOverrides()["$scope:$name"] ?: return@intercept result
                 buildRcsValue(r27Ctor, name, scope, overrideVal) ?: result
             }
     }

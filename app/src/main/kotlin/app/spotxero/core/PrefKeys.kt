@@ -7,5 +7,6 @@ object PrefKeys {
     const val KEY_CLEAN_SHARING = "pref_clean_sharing"
     const val KEY_SPOTIFY_AMOLED = "pref_spotify_amoled"
     const val KEY_HIDE_PODCASTS = "pref_hide_podcasts"
+    const val KEY_CLIENT_SPOOF = "pref_client_spoof"
     const val KEY_SHUFFLE_STATE = "pref_user_shuffle_state"
 }

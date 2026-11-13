@@ -36,6 +36,7 @@ data class DashboardUiState(
     val isCleanSharingEnabled: Boolean = true,
     val isSpotifyAmoledEnabled: Boolean = false,
     val isHidePodcastsEnabled: Boolean = false,
+    val isClientSpoofEnabled: Boolean = false,
 
     val activeSpotify: InstalledSpotifyInfo? = null,
     val installedSpotifyVariants: List<InstalledSpotifyInfo> = emptyList()

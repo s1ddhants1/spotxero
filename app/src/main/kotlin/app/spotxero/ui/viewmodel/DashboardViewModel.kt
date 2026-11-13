@@ -150,7 +150,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isLauncherIconHidden = AppUtils.isLauncherIconHidden(app),
                 isCleanSharingEnabled = PreferencesManager.isCleanSharingEnabled,
                 isSpotifyAmoledEnabled = PreferencesManager.isSpotifyAmoledEnabled,
-                isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled
+                isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled,
+                isClientSpoofEnabled = PreferencesManager.isClientSpoofEnabled
             )
         }
     }
@@ -262,6 +263,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(isHidePodcastsEnabled = enabled) }
     }
 
+    fun setClientSpoof(enabled: Boolean) {
+        val app = getApplication<Application>()
+        PreferencesManager.setBoolean(app, PrefKeys.KEY_CLIENT_SPOOF, enabled)
+        PreferencesManager.isClientSpoofEnabled = enabled
+        _uiState.update { it.copy(isClientSpoofEnabled = enabled) }
+    }
 
     fun showSettingsScreen() {
         _uiState.update { it.copy(showSettings = true, settingsSubpage = null) }
