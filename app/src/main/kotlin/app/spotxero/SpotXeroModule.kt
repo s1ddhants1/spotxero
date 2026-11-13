@@ -179,6 +179,11 @@ class SpotXeroModule : XposedModule() {
         } else {
             log(Log.WARN, TAG, "Could not resolve target Application context for hot reload hook installation")
         }
+
+        // 4. Re-register force-stop receiver on new module generation
+        if (context != null) {
+            registerReceiverSafely(context)
+        }
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
