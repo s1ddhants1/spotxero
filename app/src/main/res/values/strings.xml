@@ -19,8 +19,8 @@
     <string name="feature_clean_sharing_desc">Strip tracking and referral parameters from shared URLs</string>
     <string name="feature_spotify_amoled_title">Spotify Pure Black (AMOLED)</string>
     <string name="feature_spotify_amoled_desc">Replace Spotify\'s dark grey theme with pure black</string>
-    <string name="feature_client_spoof_title">Client Spoof</string>
-    <string name="feature_client_spoof_desc">Forge iOS client tokens and skip integrity checks. Needed for re-signed (LSPatch) installs; restart Spotify after toggling</string>
+    <string name="feature_client_spoof_title">Client Spoof (Web API)</string>
+    <string name="feature_client_spoof_desc">Recommended for re-signed (LSPatch) installs</string>
     <string name="feature_hide_podcasts_title">Hide Podcasts &amp; Audiobooks</string>
     <string name="feature_hide_podcasts_desc">Remove podcast and audiobook sections from Home and Search</string>
     <string name="title_appearance">Appearance</string>

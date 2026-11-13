@@ -82,11 +82,15 @@ object ProductStateHook {
         "core-list-player:ad_clips_per_podcast_segment" to 0
     )
 
-    private const val RCS_INTEGRITY_VALIDATION_KEY = "android-integrity:validation_enabled"
+    private val RCS_INTEGRITY_OVERRIDES: Map<String, Any> = mapOf(
+        "android-integrity:validation_enabled" to false,
+        "android-integrity:employee_validation_enabled" to false,
+        "android-integrity:time_tracking_enabled" to false
+    )
 
     private fun rcsScopedOverrides(): Map<String, Any> =
         if (PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_SPOOF, false)) {
-            RCS_SCOPED_OVERRIDES + mapOf(RCS_INTEGRITY_VALIDATION_KEY to false)
+            RCS_SCOPED_OVERRIDES + RCS_INTEGRITY_OVERRIDES
         } else {
             RCS_SCOPED_OVERRIDES
         }

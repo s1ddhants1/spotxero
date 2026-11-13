@@ -12,6 +12,7 @@ object ClientTokenProto {
     private const val FIELD_REQUEST_TYPE = 1
     private const val FIELD_CLIENT_DATA = 2
     private const val FIELD_CONNECTIVITY_SDK_DATA = 3
+    private const val FIELD_DEVICE_ID = 2
 
     private class Field(val number: Int, val wireType: Int, val varint: Long, val bytes: ByteArray)
 
@@ -76,36 +77,41 @@ object ClientTokenProto {
             .firstOrNull { it.number == FIELD_CONNECTIVITY_SDK_DATA && it.wireType == WIRE_LEN }?.bytes
             ?: return null
         return parseFields(connectivity)
-            .firstOrNull { it.number == FIELD_CLIENT_DATA && it.wireType == WIRE_LEN }
+            .firstOrNull { it.number == FIELD_DEVICE_ID && it.wireType == WIRE_LEN }
             ?.bytes?.let { String(it, Charsets.UTF_8) }
             ?.takeIf { it.isNotEmpty() }
     }
 
-    fun buildIOSRequest(
+    fun buildWebJsonRequest(
         deviceId: String,
-        clientVersion: String,
         clientId: String,
-        hwMachine: String,
-        systemVersion: String
+        clientVersion: String
     ): ByteArray {
-        val ios = encode {
-            writeString(it, 3, hwMachine)
-            writeString(it, 4, systemVersion)
+        val json = """{"client_data":{"client_version":"$clientVersion","client_id":"$clientId","js_sdk_data":{"device_brand":"unknown","device_model":"unknown","os":"android","os_version":"14","device_id":"$deviceId","device_type":"smartphone"}}}"""
+        return json.toByteArray(Charsets.UTF_8)
+    }
+
+    fun buildGrantedTokenResponse(
+        token: String,
+        expiresAfterSeconds: Int = 1216800,
+        refreshAfterSeconds: Int = 1209600,
+        domains: List<String> = listOf("spotify.com", "spotify.net")
+    ): ByteArray {
+        val granted = encode { out ->
+            writeString(out, 1, token)
+            writeVarint(out, tag(2, WIRE_VARINT))
+            writeVarint(out, expiresAfterSeconds.toLong())
+            writeVarint(out, tag(3, WIRE_VARINT))
+            writeVarint(out, refreshAfterSeconds.toLong())
+            for (domain in domains) {
+                val d = encode { writeString(it, 1, domain) }
+                writeMessage(out, 4, d)
+            }
         }
-        val platform = encode { writeMessage(it, 2, ios) }
-        val connectivity = encode {
-            writeMessage(it, 1, platform)
-            writeString(it, 2, deviceId)
-        }
-        val clientData = encode {
-            writeString(it, 1, clientVersion)
-            writeString(it, 2, clientId)
-            writeMessage(it, 3, connectivity)
-        }
-        return encode {
-            writeVarint(it, tag(FIELD_REQUEST_TYPE, WIRE_VARINT))
-            writeVarint(it, 1)
-            writeMessage(it, FIELD_CLIENT_DATA, clientData)
+        return encode { out ->
+            writeVarint(out, tag(1, WIRE_VARINT))
+            writeVarint(out, 1L) // RESPONSE_GRANTED_TOKEN_RESPONSE = 1
+            writeMessage(out, 2, granted)
         }
     }
 

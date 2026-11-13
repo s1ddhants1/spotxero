@@ -58,6 +58,8 @@ object DexKitResolver {
     const val KEY_RCS_MAP_LOADER = "rcs_map_loader"
     const val KEY_RCS_PROPERTY_LOOKUP = "rcs_property_lookup"
     const val KEY_PLAYER_SECTION_LIST = "player_section_list_getter"
+    const val KEY_PLAY_INTEGRITY_INIT = "dexkit_play_integrity_init"
+    const val KEY_PLAY_INTEGRITY_RESULT_SINK = "dexkit_play_integrity_result_sink"
     const val KEY_OKHTTP_REQUEST_TO_STRING = "okhttp_request_to_string"
     const val KEY_OKHTTP_RESPONSE_BUILDER_BUILD = "okhttp_response_builder_build"
     const val KEY_OKHTTP_REAL_CALL_CHAIN = "okhttp_real_call_chain"
@@ -160,6 +162,8 @@ object DexKitResolver {
         resolveCoroutineClientBaseCallSingle(classLoader, cachedSignatures, signatures, members)
         resolveEsperantoCall(CLIENT_BASE, "callStream", 3, KEY_CLIENT_BASE_CALL_STREAM, classLoader, cachedSignatures, signatures, members)
         resolveEsperantoCall(COROUTINE_CLIENT_BASE, "callStream", 3, KEY_COROUTINE_CLIENT_BASE_CALL_STREAM, classLoader, cachedSignatures, signatures, members)
+        resolvePlayIntegrity(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolvePlayIntegrityResultSink(dexKit, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -1451,4 +1455,46 @@ object DexKitResolver {
             method.parameterCount == 0 &&
             method.returnType == responseClass &&
             method.declaringClass.declaredFields.any { it.type == requestClass }
+
+    private fun resolvePlayIntegrity(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_PLAY_INTEGRITY_INIT, classLoader) { !java.lang.reflect.Modifier.isStatic(it.modifiers) }
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("standard_pi_init"), StringMatchType.Contains)
+                    }
+                }.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                    .firstOrNull { !java.lang.reflect.Modifier.isStatic(it.modifiers) }
+            }.getOrNull()
+        store(KEY_PLAY_INTEGRITY_INIT, method, sigs, members)
+    }
+
+    private fun resolvePlayIntegrityResultSink(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val pitClass = runCatching { Class.forName("com.spotify.messages.PitResult", false, classLoader) }.getOrNull()
+        val method = if (pitClass != null) {
+            cachedMethod(cached, KEY_PLAY_INTEGRITY_RESULT_SINK, classLoader) { m ->
+                m.parameterCount == 1 && m.parameterTypes[0] == pitClass
+            } ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        paramTypes(listOf(pitClass.name))
+                    }
+                }.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                    .firstOrNull { !java.lang.reflect.Modifier.isStatic(it.modifiers) }
+            }.getOrNull()
+        } else null
+        store(KEY_PLAY_INTEGRITY_RESULT_SINK, method, sigs, members)
+    }
 }

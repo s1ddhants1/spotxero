@@ -6,9 +6,11 @@ import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
+import org.json.JSONObject
 import java.lang.reflect.Method
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.UUID
 
 object ClientSpoofHook {
 
@@ -22,13 +24,16 @@ object ClientSpoofHook {
     private const val CLIENT_TOKEN_PATH = "/v1/clienttoken"
     private const val CLIENT_TOKEN_URL = "https://$CLIENT_TOKEN_HOST$CLIENT_TOKEN_PATH"
 
-    private const val IOS_CLIENT_ID = "58bd3c95768941ea9eb4350aaa033eb3"
-    private const val IOS_CLIENT_VERSION = "iphone-9.0.58.558.g200011c"
-    private const val IOS_HW_MACHINE = "iPhone16,1"
-    private const val IOS_SYSTEM_VERSION = "17.7.2"
-    private const val IOS_USER_AGENT = "Spotify/9.0.58.558 iOS/17.7.2 (iPhone16,1)"
+    // Web Player client ID and metadata - not subject to Play Integrity or Apple DeviceCheck
+    private const val WEB_CLIENT_ID = "f6a40776580943a7bc5173125a1e8832"
+    private const val WEB_CLIENT_VERSION = "1.2.10.35.g47464f56"
+    private const val WEB_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    private const val WEB_ORIGIN = "https://open.spotify.com"
+    private const val WEB_REFERER = "https://open.spotify.com/"
+    private const val APP_PLATFORM_HEADER = "WebPlayer"
 
     private const val PROTOBUF_CONTENT_TYPE = "application/x-protobuf"
+    private const val JSON_CONTENT_TYPE = "application/json"
     private const val RESPONSE_HEADERS = "SPT-Protocol: http/1.1\nContent-Type: $PROTOBUF_CONTENT_TYPE\n"
 
     private const val REQUEST_TYPE_CLIENT_DATA = 1
@@ -41,6 +46,7 @@ object ClientSpoofHook {
             ?: return
         hookNativeHttpConnection(module, cl)
         hookApplicationScopeConfiguration(module, cl)
+        hookPlayIntegrity(module)
     }
 
     private fun isClientTokenRequest(url: String?): Boolean {
@@ -85,24 +91,12 @@ object ClientSpoofHook {
                 val req = chain.getArg(0)
                 if (conn == null || req == null) return@intercept chain.proceed()
                 val body = runCatching { getBody.invoke(req) as? ByteArray }.getOrNull() ?: ByteArray(0)
-                val payload = when (ClientTokenProto.requestType(body)) {
-                    REQUEST_TYPE_CLIENT_DATA -> {
-                        val deviceId = ClientTokenProto.extractDeviceId(body)
-                        if (deviceId == null) {
-                            failTokenRequest(conn, onError)
-                            return@intercept null
-                        }
-                        ClientTokenProto.buildIOSRequest(
-                            deviceId,
-                            IOS_CLIENT_VERSION,
-                            IOS_CLIENT_ID,
-                            IOS_HW_MACHINE,
-                            IOS_SYSTEM_VERSION
-                        )
-                    }
-                    else -> body
-                }
-                val response = runCatching { fetchToken(payload) }.getOrNull()
+                val deviceId = (when (ClientTokenProto.requestType(body)) {
+                    REQUEST_TYPE_CLIENT_DATA -> ClientTokenProto.extractDeviceId(body)
+                    else -> null
+                }) ?: UUID.randomUUID().toString()
+
+                val response = runCatching { fetchWebToken(deviceId) }.getOrNull()
                 if (response == null) {
                     failTokenRequest(conn, onError)
                     return@intercept null
@@ -114,20 +108,40 @@ object ClientSpoofHook {
             }
     }
 
-    private fun fetchToken(payload: ByteArray): ByteArray? {
+    private fun fetchWebToken(deviceId: String): ByteArray? {
+        val payload = ClientTokenProto.buildWebJsonRequest(deviceId, WEB_CLIENT_ID, WEB_CLIENT_VERSION)
         val connection = URL(CLIENT_TOKEN_URL).openConnection() as HttpURLConnection
         return try {
             connection.requestMethod = "POST"
             connection.connectTimeout = 10_000
             connection.readTimeout = 10_000
             connection.doOutput = true
-            connection.setRequestProperty("Content-Type", PROTOBUF_CONTENT_TYPE)
+            connection.setRequestProperty("Content-Type", JSON_CONTENT_TYPE)
             connection.setRequestProperty("Accept", PROTOBUF_CONTENT_TYPE)
-            connection.setRequestProperty("User-Agent", IOS_USER_AGENT)
+            connection.setRequestProperty("User-Agent", WEB_USER_AGENT)
+            connection.setRequestProperty("Origin", WEB_ORIGIN)
+            connection.setRequestProperty("Referer", WEB_REFERER)
+            connection.setRequestProperty("App-Platform", APP_PLATFORM_HEADER)
             connection.setFixedLengthStreamingMode(payload.size)
             connection.outputStream.use { it.write(payload) }
             if (connection.responseCode != 200) return null
-            connection.inputStream.use { it.readBytes() }
+            val responseBytes = connection.inputStream.use { it.readBytes() }
+            val contentType = connection.contentType ?: ""
+            if (contentType.contains("protobuf") || (responseBytes.isNotEmpty() && responseBytes[0] == 0x08.toByte())) {
+                responseBytes
+            } else {
+                val jsonStr = String(responseBytes, Charsets.UTF_8)
+                val json = runCatching { JSONObject(jsonStr) }.getOrNull()
+                val granted = json?.optJSONObject("granted_token")
+                val token = granted?.optString("token")
+                if (!token.isNullOrEmpty()) {
+                    val expires = granted.optInt("expires_after_seconds", 1216800)
+                    val refresh = granted.optInt("refresh_after_seconds", 1209600)
+                    ClientTokenProto.buildGrantedTokenResponse(token, expires, refresh)
+                } else {
+                    responseBytes
+                }
+            }
         } finally {
             connection.disconnect()
         }
@@ -152,7 +166,7 @@ object ClientSpoofHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 if (!enabled()) return@intercept chain.proceed()
-                chain.proceed(arrayOf<Any?>(IOS_CLIENT_ID))
+                chain.proceed(arrayOf<Any?>(WEB_CLIENT_ID))
             }
 
         module.deoptimize(setUserAgent)
@@ -161,7 +175,33 @@ object ClientSpoofHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 if (!enabled()) return@intercept chain.proceed()
-                chain.proceed(arrayOf<Any?>(IOS_USER_AGENT))
+                chain.proceed(arrayOf<Any?>(WEB_USER_AGENT))
             }
+    }
+
+    private fun hookPlayIntegrity(module: XposedModule) {
+        val piInit = DexKitResolver.get<Method>(DexKitResolver.KEY_PLAY_INTEGRITY_INIT)
+        if (piInit != null) {
+            module.deoptimize(piInit)
+            module.hook(piInit)
+                .setId("client_spoof_play_integrity_init")
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    if (!enabled()) return@intercept chain.proceed()
+                    null
+                }
+        }
+
+        val pitSink = DexKitResolver.get<Method>(DexKitResolver.KEY_PLAY_INTEGRITY_RESULT_SINK)
+        if (pitSink != null) {
+            module.deoptimize(pitSink)
+            module.hook(pitSink)
+                .setId("client_spoof_pit_sink")
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    if (!enabled()) return@intercept chain.proceed()
+                    null
+                }
+        }
     }
 }
