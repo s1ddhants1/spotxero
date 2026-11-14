@@ -20,7 +20,7 @@
     <string name="feature_spotify_amoled_title">Spotify Pure Black (AMOLED)</string>
     <string name="feature_spotify_amoled_desc">Replace Spotify\'s dark grey theme with pure black</string>
     <string name="feature_client_spoof_title">Client Spoof</string>
-    <string name="feature_client_spoof_desc">Suppresses Play Integrity outcome reporting and disables integrity validation flags</string>
+    <string name="feature_client_spoof_desc">Suppresses Play Integrity outcome reporting and serves web-platform client tokens from the clienttoken endpoint</string>
     <string name="feature_hide_podcasts_title">Hide Podcasts &amp; Audiobooks</string>
     <string name="feature_hide_podcasts_desc">Remove podcast and audiobook sections from Home and Search</string>
     <string name="title_appearance">Appearance</string>
