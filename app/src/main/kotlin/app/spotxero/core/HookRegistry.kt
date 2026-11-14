@@ -61,7 +61,6 @@ object HookRegistry {
         val hooks = listOf(
             "CleanSharing" to { CleanSharingHook.install(module) },
             "HidePremiumTab" to { HidePremiumTabHook.install(module) },
-            "AdSkip" to { AdSkipHook.install(module) },
             "AdResponse" to { AdResponseHook.install(module) },
             "NetworkAdBlock" to { NetworkAdBlockHook.install(module) },
             "BrandAds" to { BrandAdsHook.install(module) },
