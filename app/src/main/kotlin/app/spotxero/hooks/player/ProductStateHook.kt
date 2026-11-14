@@ -3,6 +3,7 @@ package app.spotxero.hooks.player
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
+import app.spotxero.core.ProtoLists
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
@@ -66,7 +67,7 @@ object ProductStateHook {
         "ad_clips_per_podcast_segment"
     )
 
-    val RCS_SCOPED_OVERRIDES: Map<String, Any> = mapOf(
+    private val RCS_SCOPED_OVERRIDES: Map<String, Any> = mapOf(
         "core-common-capping:enable_common_capping" to false,
         "android-libs-lyrics:enable_common_capping" to false,
         "core-player:enable_pick_and_shuffle_dynamic_cap" to false,
@@ -88,9 +89,11 @@ object ProductStateHook {
         "android-integrity:time_tracking_enabled" to false
     )
 
+    private val RCS_ALL_OVERRIDES: Map<String, Any> = RCS_SCOPED_OVERRIDES + RCS_INTEGRITY_OVERRIDES
+
     private fun rcsScopedOverrides(): Map<String, Any> =
-        if (PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_SPOOF, false)) {
-            RCS_SCOPED_OVERRIDES + RCS_INTEGRITY_OVERRIDES
+        if (PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_SPOOF, true)) {
+            RCS_ALL_OVERRIDES
         } else {
             RCS_SCOPED_OVERRIDES
         }
@@ -283,27 +286,18 @@ object ProductStateHook {
                 if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept result
                 }
-                val filtered = list.filterNot { assignedValue ->
-                    if (assignedValue == null) return@filterNot false
+                val filtered = ProtoLists.filter(list) { assignedValue ->
                     val propId = assignedValue.javaClass.methods.firstOrNull {
                         it.parameterCount == 0 && it.returnType.name == "com.spotify.rcs.admin.grpc.v0.PropertyDefinition\$Identifier"
-                    }?.invoke(assignedValue) ?: return@filterNot false
-                    val name = propId.javaClass.getMethod("getName").invoke(propId) as? String
-                    name != null && MFT_FLAGS_TO_REMOVE.contains(name)
-                }
-                if (getter.returnType.isInstance(filtered)) {
-                    filtered
-                } else {
-                    java.lang.reflect.Proxy.newProxyInstance(
-                        getter.returnType.classLoader ?: java.lang.reflect.Proxy::class.java.classLoader,
-                        arrayOf(getter.returnType, java.util.List::class.java, java.util.RandomAccess::class.java)
-                    ) { _, method, args ->
-                        if (method.name == "j" && method.parameterCount == 1) {
-                            return@newProxyInstance result
-                        }
-                        if (args != null) method.invoke(filtered, *args) else method.invoke(filtered)
+                    }?.invoke(assignedValue)
+                    if (propId == null) {
+                        true
+                    } else {
+                        val name = propId.javaClass.getMethod("getName").invoke(propId) as? String
+                        name == null || !MFT_FLAGS_TO_REMOVE.contains(name)
                     }
                 }
+                filtered ?: result
             }
     }
 

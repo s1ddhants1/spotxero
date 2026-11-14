@@ -52,7 +52,6 @@ object AdSectionFilter {
     )
 
     private val AD_NAME_MARKERS = listOf("AdMetadata", "CreativeAd", "AdTrackingUrls", "adMetadata", "ad_metadata")
-    private val AD_TEXT_MARKERS = listOf("Реклама", "Advertisement", "Sponsored", "Anzeige", "Publicité", "Publicidad", "spotify:ad:")
     private val DEFAULT_SENTINEL = Any()
 
     private val typeFields = ConcurrentHashMap<Class<*>, Field>()
@@ -139,7 +138,6 @@ object AdSectionFilter {
                 if (subClsName.contains("Sponsored")) return true
                 if (hasAdMarker(sub)) return true
             } else if (f.name == "uri_" && t == String::class.java) {
-                // Check if protobuf URI is explicitly an ad URI
                 val uriStr = runCatching {
                     f.isAccessible = true
                     f.get(node) as? String

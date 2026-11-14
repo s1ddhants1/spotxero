@@ -6,6 +6,7 @@ import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
+import java.util.concurrent.ConcurrentHashMap
 
 object SpotifyAmoledHook {
 
@@ -30,21 +31,35 @@ object SpotifyAmoledHook {
         "decor"
     )
 
-    private fun isSurfaceResource(res: Resources, id: Int): Boolean {
+    private val NON_SURFACE_ENTRY_NAME_KEYWORDS = setOf(
+        "text",
+        "icon",
+        "tint",
+        "highlight",
+        "divider",
+        "border",
+        "stroke"
+    )
+
+    private val surfaceResourceCache = ConcurrentHashMap<Int, Boolean>()
+
+    private fun isSurfaceResource(res: Resources, id: Int): Boolean =
+        surfaceResourceCache.getOrPut(id) { resolveSurfaceResource(res, id) }
+
+    private fun resolveSurfaceResource(res: Resources, id: Int): Boolean {
         val entryName = runCatching { res.getResourceEntryName(id) }.getOrNull()?.lowercase() ?: return true
-        // If entryName has explicit keywords indicating foreground/text/icon/divider, skip
-        if (entryName.contains("text") ||
-            entryName.contains("icon") ||
-            entryName.contains("tint") ||
-            entryName.contains("highlight") ||
-            entryName.contains("divider") ||
-            entryName.contains("border") ||
-            entryName.contains("stroke")
-        ) {
+        if (NON_SURFACE_ENTRY_NAME_KEYWORDS.any { entryName.contains(it) }) {
             return false
         }
         return SURFACE_ENTRY_NAME_KEYWORDS.any { entryName.contains(it) }
     }
+
+    private fun resolveAmoled(color: Int, res: Resources?, id: Int?): Int =
+        if (color in DARK_COLORS && (res == null || id == null || isSurfaceResource(res, id))) {
+            Color.BLACK
+        } else {
+            color
+        }
 
     fun install(module: XposedModule) {
         hookResourcesGetColor(module)
@@ -66,13 +81,11 @@ object SpotifyAmoledHook {
                         return@intercept result
                     }
                     val color = result as? Int ?: return@intercept result
-                    val res = chain.getThisObject() as? Resources
-                    val id = chain.getArg(0) as? Int
-                    if (color in DARK_COLORS && (res == null || id == null || isSurfaceResource(res, id))) {
-                        Color.BLACK
-                    } else {
-                        color
-                    }
+                    resolveAmoled(
+                        color,
+                        chain.getThisObject() as? Resources,
+                        chain.getArg(0) as? Int
+                    )
                 }
         }
 
@@ -92,13 +105,11 @@ object SpotifyAmoledHook {
                         return@intercept result
                     }
                     val color = result as? Int ?: return@intercept result
-                    val res = chain.getThisObject() as? Resources
-                    val id = chain.getArg(0) as? Int
-                    if (color in DARK_COLORS && (res == null || id == null || isSurfaceResource(res, id))) {
-                        Color.BLACK
-                    } else {
-                        color
-                    }
+                    resolveAmoled(
+                        color,
+                        chain.getThisObject() as? Resources,
+                        chain.getArg(0) as? Int
+                    )
                 }
         }
     }

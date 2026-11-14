@@ -79,17 +79,15 @@ object NetworkAdBlockHook {
             return 404
         }
         val path = if (lower.startsWith("hm://")) {
-            val stripped = lower.removePrefix("hm:")
-            if (!stripped.startsWith("/")) "/$stripped" else stripped
+            "/" + lower.removePrefix("hm:").trimStart('/')
         } else {
             uri.path?.lowercase() ?: return null
         }
-        if (path.startsWith(APP_OPEN_AD_PATH) || path.startsWith("/$APP_OPEN_AD_PATH".trimStart('/'))) {
+        if (path.startsWith(APP_OPEN_AD_PATH)) {
             return 404
         }
-        val cleanPath = if (!path.startsWith("/")) "/$path" else path
         if (PROTO_BLOCKED_PATHS.any { prefix ->
-            cleanPath.startsWith(prefix) || cleanPath.startsWith("/" + prefix.trim('/')) || host == prefix.trim('/')
+            path.startsWith(prefix) || host == prefix.trim('/')
         }) {
             return 200
         }
