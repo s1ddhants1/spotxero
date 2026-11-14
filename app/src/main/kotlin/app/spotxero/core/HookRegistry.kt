@@ -15,6 +15,7 @@ import app.spotxero.hooks.player.PlayerShuffleHook
 import app.spotxero.hooks.player.ProductStateHook
 import app.spotxero.hooks.sharing.CleanSharingHook
 import app.spotxero.hooks.theme.SpotifyAmoledHook
+import app.spotxero.hooks.volume.ForceLocalPlaybackHook
 import io.github.libxposed.api.XposedModule
 import org.luckypray.dexkit.DexKitBridge
 
@@ -72,6 +73,7 @@ object HookRegistry {
             "PlayerRestrictions" to { PlayerRestrictionsHook.install(module) },
             "OnDemandInFree" to { OnDemandInFreeHook.install(module) },
             "PlayerShuffle" to { PlayerShuffleHook.install(module) },
+            "ForceLocalPlayback" to { ForceLocalPlaybackHook.install(module) },
         )
 
         for ((_, installer) in hooks) {
