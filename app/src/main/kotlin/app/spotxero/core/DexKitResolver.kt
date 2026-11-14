@@ -61,6 +61,7 @@ object DexKitResolver {
     const val KEY_OKHTTP_REQUEST_TO_STRING = "okhttp_request_to_string"
     const val KEY_OKHTTP_RESPONSE_BUILDER_BUILD = "okhttp_response_builder_build"
     const val KEY_OKHTTP_REAL_CALL_CHAIN = "okhttp_real_call_chain"
+    const val KEY_RETROFIT_CREATE = "retrofit_create"
 
     private const val CLIENT_BASE = "com.spotify.esperanto.esperanto.ClientBase"
     private const val COROUTINE_CLIENT_BASE = "com.spotify.esperanto.esperanto.CoroutineClientBase"
@@ -160,6 +161,7 @@ object DexKitResolver {
         resolveCoroutineClientBaseCallSingle(classLoader, cachedSignatures, signatures, members)
         resolveEsperantoCall(CLIENT_BASE, "callStream", 3, KEY_CLIENT_BASE_CALL_STREAM, classLoader, cachedSignatures, signatures, members)
         resolveEsperantoCall(COROUTINE_CLIENT_BASE, "callStream", 3, KEY_COROUTINE_CLIENT_BASE_CALL_STREAM, classLoader, cachedSignatures, signatures, members)
+        resolveRetrofitCreate(dexKit, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -1451,4 +1453,30 @@ object DexKitResolver {
             method.parameterCount == 0 &&
             method.returnType == responseClass &&
             method.declaringClass.declaredFields.any { it.type == requestClass }
+
+    private fun resolveRetrofitCreate(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_RETROFIT_CREATE, classLoader, ::isRetrofitCreate)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("API declarations must be interfaces"), StringMatchType.Contains)
+                        paramCount(1)
+                        paramTypes(listOf("java.lang.Class"))
+                    }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isRetrofitCreate)
+        store(KEY_RETROFIT_CREATE, method, sigs, members)
+    }
+
+    private fun isRetrofitCreate(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0] == Class::class.java &&
+            method.returnType == Any::class.java
 }

@@ -49,7 +49,6 @@ object NetworkAdBlockHook {
         "/ad-formats/",
         "/embeddedad/",
         "/embedded-ad/",
-        "/pendragon/com.spotify.pendragon.v1.clientmessageservice/",
         "/premium-marketing/spotify.premiummarketing.v1.premiummarketingupsellservice/",
         "/upsell/v1/",
         "/capping-api/",
