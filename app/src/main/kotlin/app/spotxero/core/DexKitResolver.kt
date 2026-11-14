@@ -62,6 +62,7 @@ object DexKitResolver {
     const val KEY_OKHTTP_RESPONSE_BUILDER_BUILD = "okhttp_response_builder_build"
     const val KEY_OKHTTP_REAL_CALL_CHAIN = "okhttp_real_call_chain"
     const val KEY_RETROFIT_CREATE = "retrofit_create"
+    const val KEY_CONTEXT_MENU_VIEW_MODEL_CTOR = "context_menu_view_model_ctor"
 
     private const val CLIENT_BASE = "com.spotify.esperanto.esperanto.ClientBase"
     private const val COROUTINE_CLIENT_BASE = "com.spotify.esperanto.esperanto.CoroutineClientBase"
@@ -162,6 +163,7 @@ object DexKitResolver {
         resolveEsperantoCall(CLIENT_BASE, "callStream", 3, KEY_CLIENT_BASE_CALL_STREAM, classLoader, cachedSignatures, signatures, members)
         resolveEsperantoCall(COROUTINE_CLIENT_BASE, "callStream", 3, KEY_COROUTINE_CLIENT_BASE_CALL_STREAM, classLoader, cachedSignatures, signatures, members)
         resolveRetrofitCreate(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveContextMenuViewModelCtor(dexKit, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -1479,4 +1481,34 @@ object DexKitResolver {
             method.parameterCount == 1 &&
             method.parameterTypes[0] == Class::class.java &&
             method.returnType == Any::class.java
+
+    private fun resolveContextMenuViewModelCtor(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val ctor = cachedConstructor(cached, KEY_CONTEXT_MENU_VIEW_MODEL_CTOR, classLoader, ::isContextMenuViewModelCtor)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("ContextMenuViewModel cannot contain items with duplicate itemResId"), StringMatchType.Contains)
+                        name("<init>")
+                    }
+                }.mapNotNull {
+                    val clazz = runCatching { Class.forName(it.className, false, classLoader) }.getOrNull()
+                    clazz?.declaredConstructors?.firstOrNull { c -> isContextMenuViewModelCtor(c) }
+                }.firstOrNull()
+            }.getOrNull()
+
+        if (ctor != null) {
+            members[KEY_CONTEXT_MENU_VIEW_MODEL_CTOR] = ctor
+            sigs[KEY_CONTEXT_MENU_VIEW_MODEL_CTOR] = signatureOf(ctor)
+        }
+    }
+
+    private fun isContextMenuViewModelCtor(ctor: java.lang.reflect.Constructor<*>): Boolean =
+        ctor.parameterCount >= 2 &&
+            List::class.java.isAssignableFrom(ctor.parameterTypes[1])
 }

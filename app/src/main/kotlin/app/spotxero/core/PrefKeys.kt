@@ -10,4 +10,5 @@ object PrefKeys {
     const val KEY_SHUFFLE_STATE = "pref_user_shuffle_state"
     const val KEY_FORCE_LOCAL_PLAYBACK = "pref_force_local_playback"
     const val KEY_BLOCK_PENDRAGON = "pref_block_pendragon"
+    const val KEY_FILTER_CONTEXT_MENU = "pref_filter_context_menu"
 }

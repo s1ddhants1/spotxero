@@ -4,6 +4,7 @@ import android.content.pm.ApplicationInfo
 import app.spotxero.hooks.ads.AdResponseHook
 import app.spotxero.hooks.ads.AdSkipHook
 import app.spotxero.hooks.ads.BrandAdsHook
+import app.spotxero.hooks.ads.ContextMenuAdBlockHook
 import app.spotxero.hooks.ads.NetworkAdBlockHook
 import app.spotxero.hooks.ads.PendragonHook
 import app.spotxero.hooks.ads.PlayerAdCardsHook
@@ -67,6 +68,7 @@ object HookRegistry {
             "NetworkAdBlock" to { NetworkAdBlockHook.install(module) },
             "BrandAds" to { BrandAdsHook.install(module) },
             "PlayerAdCards" to { PlayerAdCardsHook.install(module) },
+            "ContextMenuAdBlock" to { ContextMenuAdBlockHook.install(module) },
             "Pendragon" to { PendragonHook.install(module) },
             "HidePodcasts" to { HidePodcastsHook.install(module) },
             "SpotifyAmoled" to { SpotifyAmoledHook.install(module) },
