@@ -82,6 +82,30 @@ object ClientTokenProto {
             ?.takeIf { it.isNotEmpty() }
     }
 
+    fun buildIosClientTokenRequest(deviceId: String): ByteArray {
+        val iosData = encode { out ->
+            writeString(out, 3, "iPhone16,1")
+            writeString(out, 4, "17.7.2")
+        }
+        val platformData = encode { out ->
+            writeMessage(out, 2, iosData)
+        }
+        val connData = encode { out ->
+            writeMessage(out, 1, platformData)
+            writeString(out, 2, deviceId)
+        }
+        val clientData = encode { out ->
+            writeString(out, 1, "iphone-9.0.58.558.g200011c")
+            writeString(out, 2, "58bd3c95768941ea9eb4350aaa033eb3")
+            writeMessage(out, 3, connData)
+        }
+        return encode { out ->
+            writeVarint(out, tag(1, WIRE_VARINT))
+            writeVarint(out, 1L) // REQUEST_CLIENT_DATA_REQUEST = 1
+            writeMessage(out, 2, clientData)
+        }
+    }
+
     fun buildWebJsonRequest(
         deviceId: String,
         clientId: String,
