@@ -2,13 +2,13 @@ package app.spotxero.core
 
 import android.content.pm.ApplicationInfo
 import app.spotxero.hooks.ads.AdResponseHook
-import app.spotxero.hooks.ads.AdSkipHook
 import app.spotxero.hooks.ads.BrandAdsHook
 import app.spotxero.hooks.ads.ContextMenuAdBlockHook
 import app.spotxero.hooks.ads.NetworkAdBlockHook
 import app.spotxero.hooks.ads.PendragonHook
 import app.spotxero.hooks.ads.PlayerAdCardsHook
 import app.spotxero.hooks.content.HidePodcastsHook
+import app.spotxero.hooks.lyrics.LyricsHook
 import app.spotxero.hooks.navigation.HidePremiumTabHook
 import app.spotxero.hooks.player.DisableSmartShuffleHook
 import app.spotxero.hooks.player.OnDemandInFreeHook
@@ -78,6 +78,7 @@ object HookRegistry {
             "OnDemandInFree" to { OnDemandInFreeHook.install(module) },
             "PlayerShuffle" to { PlayerShuffleHook.install(module) },
             "ForceLocalPlayback" to { ForceLocalPlaybackHook.install(module) },
+            "Lyrics" to { LyricsHook.install(module) },
         )
 
         for ((_, installer) in hooks) {

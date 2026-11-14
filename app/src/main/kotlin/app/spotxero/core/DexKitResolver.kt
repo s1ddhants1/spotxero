@@ -63,6 +63,7 @@ object DexKitResolver {
     const val KEY_OKHTTP_REAL_CALL_CHAIN = "okhttp_real_call_chain"
     const val KEY_RETROFIT_CREATE = "retrofit_create"
     const val KEY_CONTEXT_MENU_VIEW_MODEL_CTOR = "context_menu_view_model_ctor"
+    const val KEY_LYRICS_CAP_STATUS_GETTER = "lyrics_cap_status_getter"
 
     private const val CLIENT_BASE = "com.spotify.esperanto.esperanto.ClientBase"
     private const val COROUTINE_CLIENT_BASE = "com.spotify.esperanto.esperanto.CoroutineClientBase"
@@ -164,6 +165,7 @@ object DexKitResolver {
         resolveEsperantoCall(COROUTINE_CLIENT_BASE, "callStream", 3, KEY_COROUTINE_CLIENT_BASE_CALL_STREAM, classLoader, cachedSignatures, signatures, members)
         resolveRetrofitCreate(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveContextMenuViewModelCtor(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveLyricsCapStatus(classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -1511,4 +1513,24 @@ object DexKitResolver {
     private fun isContextMenuViewModelCtor(ctor: java.lang.reflect.Constructor<*>): Boolean =
         ctor.parameterCount >= 2 &&
             List::class.java.isAssignableFrom(ctor.parameterTypes[1])
+
+    private fun resolveLyricsCapStatus(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_LYRICS_CAP_STATUS_GETTER, classLoader, ::isLyricsCapStatusGetter)
+            ?: runCatching {
+                val clazz = Class.forName("com.spotify.lyrics.serviceretrofit.proto.v3.LyricsV3Response", false, classLoader)
+                clazz.declaredMethods.firstOrNull { isLyricsCapStatusGetter(it) }
+            }.getOrNull()
+        store(KEY_LYRICS_CAP_STATUS_GETTER, method, sigs, members)
+    }
+
+    private fun isLyricsCapStatusGetter(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 0 &&
+            method.returnType.isEnum &&
+            method.returnType.enumConstants?.any { (it as? Enum<*>)?.name == "UNCAPPED" } == true
 }
