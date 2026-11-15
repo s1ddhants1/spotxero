@@ -1,7 +1,6 @@
 package app.spotxero.utils
 
 import android.app.Activity
-import android.app.ActivityManager
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -30,19 +29,6 @@ object AppUtils {
     } catch (e: Throwable) {
         if (!silent) Log.w(TAG, "Failed to $operation", e)
         null
-    }
-
-    fun isPackageRunning(context: Context, packageName: String): Boolean {
-        val rootRunning = runCatching {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "pidof $packageName"))
-            val output = process.inputStream.bufferedReader().readText().trim()
-            process.waitFor() == 0 && output.isNotEmpty()
-        }.getOrNull()
-        if (rootRunning != null) return rootRunning
-
-        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        val procs = runCatching { am?.runningAppProcesses }.getOrNull()
-        return procs?.any { it.processName == packageName || it.processName.startsWith("$packageName:") } == true
     }
 
     suspend fun forceStopPackage(

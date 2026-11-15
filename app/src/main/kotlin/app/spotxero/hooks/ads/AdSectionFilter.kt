@@ -80,16 +80,23 @@ object AdSectionFilter {
         if (sectionClass.name != className) return sections
 
         val kinds = adTypes.computeIfAbsent(sectionClass) { resolveAdTypes(it, adFields) }
-        if (kinds.isEmpty()) return sections
 
         val field = typeFields[sectionClass] ?: runCatching {
             sectionClass.getDeclaredField(typeField).apply { isAccessible = true }
-        }.getOrNull()?.also { typeFields[sectionClass] = it } ?: return sections
+        }.getOrNull()?.also { typeFields[sectionClass] = it }
 
         return ProtoLists.filter(sections) { section ->
-            val kind = runCatching { field.getInt(section) }.getOrDefault(-1)
-            if (kind in kinds) return@filter false
-            !inspectEmbeddedAds || !hasEmbeddedAdOrSponsorship(section)
+            if (field != null) {
+                val kind = runCatching { field.getInt(section) }.getOrDefault(-1)
+                if (kind in kinds) {
+                    return@filter false
+                }
+            }
+            val hasAd = inspectEmbeddedAds && hasEmbeddedAdOrSponsorship(section)
+            if (hasAd) {
+                return@filter false
+            }
+            true
         }
     }
 

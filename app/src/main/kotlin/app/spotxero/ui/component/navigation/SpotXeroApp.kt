@@ -19,8 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
@@ -39,8 +37,6 @@ import app.spotxero.ui.viewmodel.DashboardViewModel
 fun SpotXeroApp(
     viewModel: DashboardViewModel,
     uiState: DashboardUiState,
-    darkTheme: Boolean,
-    snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -53,9 +49,6 @@ fun SpotXeroApp(
     LaunchedEffect(viewModel) {
         viewModel.effects.collect { effect ->
             when (effect) {
-                is DashboardUiEffect.ShowSnackbar -> {
-                    snackbarHostState.showSnackbar(effect.message)
-                }
                 is DashboardUiEffect.ShowToast -> {
                     android.widget.Toast.makeText(context, effect.message, android.widget.Toast.LENGTH_SHORT).show()
                 }
@@ -65,7 +58,6 @@ fun SpotXeroApp(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             AppTopBar(
                 showSettings = uiState.showSettings,
@@ -82,7 +74,7 @@ fun SpotXeroApp(
             ) {
                 AppQuickControls(
                     onForceStop = { viewModel.forceStopSpotify() },
-                    onOpenApp = { viewModel.openSpotify() }
+                    onOpenApp = { viewModel.launchSpotify() }
                 )
             }
         },
@@ -129,6 +121,7 @@ fun SpotXeroApp(
                                 onCleanSharingToggle = { viewModel.setCleanSharing(it) },
                                 onSpotifyAmoledToggle = { viewModel.setSpotifyAmoled(it) },
                                 onHidePodcastsToggle = { viewModel.setHidePodcasts(it) },
+                                onHideAudiobooksToggle = { viewModel.setHideAudiobooks(it) },
                                 onRequestScope = { viewModel.requestScope() }
                             )
                         }

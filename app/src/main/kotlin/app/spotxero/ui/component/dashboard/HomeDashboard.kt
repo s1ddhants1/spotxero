@@ -14,6 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Warning
 import app.spotxero.ui.theme.AppIcons
+import app.spotxero.ui.theme.AppSpacing
+import app.spotxero.ui.theme.appSwitchColors
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -32,7 +34,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.spotxero.R
-import app.spotxero.ui.theme.AppSpacing
 import app.spotxero.ui.viewmodel.DashboardUiState
 
 @Composable
@@ -42,6 +43,7 @@ fun HomeDashboard(
     onCleanSharingToggle: (Boolean) -> Unit,
     onSpotifyAmoledToggle: (Boolean) -> Unit,
     onHidePodcastsToggle: (Boolean) -> Unit = {},
+    onHideAudiobooksToggle: (Boolean) -> Unit = {},
     onRequestScope: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -54,7 +56,6 @@ fun HomeDashboard(
             title = stringResource(R.string.pref_unrestricted_playback_title),
             subtitle = stringResource(R.string.pref_unrestricted_playback_desc),
             checked = uiState.isPremiumEnabled,
-            enabled = true,
             onCheckedChange = onTogglePremium
         )
 
@@ -62,7 +63,6 @@ fun HomeDashboard(
             title = stringResource(R.string.feature_clean_sharing_title),
             subtitle = stringResource(R.string.feature_clean_sharing_desc),
             checked = uiState.isCleanSharingEnabled,
-            enabled = true,
             onCheckedChange = onCleanSharingToggle
         )
 
@@ -70,15 +70,20 @@ fun HomeDashboard(
             title = stringResource(R.string.feature_hide_podcasts_title),
             subtitle = stringResource(R.string.feature_hide_podcasts_desc),
             checked = uiState.isHidePodcastsEnabled,
-            enabled = true,
             onCheckedChange = onHidePodcastsToggle
+        )
+
+        FeatureModuleCard(
+            title = stringResource(R.string.feature_hide_audiobooks_title),
+            subtitle = stringResource(R.string.feature_hide_audiobooks_desc),
+            checked = uiState.isHideAudiobooksEnabled,
+            onCheckedChange = onHideAudiobooksToggle
         )
 
         FeatureModuleCard(
             title = stringResource(R.string.feature_spotify_amoled_title),
             subtitle = stringResource(R.string.feature_spotify_amoled_desc),
             checked = uiState.isSpotifyAmoledEnabled,
-            enabled = true,
             onCheckedChange = onSpotifyAmoledToggle
         )
     }
@@ -89,11 +94,8 @@ private fun FeatureModuleCard(
     title: String,
     subtitle: String,
     checked: Boolean,
-    enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    val cardAlpha = if (enabled) 1f else 0.5f
-
     Card(
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(
@@ -106,7 +108,6 @@ private fun FeatureModuleCard(
             .clip(MaterialTheme.shapes.extraLarge)
             .toggleable(
                 value = checked,
-                enabled = enabled,
                 role = Role.Switch,
                 onValueChange = onCheckedChange
             )
@@ -126,17 +127,16 @@ private fun FeatureModuleCard(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = cardAlpha)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = cardAlpha)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Switch(
                 checked = checked,
-                enabled = enabled,
                 onCheckedChange = null,
                 thumbContent = if (checked) {
                     {
@@ -147,13 +147,7 @@ private fun FeatureModuleCard(
                         )
                     }
                 } else null,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                    checkedTrackColor = MaterialTheme.colorScheme.primary,
-                    checkedIconColor = MaterialTheme.colorScheme.primary,
-                    uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                )
+                colors = appSwitchColors()
             )
         }
     }

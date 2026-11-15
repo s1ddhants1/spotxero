@@ -19,8 +19,10 @@
     <string name="feature_clean_sharing_desc">Strip tracking and referral parameters from shared URLs</string>
     <string name="feature_spotify_amoled_title">Spotify Pure Black (AMOLED)</string>
     <string name="feature_spotify_amoled_desc">Replace Spotify\'s dark grey theme with pure black</string>
-    <string name="feature_hide_podcasts_title">Hide Podcasts &amp; Audiobooks</string>
-    <string name="feature_hide_podcasts_desc">Remove podcast and audiobook sections from Home and Search</string>
+    <string name="feature_hide_podcasts_title">Hide Podcasts</string>
+    <string name="feature_hide_podcasts_desc">Remove podcasts and episodes from Home and Search</string>
+    <string name="feature_hide_audiobooks_title">Hide Audiobooks</string>
+    <string name="feature_hide_audiobooks_desc">Remove audiobooks and chapters from Home and Search</string>
     <string name="title_appearance">Appearance</string>
     <string name="title_about">About</string>
     <string name="appearance_category_desc">Themes • Hide App Icon</string>
@@ -41,7 +43,6 @@
     <string name="about_role_lead_developer">Developer</string>
     <string name="msg_spotify_force_stopped">Spotify force-stopped</string>
     <string name="msg_spotify_not_running">Spotify is not running</string>
-    <string name="msg_opened_spotify_settings">Opened Spotify app settings</string>
     <string name="msg_spotify_not_installed">Spotify is not installed</string>
     <string name="variant_official">Official</string>
     <string name="variant_lite">Spotify Lite</string>

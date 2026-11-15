@@ -37,7 +37,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         PreferencesManager.init(application)
-        PreferencesManager.loadAll(application)
         ModuleStatus.checkStatus()
 
         detectSpotifyStatus()
@@ -135,8 +134,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         _uiState.update { current ->
             current.copy(
-                isModuleActive = isModuleActive,
-                detectedFramework = name,
                 isFrameworkConnected = isFrameworkConnected,
                 isInjectable = eval.isInjectable,
                 titleRes = eval.titleRes,
@@ -150,7 +147,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isLauncherIconHidden = AppUtils.isLauncherIconHidden(app),
                 isCleanSharingEnabled = PreferencesManager.isCleanSharingEnabled,
                 isSpotifyAmoledEnabled = PreferencesManager.isSpotifyAmoledEnabled,
-                isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled
+                isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled,
+                isHideAudiobooksEnabled = PreferencesManager.isHideAudiobooksEnabled
             )
         }
     }
@@ -203,11 +201,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
 
     fun setPremiumEnabled(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PrefKeys.KEY_ENABLE_PREMIUM, enabled)
-        PreferencesManager.isPremiumEnabled = enabled
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_ENABLE_PREMIUM, enabled)
         _uiState.update { it.copy(isPremiumEnabled = enabled) }
-        refreshState()
     }
 
     fun setThemeMode(mode: PreferencesManager.ThemeMode) {
@@ -218,16 +213,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun setDynamicColor(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PreferencesManager.KEY_APP_DYNAMIC_COLOR, enabled)
-        PreferencesManager.isDynamicColorEnabled = enabled
+        PreferencesManager.setBoolean(getApplication(), PreferencesManager.KEY_APP_DYNAMIC_COLOR, enabled)
         _uiState.update { it.copy(isDynamicColorEnabled = enabled) }
     }
 
     fun setAppAmoled(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PreferencesManager.KEY_APP_AMOLED_THEME, enabled)
-        PreferencesManager.isAppAmoledEnabled = enabled
+        PreferencesManager.setBoolean(getApplication(), PreferencesManager.KEY_APP_AMOLED_THEME, enabled)
         _uiState.update { it.copy(isAppAmoledEnabled = enabled) }
     }
 
@@ -235,31 +226,27 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val app = getApplication<Application>()
         AppUtils.setLauncherIconHidden(app, enabled)
         PreferencesManager.setBoolean(app, PreferencesManager.KEY_HIDE_LAUNCHER_ICON, enabled)
-        PreferencesManager.isLauncherIconHidden = enabled
         _uiState.update { it.copy(isLauncherIconHidden = enabled) }
     }
 
     fun setCleanSharing(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PrefKeys.KEY_CLEAN_SHARING, enabled)
-        PreferencesManager.isCleanSharingEnabled = enabled
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_CLEAN_SHARING, enabled)
         _uiState.update { it.copy(isCleanSharingEnabled = enabled) }
     }
 
     fun setSpotifyAmoled(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PrefKeys.KEY_SPOTIFY_AMOLED, enabled)
-        PreferencesManager.isSpotifyAmoledEnabled = enabled
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_SPOTIFY_AMOLED, enabled)
         _uiState.update { it.copy(isSpotifyAmoledEnabled = enabled) }
     }
 
-
-
     fun setHidePodcasts(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PrefKeys.KEY_HIDE_PODCASTS, enabled)
-        PreferencesManager.isHidePodcastsEnabled = enabled
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_HIDE_PODCASTS, enabled)
         _uiState.update { it.copy(isHidePodcastsEnabled = enabled) }
+    }
+
+    fun setHideAudiobooks(enabled: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_HIDE_AUDIOBOOKS, enabled)
+        _uiState.update { it.copy(isHideAudiobooksEnabled = enabled) }
     }
 
 
@@ -283,8 +270,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
         return false
     }
-
-    fun openSpotify() = launchSpotify()
 
     fun notifyEffect(effect: DashboardUiEffect) {
         viewModelScope.launch {

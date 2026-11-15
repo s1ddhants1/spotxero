@@ -2,11 +2,13 @@ package app.spotxero.core
 
 import android.content.pm.ApplicationInfo
 import app.spotxero.hooks.ads.AdResponseHook
-import app.spotxero.hooks.ads.AdSkipHook
 import app.spotxero.hooks.ads.BrandAdsHook
+import app.spotxero.hooks.ads.ContextMenuAdBlockHook
 import app.spotxero.hooks.ads.NetworkAdBlockHook
+import app.spotxero.hooks.ads.PendragonHook
 import app.spotxero.hooks.ads.PlayerAdCardsHook
-import app.spotxero.hooks.content.HidePodcastsHook
+import app.spotxero.hooks.content.ContentFilterHook
+import app.spotxero.hooks.lyrics.LyricsHook
 import app.spotxero.hooks.navigation.HidePremiumTabHook
 import app.spotxero.hooks.player.DisableSmartShuffleHook
 import app.spotxero.hooks.player.OnDemandInFreeHook
@@ -15,6 +17,7 @@ import app.spotxero.hooks.player.PlayerShuffleHook
 import app.spotxero.hooks.player.ProductStateHook
 import app.spotxero.hooks.sharing.CleanSharingHook
 import app.spotxero.hooks.theme.SpotifyAmoledHook
+import app.spotxero.hooks.volume.ForceLocalPlaybackHook
 import io.github.libxposed.api.XposedModule
 import org.luckypray.dexkit.DexKitBridge
 
@@ -54,25 +57,25 @@ object HookRegistry {
         installAll(module)
     }
 
-    val isResolved: Boolean
-        get() = DexKitResolver.isResolved
-
     fun installAll(module: XposedModule) {
         val hooks = listOf(
             "CleanSharing" to { CleanSharingHook.install(module) },
             "HidePremiumTab" to { HidePremiumTabHook.install(module) },
-            "AdSkip" to { AdSkipHook.install(module) },
             "AdResponse" to { AdResponseHook.install(module) },
             "NetworkAdBlock" to { NetworkAdBlockHook.install(module) },
             "BrandAds" to { BrandAdsHook.install(module) },
             "PlayerAdCards" to { PlayerAdCardsHook.install(module) },
-            "HidePodcasts" to { HidePodcastsHook.install(module) },
+            "ContextMenuAdBlock" to { ContextMenuAdBlockHook.install(module) },
+            "Pendragon" to { PendragonHook.install(module) },
+            "ContentFilter" to { ContentFilterHook.install(module) },
             "SpotifyAmoled" to { SpotifyAmoledHook.install(module) },
             "DisableSmartShuffle" to { DisableSmartShuffleHook.install(module) },
             "ProductState" to { ProductStateHook.install(module) },
             "PlayerRestrictions" to { PlayerRestrictionsHook.install(module) },
             "OnDemandInFree" to { OnDemandInFreeHook.install(module) },
             "PlayerShuffle" to { PlayerShuffleHook.install(module) },
+            "ForceLocalPlayback" to { ForceLocalPlaybackHook.install(module) },
+            "Lyrics" to { LyricsHook.install(module) },
         )
 
         for ((_, installer) in hooks) {

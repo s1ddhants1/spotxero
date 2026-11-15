@@ -34,14 +34,7 @@ object SpotifyAmoledHook {
             module.hook(methodWithTheme)
                 .setId("spotify_amoled_get_color_theme")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_AMOLED, false)) {
-                        return@intercept result
-                    }
-                    val color = result as? Int ?: return@intercept result
-                    if (color in DARK_COLORS) Color.BLACK else color
-                }
+                .intercept { chain -> applyAmoled(chain.proceed()) }
         }
 
         @Suppress("DEPRECATION")
@@ -54,14 +47,13 @@ object SpotifyAmoledHook {
             module.hook(methodDeprecated)
                 .setId("spotify_amoled_get_color_deprecated")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_AMOLED, false)) {
-                        return@intercept result
-                    }
-                    val color = result as? Int ?: return@intercept result
-                    if (color in DARK_COLORS) Color.BLACK else color
-                }
+                .intercept { chain -> applyAmoled(chain.proceed()) }
         }
+    }
+
+    private fun applyAmoled(result: Any?): Any? {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_AMOLED, false)) return result
+        val color = result as? Int ?: return result
+        return if (color in DARK_COLORS) Color.BLACK else color
     }
 }

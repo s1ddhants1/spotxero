@@ -9,7 +9,6 @@ import java.util.concurrent.ConcurrentHashMap
 object PreferencesManager {
 
     private const val TAG = "SpotXero.Prefs"
-    const val PREFS_NAME = "spotify_prefs"
     private const val TARGET_PREFS_NAME = "spotxero_target_prefs"
 
     const val KEY_APP_THEME_MODE = "app_theme_mode"
@@ -29,6 +28,7 @@ object PreferencesManager {
     var isCleanSharingEnabled: Boolean = true
     var isSpotifyAmoledEnabled: Boolean = false
     var isHidePodcastsEnabled: Boolean = false
+    var isHideAudiobooksEnabled: Boolean = false
 
     var onPreferenceChangedListener: (() -> Unit)? = null
 
@@ -43,7 +43,6 @@ object PreferencesManager {
 
     private val inMemoryBooleans = ConcurrentHashMap<String, Boolean>()
     private val inMemoryStrings = ConcurrentHashMap<String, String>()
-    private val inMemoryInts = ConcurrentHashMap<String, Int>()
 
     private fun resolveTargetContext(): Context? {
         return runCatching {
@@ -82,7 +81,6 @@ object PreferencesManager {
 
     private val changeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         if (key != null && key != "pref_force_stop") {
-            Log.d(TAG, "Preference changed: $key")
             updateMemoryCache(prefs, key)
             val lp = localPrefs
             if (lp != null && prefs != lp) {
@@ -104,7 +102,7 @@ object PreferencesManager {
         if (localPrefs != null) return
         val targetContext = context.applicationContext ?: context
         try {
-            val lp = targetContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val lp = targetContext.getSharedPreferences(PrefKeys.PREFS_NAME, Context.MODE_PRIVATE)
             localPrefs = lp
             lp.registerOnSharedPreferenceChangeListener(changeListener)
             loadAllFromPrefs(lp)
@@ -140,7 +138,6 @@ object PreferencesManager {
         onPreferenceChangedListener = null
         inMemoryBooleans.clear()
         inMemoryStrings.clear()
-        inMemoryInts.clear()
         Log.i(TAG, "Cleaned up PreferencesManager resources")
     }
 
@@ -153,7 +150,7 @@ object PreferencesManager {
             val service = SpotXeroApplication.service
             if (service != null) {
                 try {
-                    val rp = service.getRemotePreferences(PREFS_NAME)
+                    val rp = service.getRemotePreferences(PrefKeys.PREFS_NAME)
                     bindRemote(rp)
                 } catch (t: Throwable) {
                     Log.w(TAG, "Failed obtaining service remote preferences: ${t.message}")
@@ -165,7 +162,7 @@ object PreferencesManager {
         localPrefs?.let { return it }
 
         if (context != null) {
-            return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            return context.getSharedPreferences(PrefKeys.PREFS_NAME, Context.MODE_PRIVATE)
         }
 
         throw IllegalStateException("No SharedPreferences source available")
@@ -174,9 +171,9 @@ object PreferencesManager {
     fun bindServiceRemote(context: Context) {
         val service = SpotXeroApplication.service ?: return
         try {
-            val rp = service.getRemotePreferences(PREFS_NAME)
+            val rp = service.getRemotePreferences(PrefKeys.PREFS_NAME)
             val lp = localPrefs ?: context.applicationContext
-                ?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                ?.getSharedPreferences(PrefKeys.PREFS_NAME, Context.MODE_PRIVATE)
             if (lp != null) {
                 localPrefs = lp
                 if (lp.contains("pref_force_stop")) {
@@ -204,7 +201,6 @@ object PreferencesManager {
                 val editor = lp.edit()
                 for ((k, v) in inMemoryBooleans) editor.putBoolean(k, v)
                 for ((k, v) in inMemoryStrings) editor.putString(k, v)
-                for ((k, v) in inMemoryInts) editor.putInt(k, v)
                 editor.apply()
             }
         } catch (t: Throwable) {
@@ -229,6 +225,8 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_SPOTIFY_AMOLED] = isSpotifyAmoledEnabled
         isHidePodcastsEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PODCASTS, false)
         inMemoryBooleans[PrefKeys.KEY_HIDE_PODCASTS] = isHidePodcastsEnabled
+        isHideAudiobooksEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_AUDIOBOOKS, false)
+        inMemoryBooleans[PrefKeys.KEY_HIDE_AUDIOBOOKS] = isHideAudiobooksEnabled
         isLauncherIconHidden = prefs.getBoolean(KEY_HIDE_LAUNCHER_ICON, false)
         inMemoryBooleans[KEY_HIDE_LAUNCHER_ICON] = isLauncherIconHidden
         val tp = getTargetPrefs()
@@ -239,7 +237,7 @@ object PreferencesManager {
         }
     }
 
-    fun isEnabled(key: String, default: Boolean = true): Boolean {
+    fun isEnabled(key: String, default: Boolean): Boolean {
         inMemoryBooleans[key]?.let { return it }
         val tp = getTargetPrefs()
         if (tp != null && tp.contains(key)) {
@@ -260,25 +258,6 @@ object PreferencesManager {
             return v
         }
         return default
-    }
-
-    fun getString(key: String, default: String = ""): String {
-        inMemoryStrings[key]?.let { return it }
-        val tp = getTargetPrefs()
-        if (tp != null && tp.contains(key)) {
-            val v = tp.getString(key, default) ?: default
-            inMemoryStrings[key] = v
-            return v
-        }
-        val value = try {
-            remotePrefs?.getString(key, default)
-                ?: localPrefs?.getString(key, default)
-                ?: default
-        } catch (_: Throwable) {
-            default
-        }
-        inMemoryStrings[key] = value
-        return value
     }
 
     fun setBoolean(context: Context? = null, key: String, value: Boolean) {
@@ -313,21 +292,13 @@ object PreferencesManager {
         }
     }
 
-    fun setInt(context: Context? = null, key: String, value: Int) {
-        inMemoryInts[key] = value
-        try {
-            getPrefs(context).edit().putInt(key, value).apply()
-        } catch (t: Throwable) {
-            Log.e(TAG, "Error writing int preference $key: ${t.message}", t)
-        }
-    }
-
     fun updateFieldDirectly(key: String, value: Boolean) {
         when (key) {
             PrefKeys.KEY_ENABLE_PREMIUM -> isPremiumEnabled = value
             PrefKeys.KEY_CLEAN_SHARING -> isCleanSharingEnabled = value
             PrefKeys.KEY_SPOTIFY_AMOLED -> isSpotifyAmoledEnabled = value
             PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = value
+            PrefKeys.KEY_HIDE_AUDIOBOOKS -> isHideAudiobooksEnabled = value
             KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = value
             KEY_APP_AMOLED_THEME -> isAppAmoledEnabled = value
             KEY_HIDE_LAUNCHER_ICON -> isLauncherIconHidden = value
@@ -340,15 +311,7 @@ object PreferencesManager {
             when (val v = all[key]) {
                 is Boolean -> {
                     inMemoryBooleans[key] = v
-                    when (key) {
-                        PrefKeys.KEY_ENABLE_PREMIUM -> isPremiumEnabled = v
-                        PrefKeys.KEY_CLEAN_SHARING -> isCleanSharingEnabled = v
-                        PrefKeys.KEY_SPOTIFY_AMOLED -> isSpotifyAmoledEnabled = v
-                        PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = v
-                        KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = v
-                        KEY_APP_AMOLED_THEME -> isAppAmoledEnabled = v
-                        KEY_HIDE_LAUNCHER_ICON -> isLauncherIconHidden = v
-                    }
+                    updateFieldDirectly(key, v)
                 }
                 is String -> {
                     inMemoryStrings[key] = v
@@ -356,7 +319,6 @@ object PreferencesManager {
                         appThemeMode = parseThemeMode(v)
                     }
                 }
-                is Int -> inMemoryInts[key] = v
             }
         }
     }

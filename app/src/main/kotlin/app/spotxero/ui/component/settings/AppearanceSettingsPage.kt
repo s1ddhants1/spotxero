@@ -40,6 +40,7 @@ import app.spotxero.R
 import app.spotxero.core.PreferencesManager.ThemeMode
 import app.spotxero.ui.theme.AppIcons
 import app.spotxero.ui.theme.AppSpacing
+import app.spotxero.ui.theme.appSwitchColors
 
 private data class ThemeOption(
     val mode: ThemeMode,
@@ -182,13 +183,7 @@ fun AppearanceSettingsPage(
                             )
                         }
                     } else null,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primary,
-                        checkedIconColor = MaterialTheme.colorScheme.primary,
-                        uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
+                    colors = appSwitchColors()
                 )
             }
         }
@@ -245,13 +240,7 @@ fun AppearanceSettingsPage(
                             )
                         }
                     } else null,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primary,
-                        checkedIconColor = MaterialTheme.colorScheme.primary,
-                        uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
+                    colors = appSwitchColors()
                 )
             }
         }
@@ -312,13 +301,7 @@ fun AppearanceSettingsPage(
                             )
                         }
                     } else null,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primary,
-                        checkedIconColor = MaterialTheme.colorScheme.primary,
-                        uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
+                    colors = appSwitchColors()
                 )
             }
         }

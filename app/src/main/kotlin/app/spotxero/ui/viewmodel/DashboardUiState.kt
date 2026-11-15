@@ -18,9 +18,7 @@ data class InstalledSpotifyInfo(
 
 @Immutable
 data class DashboardUiState(
-    val isModuleActive: Boolean = false,
     val isPremiumEnabled: Boolean = true,
-    val detectedFramework: String? = null,
     val isFrameworkConnected: Boolean = false,
     val isInjectable: Boolean = false,
     val titleRes: Int = R.string.framework_inactive_title,
@@ -36,6 +34,7 @@ data class DashboardUiState(
     val isCleanSharingEnabled: Boolean = true,
     val isSpotifyAmoledEnabled: Boolean = false,
     val isHidePodcastsEnabled: Boolean = false,
+    val isHideAudiobooksEnabled: Boolean = false,
 
     val activeSpotify: InstalledSpotifyInfo? = null,
     val installedSpotifyVariants: List<InstalledSpotifyInfo> = emptyList()
@@ -49,5 +48,4 @@ data class DashboardUiState(
 
 sealed interface DashboardUiEffect {
     data class ShowToast(val message: String) : DashboardUiEffect
-    data class ShowSnackbar(val message: String) : DashboardUiEffect
 }

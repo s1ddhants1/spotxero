@@ -34,14 +34,6 @@ class SpotXeroModule : XposedModule() {
     companion object {
         const val TAG = "SpotXero"
         const val ACTION_FORCE_STOP = "app.spotxero.FORCE_STOP"
-
-        @Volatile
-        var targetAppInfo: android.content.pm.ApplicationInfo? = null
-            internal set
-
-        @Volatile
-        var targetClassLoader: ClassLoader? = null
-            internal set
     }
 
     @Volatile
@@ -145,24 +137,19 @@ class SpotXeroModule : XposedModule() {
     override fun onHotReloaded(param: HotReloadedParam) {
         log(Log.INFO, TAG, "New module generation active in: ${param.processName}")
 
-        // 1. Re-bind remote preferences in the new module instance
         runCatching {
             val remotePrefs = getRemotePreferences(PrefKeys.PREFS_NAME)
             PreferencesManager.bindRemote(remotePrefs)
         }
 
-        // 2. Unhook previous hooks
         param.oldHookHandles.forEach { handle ->
             val id = handle.id
-            // Keep framework-level lifecycle hooks active (attachBaseContext, onCreate, service tracking)
             if (id != null && (id.startsWith("app_") || id.startsWith("service_"))) {
-                // Keep tracking hooks intact across reload
                 return@forEach
             }
             runCatching { handle.unhook() }
         }
 
-        // 3. Re-install hooks
         val context = resolveTargetContext()
         val classLoader = context?.classLoader ?: runCatching {
             Class.forName("android.app.ActivityThread").classLoader
@@ -180,7 +167,6 @@ class SpotXeroModule : XposedModule() {
             log(Log.WARN, TAG, "Could not resolve target Application context for hot reload hook installation")
         }
 
-        // 4. Re-register force-stop receiver on new module generation
         if (context != null) {
             registerReceiverSafely(context)
         }
@@ -190,9 +176,6 @@ class SpotXeroModule : XposedModule() {
         if (!CommonUtils.SUPPORTED_PACKAGES.contains(param.packageName) || !param.isFirstPackage) {
             return
         }
-
-        targetAppInfo = param.applicationInfo
-        targetClassLoader = param.classLoader
 
         runCatching {
             val remotePrefs = getRemotePreferences(PrefKeys.PREFS_NAME)
