@@ -183,7 +183,7 @@ object PlayerShuffleHook {
                     if (isShuffleEnabled()) {
                         chain.proceed()
                     } else {
-                        null
+                        chain.proceed(arrayOf(java.lang.Boolean.FALSE))
                     }
                 }
         }
