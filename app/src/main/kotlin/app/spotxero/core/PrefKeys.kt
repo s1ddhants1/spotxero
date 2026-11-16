@@ -14,4 +14,6 @@ object PrefKeys {
     const val KEY_BLOCK_PENDRAGON = "pref_block_pendragon"
     const val KEY_FILTER_CONTEXT_MENU = "pref_filter_context_menu"
     const val KEY_UNCAPPED_LYRICS = "pref_uncapped_lyrics"
+    const val KEY_SPOTIFY_MONET = "pref_spotify_monet"
+    const val KEY_SPOTIFY_ROUNDY_UI = "pref_spotify_roundy_ui"
 }

@@ -120,6 +120,8 @@ fun SpotXeroApp(
                                 onTogglePremium = { viewModel.setPremiumEnabled(it) },
                                 onCleanSharingToggle = { viewModel.setCleanSharing(it) },
                                 onSpotifyAmoledToggle = { viewModel.setSpotifyAmoled(it) },
+                                onSpotifyMonetToggle = { viewModel.setSpotifyMonet(it) },
+                                onSpotifyRoundyUiToggle = { viewModel.setSpotifyRoundyUi(it) },
                                 onHidePodcastsToggle = { viewModel.setHidePodcasts(it) },
                                 onHideAudiobooksToggle = { viewModel.setHideAudiobooks(it) },
                                 onRequestScope = { viewModel.requestScope() }

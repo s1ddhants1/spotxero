@@ -19,6 +19,10 @@
     <string name="feature_clean_sharing_desc">Strip tracking and referral parameters from shared URLs</string>
     <string name="feature_spotify_amoled_title">Spotify Pure Black (AMOLED)</string>
     <string name="feature_spotify_amoled_desc">Replace Spotify\'s dark grey theme with pure black</string>
+    <string name="feature_spotify_monet_title">Monet Dynamic Theme</string>
+    <string name="feature_spotify_monet_desc">Replace Spotify green accents with system Material You colors</string>
+    <string name="feature_spotify_roundy_ui_title">RoundyUI</string>
+    <string name="feature_spotify_roundy_ui_desc">Round album art, buttons, cards, and bottom sheets</string>
     <string name="feature_hide_podcasts_title">Hide Podcasts</string>
     <string name="feature_hide_podcasts_desc">Remove podcasts and episodes from Home and Search</string>
     <string name="feature_hide_audiobooks_title">Hide Audiobooks</string>

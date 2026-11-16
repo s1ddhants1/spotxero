@@ -42,6 +42,8 @@ fun HomeDashboard(
     onTogglePremium: (Boolean) -> Unit,
     onCleanSharingToggle: (Boolean) -> Unit,
     onSpotifyAmoledToggle: (Boolean) -> Unit,
+    onSpotifyMonetToggle: (Boolean) -> Unit = {},
+    onSpotifyRoundyUiToggle: (Boolean) -> Unit = {},
     onHidePodcastsToggle: (Boolean) -> Unit = {},
     onHideAudiobooksToggle: (Boolean) -> Unit = {},
     onRequestScope: () -> Unit = {},
@@ -85,6 +87,20 @@ fun HomeDashboard(
             subtitle = stringResource(R.string.feature_spotify_amoled_desc),
             checked = uiState.isSpotifyAmoledEnabled,
             onCheckedChange = onSpotifyAmoledToggle
+        )
+
+        FeatureModuleCard(
+            title = stringResource(R.string.feature_spotify_monet_title),
+            subtitle = stringResource(R.string.feature_spotify_monet_desc),
+            checked = uiState.isSpotifyMonetEnabled,
+            onCheckedChange = onSpotifyMonetToggle
+        )
+
+        FeatureModuleCard(
+            title = stringResource(R.string.feature_spotify_roundy_ui_title),
+            subtitle = stringResource(R.string.feature_spotify_roundy_ui_desc),
+            checked = uiState.isSpotifyRoundyUiEnabled,
+            onCheckedChange = onSpotifyRoundyUiToggle
         )
     }
 }

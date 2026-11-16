@@ -33,6 +33,8 @@ data class DashboardUiState(
     val isLauncherIconHidden: Boolean = false,
     val isCleanSharingEnabled: Boolean = true,
     val isSpotifyAmoledEnabled: Boolean = false,
+    val isSpotifyMonetEnabled: Boolean = false,
+    val isSpotifyRoundyUiEnabled: Boolean = false,
     val isHidePodcastsEnabled: Boolean = false,
     val isHideAudiobooksEnabled: Boolean = false,
 

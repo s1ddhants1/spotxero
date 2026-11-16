@@ -27,6 +27,8 @@ object PreferencesManager {
     var isPremiumEnabled: Boolean = true
     var isCleanSharingEnabled: Boolean = true
     var isSpotifyAmoledEnabled: Boolean = false
+    var isSpotifyMonetEnabled: Boolean = false
+    var isSpotifyRoundyUiEnabled: Boolean = false
     var isHidePodcastsEnabled: Boolean = false
     var isHideAudiobooksEnabled: Boolean = false
 
@@ -223,6 +225,10 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_CLEAN_SHARING] = isCleanSharingEnabled
         isSpotifyAmoledEnabled = prefs.getBoolean(PrefKeys.KEY_SPOTIFY_AMOLED, false)
         inMemoryBooleans[PrefKeys.KEY_SPOTIFY_AMOLED] = isSpotifyAmoledEnabled
+        isSpotifyMonetEnabled = prefs.getBoolean(PrefKeys.KEY_SPOTIFY_MONET, false)
+        inMemoryBooleans[PrefKeys.KEY_SPOTIFY_MONET] = isSpotifyMonetEnabled
+        isSpotifyRoundyUiEnabled = prefs.getBoolean(PrefKeys.KEY_SPOTIFY_ROUNDY_UI, false)
+        inMemoryBooleans[PrefKeys.KEY_SPOTIFY_ROUNDY_UI] = isSpotifyRoundyUiEnabled
         isHidePodcastsEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PODCASTS, false)
         inMemoryBooleans[PrefKeys.KEY_HIDE_PODCASTS] = isHidePodcastsEnabled
         isHideAudiobooksEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_AUDIOBOOKS, false)
@@ -297,6 +303,8 @@ object PreferencesManager {
             PrefKeys.KEY_ENABLE_PREMIUM -> isPremiumEnabled = value
             PrefKeys.KEY_CLEAN_SHARING -> isCleanSharingEnabled = value
             PrefKeys.KEY_SPOTIFY_AMOLED -> isSpotifyAmoledEnabled = value
+            PrefKeys.KEY_SPOTIFY_MONET -> isSpotifyMonetEnabled = value
+            PrefKeys.KEY_SPOTIFY_ROUNDY_UI -> isSpotifyRoundyUiEnabled = value
             PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = value
             PrefKeys.KEY_HIDE_AUDIOBOOKS -> isHideAudiobooksEnabled = value
             KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = value

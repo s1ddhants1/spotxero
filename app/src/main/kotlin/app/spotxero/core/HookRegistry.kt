@@ -17,6 +17,8 @@ import app.spotxero.hooks.player.PlayerShuffleHook
 import app.spotxero.hooks.player.ProductStateHook
 import app.spotxero.hooks.sharing.CleanSharingHook
 import app.spotxero.hooks.theme.SpotifyAmoledHook
+import app.spotxero.hooks.theme.SpotifyMonetHook
+import app.spotxero.hooks.theme.SpotifyRoundyUIHook
 import app.spotxero.hooks.volume.ForceLocalPlaybackHook
 import io.github.libxposed.api.XposedModule
 import org.luckypray.dexkit.DexKitBridge
@@ -69,6 +71,8 @@ object HookRegistry {
             "Pendragon" to { PendragonHook.install(module) },
             "ContentFilter" to { ContentFilterHook.install(module) },
             "SpotifyAmoled" to { SpotifyAmoledHook.install(module) },
+            "SpotifyMonet" to { SpotifyMonetHook.install(module) },
+            "SpotifyRoundyUI" to { SpotifyRoundyUIHook.install(module) },
             "DisableSmartShuffle" to { DisableSmartShuffleHook.install(module) },
             "ProductState" to { ProductStateHook.install(module) },
             "PlayerRestrictions" to { PlayerRestrictionsHook.install(module) },

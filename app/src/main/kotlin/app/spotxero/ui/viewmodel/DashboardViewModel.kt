@@ -147,6 +147,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isLauncherIconHidden = AppUtils.isLauncherIconHidden(app),
                 isCleanSharingEnabled = PreferencesManager.isCleanSharingEnabled,
                 isSpotifyAmoledEnabled = PreferencesManager.isSpotifyAmoledEnabled,
+                isSpotifyMonetEnabled = PreferencesManager.isSpotifyMonetEnabled,
+                isSpotifyRoundyUiEnabled = PreferencesManager.isSpotifyRoundyUiEnabled,
                 isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled,
                 isHideAudiobooksEnabled = PreferencesManager.isHideAudiobooksEnabled
             )
@@ -237,6 +239,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun setSpotifyAmoled(enabled: Boolean) {
         PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_SPOTIFY_AMOLED, enabled)
         _uiState.update { it.copy(isSpotifyAmoledEnabled = enabled) }
+    }
+
+    fun setSpotifyMonet(enabled: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_SPOTIFY_MONET, enabled)
+        _uiState.update { it.copy(isSpotifyMonetEnabled = enabled) }
+    }
+
+    fun setSpotifyRoundyUi(enabled: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_SPOTIFY_ROUNDY_UI, enabled)
+        _uiState.update { it.copy(isSpotifyRoundyUiEnabled = enabled) }
     }
 
     fun setHidePodcasts(enabled: Boolean) {
