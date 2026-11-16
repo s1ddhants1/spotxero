@@ -140,6 +140,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 titleArgs = eval.titleArgs,
                 descRes = eval.descRes,
                 descArgs = eval.descArgs,
+                isMasterEnabled = PreferencesManager.isMasterEnabled,
                 isPremiumEnabled = PreferencesManager.isPremiumEnabled,
                 themeMode = PreferencesManager.appThemeMode,
                 isDynamicColorEnabled = PreferencesManager.isDynamicColorEnabled,
@@ -201,6 +202,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+
+    fun setMasterEnabled(enabled: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_MASTER_ENABLED, enabled)
+        _uiState.update { it.copy(isMasterEnabled = enabled) }
+    }
 
     fun setPremiumEnabled(enabled: Boolean) {
         PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_ENABLE_PREMIUM, enabled)

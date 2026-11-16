@@ -117,6 +117,7 @@ fun SpotXeroApp(
                         item(key = "home_dashboard") {
                             HomeDashboard(
                                 uiState = uiState,
+                                onMasterToggle = { viewModel.setMasterEnabled(it) },
                                 onTogglePremium = { viewModel.setPremiumEnabled(it) },
                                 onCleanSharingToggle = { viewModel.setCleanSharing(it) },
                                 onSpotifyAmoledToggle = { viewModel.setSpotifyAmoled(it) },

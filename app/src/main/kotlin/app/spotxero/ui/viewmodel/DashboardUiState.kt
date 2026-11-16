@@ -18,6 +18,7 @@ data class InstalledSpotifyInfo(
 
 @Immutable
 data class DashboardUiState(
+    val isMasterEnabled: Boolean = true,
     val isPremiumEnabled: Boolean = true,
     val isFrameworkConnected: Boolean = false,
     val isInjectable: Boolean = false,

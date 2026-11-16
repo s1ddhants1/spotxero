@@ -39,6 +39,7 @@ import app.spotxero.ui.viewmodel.DashboardUiState
 @Composable
 fun HomeDashboard(
     uiState: DashboardUiState,
+    onMasterToggle: (Boolean) -> Unit,
     onTogglePremium: (Boolean) -> Unit,
     onCleanSharingToggle: (Boolean) -> Unit,
     onSpotifyAmoledToggle: (Boolean) -> Unit,
@@ -51,9 +52,16 @@ fun HomeDashboard(
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
     ) {
         FrameworkStatusBanner(uiState = uiState, onRequestScope = onRequestScope)
+
+        MasterSwitchCard(
+            checked = uiState.isMasterEnabled,
+            onCheckedChange = onMasterToggle
+        )
+
+        CategoryHeader(title = stringResource(R.string.category_playback))
         FeatureModuleCard(
             title = stringResource(R.string.pref_unrestricted_playback_title),
             subtitle = stringResource(R.string.pref_unrestricted_playback_desc),
@@ -61,6 +69,7 @@ fun HomeDashboard(
             onCheckedChange = onTogglePremium
         )
 
+        CategoryHeader(title = stringResource(R.string.category_privacy))
         FeatureModuleCard(
             title = stringResource(R.string.feature_clean_sharing_title),
             subtitle = stringResource(R.string.feature_clean_sharing_desc),
@@ -68,6 +77,7 @@ fun HomeDashboard(
             onCheckedChange = onCleanSharingToggle
         )
 
+        CategoryHeader(title = stringResource(R.string.category_content))
         FeatureModuleCard(
             title = stringResource(R.string.feature_hide_podcasts_title),
             subtitle = stringResource(R.string.feature_hide_podcasts_desc),
@@ -82,6 +92,7 @@ fun HomeDashboard(
             onCheckedChange = onHideAudiobooksToggle
         )
 
+        CategoryHeader(title = stringResource(R.string.category_theme))
         FeatureModuleCard(
             title = stringResource(R.string.feature_spotify_amoled_title),
             subtitle = stringResource(R.string.feature_spotify_amoled_desc),
@@ -102,6 +113,123 @@ fun HomeDashboard(
             checked = uiState.isSpotifyRoundyUiEnabled,
             onCheckedChange = onSpotifyRoundyUiToggle
         )
+    }
+}
+
+@Composable
+private fun CategoryHeader(
+    title: String,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
+private fun MasterSwitchCard(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = if (checked) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+            contentColor = if (checked) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            }
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.extraLarge)
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange
+            )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = if (checked) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                },
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = AppIcons.PowerSettingsNew,
+                        contentDescription = null,
+                        tint = if (checked) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.feature_master_switch_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (checked) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
+                Text(
+                    text = stringResource(R.string.feature_master_switch_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (checked) {
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = null,
+                thumbContent = if (checked) {
+                    {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    }
+                } else null,
+                colors = appSwitchColors()
+            )
+        }
     }
 }
 

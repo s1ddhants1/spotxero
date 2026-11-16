@@ -24,6 +24,7 @@ object PreferencesManager {
     var isDynamicColorEnabled: Boolean = false
     var isAppAmoledEnabled: Boolean = false
     var isLauncherIconHidden: Boolean = false
+    var isMasterEnabled: Boolean = true
     var isPremiumEnabled: Boolean = true
     var isCleanSharingEnabled: Boolean = true
     var isSpotifyAmoledEnabled: Boolean = false
@@ -219,6 +220,8 @@ object PreferencesManager {
         appThemeMode = parseThemeMode(prefs.getString(KEY_APP_THEME_MODE, null))
         isDynamicColorEnabled = prefs.getBoolean(KEY_APP_DYNAMIC_COLOR, false)
         isAppAmoledEnabled = prefs.getBoolean(KEY_APP_AMOLED_THEME, false)
+        isMasterEnabled = prefs.getBoolean(PrefKeys.KEY_MASTER_ENABLED, true)
+        inMemoryBooleans[PrefKeys.KEY_MASTER_ENABLED] = isMasterEnabled
         isPremiumEnabled = prefs.getBoolean(PrefKeys.KEY_ENABLE_PREMIUM, true)
         inMemoryBooleans[PrefKeys.KEY_ENABLE_PREMIUM] = isPremiumEnabled
         isCleanSharingEnabled = prefs.getBoolean(PrefKeys.KEY_CLEAN_SHARING, true)
@@ -244,6 +247,20 @@ object PreferencesManager {
     }
 
     fun isEnabled(key: String, default: Boolean): Boolean {
+        if (key != PrefKeys.KEY_MASTER_ENABLED &&
+            key != PrefKeys.KEY_SHUFFLE_STATE &&
+            key != KEY_APP_DYNAMIC_COLOR &&
+            key != KEY_APP_AMOLED_THEME &&
+            key != KEY_HIDE_LAUNCHER_ICON &&
+            key != KEY_APP_THEME_MODE
+        ) {
+            val master = inMemoryBooleans[PrefKeys.KEY_MASTER_ENABLED] ?: isEnabledDirect(PrefKeys.KEY_MASTER_ENABLED, true)
+            if (!master) return false
+        }
+        return isEnabledDirect(key, default)
+    }
+
+    private fun isEnabledDirect(key: String, default: Boolean): Boolean {
         inMemoryBooleans[key]?.let { return it }
         val tp = getTargetPrefs()
         if (tp != null && tp.contains(key)) {
@@ -300,6 +317,7 @@ object PreferencesManager {
 
     fun updateFieldDirectly(key: String, value: Boolean) {
         when (key) {
+            PrefKeys.KEY_MASTER_ENABLED -> isMasterEnabled = value
             PrefKeys.KEY_ENABLE_PREMIUM -> isPremiumEnabled = value
             PrefKeys.KEY_CLEAN_SHARING -> isCleanSharingEnabled = value
             PrefKeys.KEY_SPOTIFY_AMOLED -> isSpotifyAmoledEnabled = value
