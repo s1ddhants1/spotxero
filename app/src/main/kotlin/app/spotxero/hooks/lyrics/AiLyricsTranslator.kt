@@ -284,25 +284,7 @@ Output MUST be a JSON object {"lines": [...]} with EXACTLY $lineCount strings.""
             }
 
             put("response_format", JSONObject().apply {
-                put("type", "json_schema")
-                put("json_schema", JSONObject().apply {
-                    put("name", "translated_lyrics")
-                    put("strict", true)
-                    put("schema", JSONObject().apply {
-                        put("type", "object")
-                        put("properties", JSONObject().apply {
-                            put("lines", JSONObject().apply {
-                                put("type", "array")
-                                put("description", "Translated lines, one per input line, empty lines preserved as empty strings")
-                                put("items", JSONObject().apply {
-                                    put("type", "string")
-                                })
-                            })
-                        })
-                        put("required", JSONArray().apply { put("lines") })
-                        put("additionalProperties", false)
-                    })
-                })
+                put("type", "json_object")
             })
 
             if (baseUrl.contains("openrouter.ai")) {

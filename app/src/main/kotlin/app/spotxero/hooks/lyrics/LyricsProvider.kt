@@ -30,6 +30,9 @@ object LocalLrcProvider : LyricsProvider {
 
     override fun fetchLyrics(trackName: String, artistName: String, albumName: String?, durationSec: Long?): ParsedLyrics? {
         val searchDirs = listOfNotNull(
+            runCatching { File("/sdcard/Android/data/com.spotify.music/files/Lyrics") }.getOrNull(),
+            runCatching { File("/data/user/0/com.spotify.music/files/Lyrics") }.getOrNull(),
+            runCatching { File("/data/data/com.spotify.music/files/Lyrics") }.getOrNull(),
             runCatching { File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lyrics") }.getOrNull(),
             runCatching { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC) }.getOrNull(),
             runCatching { File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lyrics") }.getOrNull(),
@@ -96,6 +99,14 @@ object BetterLyricsProvider : LyricsProvider {
 
         if (trimmedAlbum != null) {
             fetchTtml(cleanTitle, cleanArtist, durationSec, null)?.let { ttml ->
+                val parsed = LrcParser.parseTtml(ttml)
+                if (parsed != null && parsed.lines.isNotEmpty()) return parsed
+            }
+        }
+
+        val simplified = removeExtraInfo(cleanTitle)
+        if (simplified != cleanTitle) {
+            fetchTtml(simplified, cleanArtist, durationSec, null)?.let { ttml ->
                 val parsed = LrcParser.parseTtml(ttml)
                 if (parsed != null && parsed.lines.isNotEmpty()) return parsed
             }
@@ -241,7 +252,13 @@ object KuGouLyricsProvider : LyricsProvider {
                 }
             }
 
-            if (bestId == 0L || bestAccessKey.isBlank()) return null
+            if (bestId == 0L || bestAccessKey.isBlank()) {
+                val simplified = removeExtraInfo(trackName)
+                if (simplified != trackName && simplified.isNotBlank()) {
+                    return fetchLyrics(simplified, artistName, albumName, durationSec)
+                }
+                return null
+            }
 
             val downloadUrl = Uri.parse("https://lyrics.kugou.com/download").buildUpon()
                 .appendQueryParameter("fmt", "lrc")
@@ -530,14 +547,14 @@ object GeniusProvider : LyricsProvider {
 
         return if (lines.isNotEmpty()) ParsedLyrics(syncType = SyncType.UNSYNCED, lines = lines) else null
     }
+}
 
-    private fun removeExtraInfo(title: String): String {
-        return title
-            .replace(Regex("""\s*[\[(](?:feat(?:uring)?|ft|with)\.?\s+[^)\]]*[\])]""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s*[-–—]\s*(?:feat(?:uring)?|ft)\.?\s+.+$""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s*[\[(][^()\[\]]*(?:remaster|deluxe|version|mono|stereo|bonus)[^()\[\]]*[\])]""", RegexOption.IGNORE_CASE), "")
-            .trim()
-    }
+internal fun removeExtraInfo(title: String): String {
+    return title
+        .replace(Regex("""\s*[\[(](?:feat(?:uring)?|ft|with)\.?\s+[^)\]]*[\])]""", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("""\s*[-–—]\s*(?:feat(?:uring)?|ft)\.?\s+.+$""", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("""\s*[\[(][^()\[\]]*(?:remaster|deluxe|version|mono|stereo|bonus)[^()\[\]]*[\])]""", RegexOption.IGNORE_CASE), "")
+        .trim()
 }
 
 private fun httpGet(urlString: String, headers: Map<String, String> = emptyMap(), redirectCount: Int = 0): String? {
@@ -547,8 +564,8 @@ private fun httpGet(urlString: String, headers: Map<String, String> = emptyMap()
         val conn = url.openConnection() as HttpURLConnection
         conn.instanceFollowRedirects = true
         conn.requestMethod = "GET"
-        conn.connectTimeout = 6000
-        conn.readTimeout = 6000
+        conn.connectTimeout = 3500
+        conn.readTimeout = 4000
         conn.setRequestProperty("User-Agent", "SpotXero/2.0 (Android; +https://github.com/s1ddhants1/SpotXero)")
         for ((k, v) in headers) {
             conn.setRequestProperty(k, v)

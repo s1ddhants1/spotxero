@@ -96,10 +96,7 @@ object HookRegistry {
             HookEntry("OnDemandInFree", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { OnDemandInFreeHook.install(module) },
             HookEntry("PlayerShuffle", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PlayerShuffleHook.install(module) },
             HookEntry("ForceLocalPlayback", { PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, true) }) { ForceLocalPlaybackHook.install(module) },
-            HookEntry("Lyrics", {
-                PreferencesManager.isEnabled(PrefKeys.KEY_UNCAPPED_LYRICS, true) ||
-                    PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false)
-            }) { LyricsHook.install(module) },
+            HookEntry("Lyrics", { true }) { LyricsHook.install(module) },
         )
 
         for (hook in hooks) {

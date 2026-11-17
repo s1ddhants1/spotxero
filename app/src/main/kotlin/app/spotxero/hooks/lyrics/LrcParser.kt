@@ -30,7 +30,7 @@ data class ParsedLyrics(
 object LrcParser {
 
     private val LINE_TIME_TAG_PATTERN = Pattern.compile("""\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?]""")
-    private val WORD_TIME_TAG_PATTERN = Pattern.compile("""(?:<|\()(\d{1,2}:\d{2}(?:[.:]\d{1,3})?|\d{1,7})(?:>|\))""")
+    private val WORD_TIME_TAG_PATTERN = Pattern.compile("""<(\d{1,2}:\d{2}(?:[.:]\d{1,3})?|\d{1,7})>|\((\d{1,2}:\d{2}(?:[.:]\d{1,3})?)\)""")
 
     fun parse(lrcContent: String?): ParsedLyrics? {
         if (lrcContent.isNullOrBlank()) return null
@@ -103,11 +103,11 @@ object LrcParser {
     private fun parseTimeString(minStr: String?, secStr: String?, msStr: String?): Long {
         val min = minStr?.toLongOrNull() ?: 0L
         val sec = secStr?.toLongOrNull() ?: 0L
-        val ms = when (msStr?.length) {
-            1 -> (msStr.toLongOrNull() ?: 0L) * 100
-            2 -> (msStr.toLongOrNull() ?: 0L) * 10
-            3 -> msStr.toLongOrNull() ?: 0L
-            else -> 0L
+        val ms = when {
+            msStr.isNullOrEmpty() -> 0L
+            msStr.length == 1 -> (msStr.toLongOrNull() ?: 0L) * 100
+            msStr.length == 2 -> (msStr.toLongOrNull() ?: 0L) * 10
+            else -> msStr.take(3).toLongOrNull() ?: 0L
         }
         return (min * 60 + sec) * 1000 + ms
     }
@@ -124,11 +124,11 @@ object LrcParser {
         val (sec, ms) = if (dot >= 0) {
             val s = rest.substring(0, dot).toLongOrNull() ?: 0L
             val frac = rest.substring(dot + 1)
-            val m = when (frac.length) {
-                1 -> (frac.toLongOrNull() ?: 0L) * 100
-                2 -> (frac.toLongOrNull() ?: 0L) * 10
-                3 -> frac.toLongOrNull() ?: 0L
-                else -> 0L
+            val m = when {
+                frac.isEmpty() -> 0L
+                frac.length == 1 -> (frac.toLongOrNull() ?: 0L) * 100
+                frac.length == 2 -> (frac.toLongOrNull() ?: 0L) * 10
+                else -> frac.take(3).toLongOrNull() ?: 0L
             }
             s to m
         } else {
@@ -154,7 +154,7 @@ object LrcParser {
         while (matcher.find()) {
             val tagStart = matcher.start()
             val tagEnd = matcher.end()
-            val timeTag = matcher.group(1).orEmpty()
+            val timeTag = matcher.group(1)?.takeIf { it.isNotEmpty() } ?: matcher.group(2).orEmpty()
             val ts = parseTimestampTag(timeTag)
 
             if (tagStart > currentWordStart) {
