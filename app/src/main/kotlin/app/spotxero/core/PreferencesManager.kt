@@ -26,6 +26,30 @@ object PreferencesManager {
     var isLauncherIconHidden: Boolean = false
     var isMasterEnabled: Boolean = true
     var isPremiumEnabled: Boolean = true
+    var isLyricsEnabled: Boolean = true
+    var isExternalLyricsEnabled: Boolean = false
+    var isForceExternalLyricsEnabled: Boolean = false
+    var isLyricsTranslationsEnabled: Boolean = true
+    var isAiLyricsTranslationEnabled: Boolean = false
+    var aiTranslationProvider: String = "OpenRouter"
+    var aiTranslationApiKey: String = ""
+    var aiTranslationBaseUrl: String = PrefKeys.OpenRouterDefaultBaseUrl
+    var aiTranslationModel: String = "google/gemini-2.5-flash-lite"
+    var aiTranslationTargetLang: String = "en"
+    var aiTranslationCustomPrompt: String = ""
+    var isAiTranslationDualLine: Boolean = true
+    var aiTranslationTranslateMode: String = "Literal"
+    var aiTranslationDeeplApiKey: String = ""
+    var aiTranslationDeeplFormality: String = "default"
+    var lyricsProvidersOrder: String = "local,betterlyrics,lrcred,lrclib,kugou,netease,genius"
+    var isLocalLyricsEnabled: Boolean = true
+    var isBetterlyricsEnabled: Boolean = true
+    var isLrcredEnabled: Boolean = true
+    var isLrclibEnabled: Boolean = true
+    var isKugouEnabled: Boolean = true
+    var isNeteaseEnabled: Boolean = true
+    var isGeniusEnabled: Boolean = true
+    var isForceLocalPlaybackEnabled: Boolean = true
     var isCleanSharingEnabled: Boolean = true
     var isSpotifyAmoledEnabled: Boolean = false
     var isSpotifyMonetEnabled: Boolean = false
@@ -224,6 +248,54 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_MASTER_ENABLED] = isMasterEnabled
         isPremiumEnabled = prefs.getBoolean(PrefKeys.KEY_ENABLE_PREMIUM, true)
         inMemoryBooleans[PrefKeys.KEY_ENABLE_PREMIUM] = isPremiumEnabled
+        isLyricsEnabled = prefs.getBoolean(PrefKeys.KEY_UNCAPPED_LYRICS, true)
+        inMemoryBooleans[PrefKeys.KEY_UNCAPPED_LYRICS] = isLyricsEnabled
+        isExternalLyricsEnabled = prefs.getBoolean(PrefKeys.KEY_EXTERNAL_LYRICS, false)
+        inMemoryBooleans[PrefKeys.KEY_EXTERNAL_LYRICS] = isExternalLyricsEnabled
+        isForceExternalLyricsEnabled = prefs.getBoolean(PrefKeys.KEY_FORCE_EXTERNAL_LYRICS, false)
+        inMemoryBooleans[PrefKeys.KEY_FORCE_EXTERNAL_LYRICS] = isForceExternalLyricsEnabled
+        isLyricsTranslationsEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_TRANSLATIONS, true)
+        inMemoryBooleans[PrefKeys.KEY_LYRICS_TRANSLATIONS] = isLyricsTranslationsEnabled
+        isAiLyricsTranslationEnabled = prefs.getBoolean(PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, false)
+        inMemoryBooleans[PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED] = isAiLyricsTranslationEnabled
+        aiTranslationProvider = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_PROVIDER, "OpenRouter") ?: "OpenRouter"
+        inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_PROVIDER] = aiTranslationProvider
+        aiTranslationApiKey = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_API_KEY, "") ?: ""
+        inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_API_KEY] = aiTranslationApiKey
+        aiTranslationBaseUrl = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_BASE_URL, PrefKeys.OpenRouterDefaultBaseUrl) ?: PrefKeys.OpenRouterDefaultBaseUrl
+        inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_BASE_URL] = aiTranslationBaseUrl
+        aiTranslationModel = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_MODEL, "google/gemini-2.5-flash-lite") ?: "google/gemini-2.5-flash-lite"
+        inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_MODEL] = aiTranslationModel
+        aiTranslationTargetLang = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_TARGET_LANG, "en") ?: "en"
+        inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_TARGET_LANG] = aiTranslationTargetLang
+        aiTranslationCustomPrompt = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_CUSTOM_PROMPT, "") ?: ""
+        inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_CUSTOM_PROMPT] = aiTranslationCustomPrompt
+        isAiTranslationDualLine = prefs.getBoolean(PrefKeys.KEY_AI_TRANSLATION_DUAL_LINE, true)
+        inMemoryBooleans[PrefKeys.KEY_AI_TRANSLATION_DUAL_LINE] = isAiTranslationDualLine
+        aiTranslationTranslateMode = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_TRANSLATE_MODE, "Literal") ?: "Literal"
+        inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_TRANSLATE_MODE] = aiTranslationTranslateMode
+        aiTranslationDeeplApiKey = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_DEEPL_API_KEY, "") ?: ""
+        inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_DEEPL_API_KEY] = aiTranslationDeeplApiKey
+        aiTranslationDeeplFormality = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY, "default") ?: "default"
+        inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY] = aiTranslationDeeplFormality
+        lyricsProvidersOrder = prefs.getString(PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, "local,betterlyrics,lrcred,lrclib,kugou,netease,genius") ?: "local,betterlyrics,lrcred,lrclib,kugou,netease,genius"
+        inMemoryStrings[PrefKeys.KEY_LYRICS_PROVIDERS_ORDER] = lyricsProvidersOrder
+        isLocalLyricsEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_LOCAL, true)
+        inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_LOCAL] = isLocalLyricsEnabled
+        isBetterlyricsEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS, true)
+        inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS] = isBetterlyricsEnabled
+        isLrcredEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_LRCRED, true)
+        inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_LRCRED] = isLrcredEnabled
+        isLrclibEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_LRCLIB, true)
+        inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_LRCLIB] = isLrclibEnabled
+        isKugouEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_KUGOU, true)
+        inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_KUGOU] = isKugouEnabled
+        isNeteaseEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_NETEASE, true)
+        inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_NETEASE] = isNeteaseEnabled
+        isGeniusEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_GENIUS, true)
+        inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_GENIUS] = isGeniusEnabled
+        isForceLocalPlaybackEnabled = prefs.getBoolean(PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, true)
+        inMemoryBooleans[PrefKeys.KEY_FORCE_LOCAL_PLAYBACK] = isForceLocalPlaybackEnabled
         isCleanSharingEnabled = prefs.getBoolean(PrefKeys.KEY_CLEAN_SHARING, true)
         inMemoryBooleans[PrefKeys.KEY_CLEAN_SHARING] = isCleanSharingEnabled
         isSpotifyAmoledEnabled = prefs.getBoolean(PrefKeys.KEY_SPOTIFY_AMOLED, false)
@@ -306,12 +378,65 @@ object PreferencesManager {
         }
     }
 
+    fun getString(key: String, default: String): String {
+        inMemoryStrings[key]?.let { return it }
+        val tp = getTargetPrefs()
+        if (tp != null && tp.contains(key)) {
+            val v = tp.getString(key, default) ?: default
+            inMemoryStrings[key] = v
+            return v
+        }
+        val rp = remotePrefs
+        if (rp != null && rp.contains(key)) {
+            val v = rp.getString(key, default) ?: default
+            inMemoryStrings[key] = v
+            return v
+        }
+        val lp = localPrefs
+        if (lp != null && lp.contains(key)) {
+            val v = lp.getString(key, default) ?: default
+            inMemoryStrings[key] = v
+            return v
+        }
+        return default
+    }
+
     fun setString(context: Context? = null, key: String, value: String) {
         inMemoryStrings[key] = value
-        try {
-            getPrefs(context).edit().putString(key, value).apply()
-        } catch (t: Throwable) {
-            Log.e(TAG, "Error writing string preference $key: ${t.message}", t)
+        updateStringFieldDirectly(key, value)
+        val tp = getTargetPrefs()
+        if (tp != null) {
+            runCatching {
+                tp.edit().putString(key, value).commit()
+            }
+        }
+        val rp = remotePrefs
+        if (rp != null) {
+            runCatching {
+                rp.edit().putString(key, value).apply()
+            }
+        }
+        val prefs = runCatching { getPrefs(context) }.getOrNull()
+        if (prefs != null && prefs != tp && prefs != rp) {
+            runCatching {
+                prefs.edit().putString(key, value).apply()
+            }
+        }
+    }
+
+    fun updateStringFieldDirectly(key: String, value: String) {
+        when (key) {
+            PrefKeys.KEY_LYRICS_PROVIDERS_ORDER -> lyricsProvidersOrder = value
+            KEY_APP_THEME_MODE -> appThemeMode = parseThemeMode(value)
+            PrefKeys.KEY_AI_TRANSLATION_PROVIDER -> aiTranslationProvider = value
+            PrefKeys.KEY_AI_TRANSLATION_API_KEY -> aiTranslationApiKey = value
+            PrefKeys.KEY_AI_TRANSLATION_BASE_URL -> aiTranslationBaseUrl = value
+            PrefKeys.KEY_AI_TRANSLATION_MODEL -> aiTranslationModel = value
+            PrefKeys.KEY_AI_TRANSLATION_TARGET_LANG -> aiTranslationTargetLang = value
+            PrefKeys.KEY_AI_TRANSLATION_CUSTOM_PROMPT -> aiTranslationCustomPrompt = value
+            PrefKeys.KEY_AI_TRANSLATION_TRANSLATE_MODE -> aiTranslationTranslateMode = value
+            PrefKeys.KEY_AI_TRANSLATION_DEEPL_API_KEY -> aiTranslationDeeplApiKey = value
+            PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY -> aiTranslationDeeplFormality = value
         }
     }
 
@@ -319,6 +444,20 @@ object PreferencesManager {
         when (key) {
             PrefKeys.KEY_MASTER_ENABLED -> isMasterEnabled = value
             PrefKeys.KEY_ENABLE_PREMIUM -> isPremiumEnabled = value
+            PrefKeys.KEY_UNCAPPED_LYRICS -> isLyricsEnabled = value
+            PrefKeys.KEY_EXTERNAL_LYRICS -> isExternalLyricsEnabled = value
+            PrefKeys.KEY_FORCE_EXTERNAL_LYRICS -> isForceExternalLyricsEnabled = value
+            PrefKeys.KEY_LYRICS_TRANSLATIONS -> isLyricsTranslationsEnabled = value
+            PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED -> isAiLyricsTranslationEnabled = value
+            PrefKeys.KEY_AI_TRANSLATION_DUAL_LINE -> isAiTranslationDualLine = value
+            PrefKeys.KEY_LYRICS_PROVIDER_LOCAL -> isLocalLyricsEnabled = value
+            PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS -> isBetterlyricsEnabled = value
+            PrefKeys.KEY_LYRICS_PROVIDER_LRCRED -> isLrcredEnabled = value
+            PrefKeys.KEY_LYRICS_PROVIDER_LRCLIB -> isLrclibEnabled = value
+            PrefKeys.KEY_LYRICS_PROVIDER_KUGOU -> isKugouEnabled = value
+            PrefKeys.KEY_LYRICS_PROVIDER_NETEASE -> isNeteaseEnabled = value
+            PrefKeys.KEY_LYRICS_PROVIDER_GENIUS -> isGeniusEnabled = value
+            PrefKeys.KEY_FORCE_LOCAL_PLAYBACK -> isForceLocalPlaybackEnabled = value
             PrefKeys.KEY_CLEAN_SHARING -> isCleanSharingEnabled = value
             PrefKeys.KEY_SPOTIFY_AMOLED -> isSpotifyAmoledEnabled = value
             PrefKeys.KEY_SPOTIFY_MONET -> isSpotifyMonetEnabled = value
@@ -341,9 +480,7 @@ object PreferencesManager {
                 }
                 is String -> {
                     inMemoryStrings[key] = v
-                    if (key == KEY_APP_THEME_MODE) {
-                        appThemeMode = parseThemeMode(v)
-                    }
+                    updateStringFieldDirectly(key, v)
                 }
             }
         }

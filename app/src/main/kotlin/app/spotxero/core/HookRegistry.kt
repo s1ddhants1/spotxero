@@ -25,7 +25,17 @@ import org.luckypray.dexkit.DexKitBridge
 
 object HookRegistry {
 
+    private data class HookEntry(
+        val name: String,
+        val isEnabled: () -> Boolean,
+        val install: () -> Unit
+    )
+
     fun resolveAndInstall(module: XposedModule, appInfo: ApplicationInfo, classLoader: ClassLoader) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_MASTER_ENABLED, true)) {
+            return
+        }
+
         val apkPath = appInfo.sourceDir
         val versionCode: Long = runCatching {
             val pm = Class.forName("android.app.ActivityThread")
@@ -60,31 +70,43 @@ object HookRegistry {
     }
 
     fun installAll(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_MASTER_ENABLED, true)) {
+            return
+        }
+
         val hooks = listOf(
-            "CleanSharing" to { CleanSharingHook.install(module) },
-            "HidePremiumTab" to { HidePremiumTabHook.install(module) },
-            "AdResponse" to { AdResponseHook.install(module) },
-            "NetworkAdBlock" to { NetworkAdBlockHook.install(module) },
-            "BrandAds" to { BrandAdsHook.install(module) },
-            "PlayerAdCards" to { PlayerAdCardsHook.install(module) },
-            "ContextMenuAdBlock" to { ContextMenuAdBlockHook.install(module) },
-            "Pendragon" to { PendragonHook.install(module) },
-            "ContentFilter" to { ContentFilterHook.install(module) },
-            "SpotifyAmoled" to { SpotifyAmoledHook.install(module) },
-            "SpotifyMonet" to { SpotifyMonetHook.install(module) },
-            "SpotifyRoundyUI" to { SpotifyRoundyUIHook.install(module) },
-            "DisableSmartShuffle" to { DisableSmartShuffleHook.install(module) },
-            "ProductState" to { ProductStateHook.install(module) },
-            "PlayerRestrictions" to { PlayerRestrictionsHook.install(module) },
-            "OnDemandInFree" to { OnDemandInFreeHook.install(module) },
-            "PlayerShuffle" to { PlayerShuffleHook.install(module) },
-            "ForceLocalPlayback" to { ForceLocalPlaybackHook.install(module) },
-            "Lyrics" to { LyricsHook.install(module) },
+            HookEntry("CleanSharing", { PreferencesManager.isEnabled(PrefKeys.KEY_CLEAN_SHARING, true) }) { CleanSharingHook.install(module) },
+            HookEntry("HidePremiumTab", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { HidePremiumTabHook.install(module) },
+            HookEntry("AdResponse", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { AdResponseHook.install(module) },
+            HookEntry("NetworkAdBlock", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { NetworkAdBlockHook.install(module) },
+            HookEntry("BrandAds", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { BrandAdsHook.install(module) },
+            HookEntry("PlayerAdCards", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PlayerAdCardsHook.install(module) },
+            HookEntry("ContextMenuAdBlock", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { ContextMenuAdBlockHook.install(module) },
+            HookEntry("Pendragon", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PendragonHook.install(module) },
+            HookEntry("ContentFilter", {
+                PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_PODCASTS, false) ||
+                    PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_AUDIOBOOKS, false)
+            }) { ContentFilterHook.install(module) },
+            HookEntry("SpotifyAmoled", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_AMOLED, false) }) { SpotifyAmoledHook.install(module) },
+            HookEntry("SpotifyMonet", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_MONET, false) }) { SpotifyMonetHook.install(module) },
+            HookEntry("SpotifyRoundyUI", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_ROUNDY_UI, false) }) { SpotifyRoundyUIHook.install(module) },
+            HookEntry("DisableSmartShuffle", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { DisableSmartShuffleHook.install(module) },
+            HookEntry("ProductState", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { ProductStateHook.install(module) },
+            HookEntry("PlayerRestrictions", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PlayerRestrictionsHook.install(module) },
+            HookEntry("OnDemandInFree", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { OnDemandInFreeHook.install(module) },
+            HookEntry("PlayerShuffle", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PlayerShuffleHook.install(module) },
+            HookEntry("ForceLocalPlayback", { PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, true) }) { ForceLocalPlaybackHook.install(module) },
+            HookEntry("Lyrics", {
+                PreferencesManager.isEnabled(PrefKeys.KEY_UNCAPPED_LYRICS, true) ||
+                    PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false)
+            }) { LyricsHook.install(module) },
         )
 
-        for ((_, installer) in hooks) {
-            runCatching {
-                installer()
+        for (hook in hooks) {
+            if (hook.isEnabled()) {
+                runCatching {
+                    hook.install()
+                }
             }
         }
     }

@@ -51,6 +51,9 @@ object SpotifyAmoledHook {
     }
 
     fun install(module: XposedModule) {
+        if (!isAmoledEnabled()) {
+            return
+        }
         hookResources(module)
         hookTypedArray(module)
         hookDrawables(module)

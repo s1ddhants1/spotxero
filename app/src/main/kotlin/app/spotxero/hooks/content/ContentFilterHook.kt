@@ -16,6 +16,11 @@ object ContentFilterHook {
     )
 
     fun install(module: XposedModule) {
+        val podcastsEnabled = PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_PODCASTS, false)
+        val audiobooksEnabled = PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_AUDIOBOOKS, false)
+        if (!podcastsEnabled && !audiobooksEnabled) {
+            return
+        }
         hookProvidedItems(module)
         hookHomeSections(module)
         hookHomeChips(module)

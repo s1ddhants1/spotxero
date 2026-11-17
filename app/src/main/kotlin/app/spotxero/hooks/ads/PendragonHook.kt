@@ -17,7 +17,7 @@ object PendragonHook {
     private const val RX_SINGLE = "io.reactivex.rxjava3.core.Single"
 
     fun install(module: XposedModule) {
-        if (!PreferencesManager.isEnabled(PrefKeys.KEY_BLOCK_PENDRAGON, true)) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
             return
         }
 
@@ -29,7 +29,7 @@ object PendragonHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val result = chain.proceed()
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_BLOCK_PENDRAGON, true)) {
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept result
                 }
 

@@ -19,11 +19,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.spotxero.R
 import app.spotxero.ui.theme.AppIcons
+import app.spotxero.ui.theme.AppSpacing
 
 @Composable
 fun AppQuickControls(
@@ -41,7 +41,7 @@ fun AppQuickControls(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = AppSpacing.md, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             FilledTonalButton(
@@ -58,7 +58,7 @@ fun AppQuickControls(
             ) {
                 Icon(AppIcons.PowerSettingsNew, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.size(6.dp))
-                Text(stringResource(R.string.btn_force_stop), fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+                Text(stringResource(R.string.btn_force_stop), textAlign = TextAlign.Center)
             }
             Button(
                 onClick = onOpenApp,
@@ -74,7 +74,7 @@ fun AppQuickControls(
             ) {
                 Icon(AppIcons.Launch, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.size(6.dp))
-                Text(stringResource(R.string.btn_open_spotify), fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+                Text(stringResource(R.string.btn_open_spotify), textAlign = TextAlign.Center)
             }
         }
     }

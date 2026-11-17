@@ -12,6 +12,10 @@ object PlayerAdCardsHook {
     private const val PLAYER_SECTION = "com.spotify.scrollsita.v1.Section"
 
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
+
         val method = DexKitResolver.get<Method>(DexKitResolver.KEY_IMAGE_AD_PREDICATE)
         if (method == null ||
             method.declaringClass.name != PLAYER_SECTION ||

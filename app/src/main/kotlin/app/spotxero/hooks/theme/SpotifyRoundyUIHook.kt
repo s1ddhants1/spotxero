@@ -46,6 +46,9 @@ object SpotifyRoundyUIHook {
         PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_ROUNDY_UI, false)
 
     fun install(module: XposedModule) {
+        if (!isRoundyUiEnabled()) {
+            return
+        }
         hookViewAttach(module)
         hookImageViewSetDrawable(module)
         hookGradientDrawable(module)

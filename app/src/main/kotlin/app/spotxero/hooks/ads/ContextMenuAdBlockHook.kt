@@ -26,7 +26,7 @@ object ContextMenuAdBlockHook {
     private val itemStringFieldsCache = ConcurrentHashMap<Class<*>, List<Field>>()
 
     fun install(module: XposedModule) {
-        if (!PreferencesManager.isEnabled(PrefKeys.KEY_FILTER_CONTEXT_MENU, true)) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
             return
         }
 
@@ -37,7 +37,7 @@ object ContextMenuAdBlockHook {
             .setId("context_menu_ad_blocker")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
-                if (PreferencesManager.isEnabled(PrefKeys.KEY_FILTER_CONTEXT_MENU, true)) {
+                if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     val rawItems = chain.getArg(1) as? List<*>
                     if (!rawItems.isNullOrEmpty()) {
                         val filteredItems = rawItems.filterNot { item ->

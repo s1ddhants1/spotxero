@@ -40,6 +40,9 @@ object PlayerShuffleHook {
     }
 
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
         hookCommandValue(module)
         hookPlayerOptions(module)
         hookPreparePlayOptions(module)

@@ -100,7 +100,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         titleArgs = emptyList(),
                         descRes = R.string.framework_lsposed_not_in_scope_desc,
                         descArgs = emptyList(),
-                        isInjectable = false
+                        isInjectable = false,
+                        canRequestScope = true
                     )
                 } else {
                     BannerEvaluationData(
@@ -136,6 +137,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             current.copy(
                 isFrameworkConnected = isFrameworkConnected,
                 isInjectable = eval.isInjectable,
+                canRequestScope = eval.canRequestScope,
                 titleRes = eval.titleRes,
                 titleArgs = eval.titleArgs,
                 descRes = eval.descRes,
@@ -147,6 +149,27 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isAppAmoledEnabled = PreferencesManager.isAppAmoledEnabled,
                 isLauncherIconHidden = AppUtils.isLauncherIconHidden(app),
                 isCleanSharingEnabled = PreferencesManager.isCleanSharingEnabled,
+                isLyricsEnabled = PreferencesManager.isLyricsEnabled,
+                isExternalLyricsEnabled = PreferencesManager.isExternalLyricsEnabled,
+                isForceExternalLyricsEnabled = PreferencesManager.isForceExternalLyricsEnabled,
+                aiTranslationProvider = PreferencesManager.aiTranslationProvider,
+                aiTranslationApiKey = PreferencesManager.aiTranslationApiKey,
+                aiTranslationBaseUrl = PreferencesManager.aiTranslationBaseUrl,
+                aiTranslationModel = PreferencesManager.aiTranslationModel,
+                aiTranslationTargetLang = PreferencesManager.aiTranslationTargetLang,
+                aiTranslationCustomPrompt = PreferencesManager.aiTranslationCustomPrompt,
+                aiTranslationTranslateMode = PreferencesManager.aiTranslationTranslateMode,
+                aiTranslationDeeplApiKey = PreferencesManager.aiTranslationDeeplApiKey,
+                aiTranslationDeeplFormality = PreferencesManager.aiTranslationDeeplFormality,
+                lyricsProvidersOrder = parseLyricsProviders(PreferencesManager.lyricsProvidersOrder),
+                isLocalLyricsEnabled = PreferencesManager.isLocalLyricsEnabled,
+                isBetterlyricsEnabled = PreferencesManager.isBetterlyricsEnabled,
+                isLrcredEnabled = PreferencesManager.isLrcredEnabled,
+                isLrclibEnabled = PreferencesManager.isLrclibEnabled,
+                isKugouEnabled = PreferencesManager.isKugouEnabled,
+                isNeteaseEnabled = PreferencesManager.isNeteaseEnabled,
+                isGeniusEnabled = PreferencesManager.isGeniusEnabled,
+                isForceLocalPlaybackEnabled = PreferencesManager.isForceLocalPlaybackEnabled,
                 isSpotifyAmoledEnabled = PreferencesManager.isSpotifyAmoledEnabled,
                 isSpotifyMonetEnabled = PreferencesManager.isSpotifyMonetEnabled,
                 isSpotifyRoundyUiEnabled = PreferencesManager.isSpotifyRoundyUiEnabled,
@@ -242,6 +265,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(isCleanSharingEnabled = enabled) }
     }
 
+    fun setLyrics(enabled: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_UNCAPPED_LYRICS, enabled)
+        _uiState.update { it.copy(isLyricsEnabled = enabled) }
+    }
+
+    fun setForceLocalPlayback(enabled: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, enabled)
+        _uiState.update { it.copy(isForceLocalPlaybackEnabled = enabled) }
+    }
+
     fun setSpotifyAmoled(enabled: Boolean) {
         PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_SPOTIFY_AMOLED, enabled)
         _uiState.update { it.copy(isSpotifyAmoledEnabled = enabled) }
@@ -268,6 +301,126 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
 
+    fun showLyricsSourcesScreen() {
+        _uiState.update { it.copy(showLyricsSources = true, showAiLyricsTranslation = false) }
+    }
+
+    fun hideLyricsSourcesScreen() {
+        _uiState.update { it.copy(showLyricsSources = false, showAiLyricsTranslation = false) }
+    }
+
+    fun showAiLyricsTranslationScreen() {
+        _uiState.update { it.copy(showAiLyricsTranslation = true) }
+    }
+
+    fun hideAiLyricsTranslationScreen() {
+        _uiState.update { it.copy(showAiLyricsTranslation = false) }
+    }
+
+    fun setAiTranslationProvider(provider: String) {
+        val app = getApplication<Application>()
+        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_PROVIDER, provider)
+        _uiState.update { it.copy(aiTranslationProvider = provider) }
+    }
+
+    fun setAiTranslationApiKey(key: String) {
+        val app = getApplication<Application>()
+        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_API_KEY, key)
+        _uiState.update { it.copy(aiTranslationApiKey = key) }
+    }
+
+    fun setAiTranslationBaseUrl(url: String) {
+        val app = getApplication<Application>()
+        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_BASE_URL, url)
+        _uiState.update { it.copy(aiTranslationBaseUrl = url) }
+    }
+
+    fun setAiTranslationModel(model: String) {
+        val app = getApplication<Application>()
+        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_MODEL, model)
+        _uiState.update { it.copy(aiTranslationModel = model) }
+    }
+
+    fun setAiTranslationTargetLang(lang: String) {
+        val app = getApplication<Application>()
+        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_TARGET_LANG, lang)
+        _uiState.update { it.copy(aiTranslationTargetLang = lang) }
+    }
+
+    fun setAiTranslationCustomPrompt(prompt: String) {
+        val app = getApplication<Application>()
+        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_CUSTOM_PROMPT, prompt)
+        _uiState.update { it.copy(aiTranslationCustomPrompt = prompt) }
+    }
+
+    fun setAiTranslationTranslateMode(mode: String) {
+        val app = getApplication<Application>()
+        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_TRANSLATE_MODE, mode)
+        _uiState.update { it.copy(aiTranslationTranslateMode = mode) }
+    }
+
+    fun setAiTranslationDeeplApiKey(key: String) {
+        val app = getApplication<Application>()
+        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_DEEPL_API_KEY, key)
+        _uiState.update { it.copy(aiTranslationDeeplApiKey = key) }
+    }
+
+    fun setAiTranslationDeeplFormality(formality: String) {
+        val app = getApplication<Application>()
+        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY, formality)
+        _uiState.update { it.copy(aiTranslationDeeplFormality = formality) }
+    }
+
+    fun setExternalLyrics(enabled: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_EXTERNAL_LYRICS, enabled)
+        _uiState.update { it.copy(isExternalLyricsEnabled = enabled) }
+    }
+
+    fun setForceExternalLyrics(enabled: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_FORCE_EXTERNAL_LYRICS, enabled)
+        _uiState.update { it.copy(isForceExternalLyricsEnabled = enabled) }
+    }
+
+    fun setLyricsProviderEnabled(id: String, enabled: Boolean) {
+        val app = getApplication<Application>()
+        when (id) {
+            "local" -> {
+                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_LOCAL, enabled)
+                _uiState.update { it.copy(isLocalLyricsEnabled = enabled) }
+            }
+            "betterlyrics" -> {
+                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS, enabled)
+                _uiState.update { it.copy(isBetterlyricsEnabled = enabled) }
+            }
+            "lrcred" -> {
+                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_LRCRED, enabled)
+                _uiState.update { it.copy(isLrcredEnabled = enabled) }
+            }
+            "lrclib" -> {
+                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_LRCLIB, enabled)
+                _uiState.update { it.copy(isLrclibEnabled = enabled) }
+            }
+            "kugou" -> {
+                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_KUGOU, enabled)
+                _uiState.update { it.copy(isKugouEnabled = enabled) }
+            }
+            "netease" -> {
+                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_NETEASE, enabled)
+                _uiState.update { it.copy(isNeteaseEnabled = enabled) }
+            }
+            "genius" -> {
+                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_GENIUS, enabled)
+                _uiState.update { it.copy(isGeniusEnabled = enabled) }
+            }
+        }
+    }
+
+    fun reorderLyricsProviders(newOrder: List<String>) {
+        val orderStr = newOrder.joinToString(",")
+        PreferencesManager.setString(getApplication(), PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, orderStr)
+        _uiState.update { it.copy(lyricsProvidersOrder = newOrder) }
+    }
+
     fun showSettingsScreen() {
         _uiState.update { it.copy(showSettings = true, settingsSubpage = null) }
     }
@@ -278,6 +431,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun handleBack(): Boolean {
         val current = _uiState.value
+        if (current.showAiLyricsTranslation) {
+            _uiState.update { it.copy(showAiLyricsTranslation = false) }
+            return true
+        }
+        if (current.showLyricsSources) {
+            _uiState.update { it.copy(showLyricsSources = false) }
+            return true
+        }
         if (current.settingsSubpage != null) {
             _uiState.update { it.copy(settingsSubpage = null) }
             return true
@@ -287,6 +448,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             return true
         }
         return false
+    }
+
+    private fun parseLyricsProviders(raw: String): List<String> {
+        val defaultList = listOf("local", "betterlyrics", "lrcred", "lrclib", "kugou", "netease", "genius")
+        val items = raw.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        val result = items.filter { defaultList.contains(it) }.distinct().toMutableList()
+        for (d in defaultList) {
+            if (!result.contains(d)) result.add(d)
+        }
+        return result
     }
 
     fun notifyEffect(effect: DashboardUiEffect) {
@@ -315,5 +486,6 @@ private data class BannerEvaluationData(
     val titleArgs: List<String>,
     val descRes: Int,
     val descArgs: List<String>,
-    val isInjectable: Boolean
+    val isInjectable: Boolean,
+    val canRequestScope: Boolean = false
 )

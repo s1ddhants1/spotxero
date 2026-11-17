@@ -5,7 +5,6 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,7 +29,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.spotxero.BuildConfig
 import app.spotxero.R
@@ -56,13 +54,14 @@ private val CONTRIBUTORS = listOf(
     )
 )
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AboutSettingsPage() {
+fun AboutSettingsPage(
+    modifier: Modifier = Modifier
+) {
     val uriHandler = LocalUriHandler.current
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(horizontal = AppSpacing.md)
             .verticalScroll(rememberScrollState()),
@@ -86,8 +85,7 @@ fun AboutSettingsPage() {
 
             Text(
                 text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
 
@@ -98,7 +96,6 @@ fun AboutSettingsPage() {
                 Text(
                     text = stringResource(R.string.about_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(horizontal = AppSpacing.sm, vertical = AppSpacing.xxs)
                 )
@@ -148,8 +145,7 @@ private fun ContributorItemRow(
             Column {
                 Text(
                     text = contributor.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleSmall
                 )
                 if (contributor.roleRes != null) {
                     Text(
@@ -162,7 +158,7 @@ private fun ContributorItemRow(
         }
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.xxs),
             verticalAlignment = Alignment.CenterVertically
         ) {
             contributor.githubUrl?.let { url ->

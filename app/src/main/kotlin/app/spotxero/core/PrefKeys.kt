@@ -5,16 +5,129 @@ object PrefKeys {
 
     const val KEY_MASTER_ENABLED = "pref_master_enabled"
     const val KEY_ENABLE_PREMIUM = "pref_enable_premium"
+    const val KEY_UNCAPPED_LYRICS = "pref_uncapped_lyrics"
+    const val KEY_EXTERNAL_LYRICS = "pref_external_lyrics"
+    const val KEY_FORCE_EXTERNAL_LYRICS = "pref_force_external_lyrics"
+    const val KEY_LYRICS_TRANSLATIONS = "pref_lyrics_translations"
+    const val KEY_AI_LYRICS_TRANSLATION_ENABLED = "pref_ai_lyrics_translation_enabled"
+    const val KEY_AI_TRANSLATION_PROVIDER = "pref_ai_translation_provider"
+    const val KEY_AI_TRANSLATION_API_KEY = "pref_ai_translation_api_key"
+    const val KEY_AI_TRANSLATION_BASE_URL = "pref_ai_translation_base_url"
+    const val KEY_AI_TRANSLATION_MODEL = "pref_ai_translation_model"
+    const val KEY_AI_TRANSLATION_TARGET_LANG = "pref_ai_translation_target_lang"
+    const val KEY_AI_TRANSLATION_CUSTOM_PROMPT = "pref_ai_translation_custom_prompt"
+    const val KEY_AI_TRANSLATION_DUAL_LINE = "pref_ai_translation_dual_line"
+    const val KEY_AI_TRANSLATION_TRANSLATE_MODE = "pref_ai_translation_translate_mode"
+    const val KEY_AI_TRANSLATION_DEEPL_API_KEY = "pref_ai_translation_deepl_api_key"
+    const val KEY_AI_TRANSLATION_DEEPL_FORMALITY = "pref_ai_translation_deepl_formality"
+
+    const val OpenRouterDefaultBaseUrl = "https://openrouter.ai/api/v1/chat/completions"
+    const val OpenRouterDefaultModel = "google/gemini-2.5-flash-lite"
+
+    const val DEFAULT_AI_SYSTEM_PROMPT = """You are a precise lyrics translation assistant. Your output must ALWAYS be a valid JSON object of the form {"lines": ["line1", "line2", "line3"]}.
+
+CRITICAL RULES:
+1. Output ONLY the JSON object: {"lines": ["line1", "line2", "line3"]}
+2. NO explanations, NO questions, NO additional text
+3. Each input line maps to exactly one entry in the "lines" array
+4. Preserve empty lines as empty strings ""
+5. The "lines" array must contain EXACTLY {lineCount} items
+6. If uncertain, provide best approximation but maintain line count"""
+
+    val LanguageCodeToName = mapOf(
+        "af" to "Afrikaans",
+        "az" to "Azərbaycan",
+        "id" to "Bahasa Indonesia",
+        "ms" to "Bahasa Malaysia",
+        "ca" to "Català",
+        "cs" to "Čeština",
+        "da" to "Dansk",
+        "de" to "Deutsch",
+        "et" to "Eesti",
+        "en-GB" to "English (UK)",
+        "en" to "English (US)",
+        "es" to "Español (España)",
+        "es-419" to "Español (Latinoamérica)",
+        "eu" to "Euskara",
+        "fil" to "Filipino",
+        "fr" to "Français",
+        "fr-CA" to "Français (Canada)",
+        "gl" to "Galego",
+        "hr" to "Hrvatski",
+        "zu" to "IsiZulu",
+        "is" to "Íslenska",
+        "it" to "Italiano",
+        "sw" to "Kiswahili",
+        "lt" to "Lietuvių",
+        "hu" to "Magyar",
+        "nl" to "Nederlands",
+        "no" to "Norsk",
+        "or" to "Odia",
+        "uz" to "O‘zbe",
+        "pl" to "Polski",
+        "pt-PT" to "Português",
+        "pt" to "Português (Brasil)",
+        "ro" to "Română",
+        "sq" to "Shqip",
+        "sk" to "Slovenčina",
+        "sl" to "Slovenščina",
+        "fi" to "Suomi",
+        "sv" to "Svenska",
+        "bo" to "Tibetan བོད་སྐད།",
+        "vi" to "Tiếng Việt",
+        "tr" to "Türkçe",
+        "bg" to "Български",
+        "ky" to "Кыргызча",
+        "kk" to "Қазақ Тілі",
+        "mk" to "Македонски",
+        "mn" to "Монгол",
+        "ru" to "Русский",
+        "sr" to "Српски",
+        "uk" to "Українська",
+        "el" to "Ελληνικά",
+        "hy" to "Հայերեն",
+        "iw" to "עברית",
+        "ur" to "اردو",
+        "ar" to "العربية",
+        "fa" to "فارسی",
+        "ne" to "नेपाली",
+        "mr" to "मराठी",
+        "hi" to "हिन्दी",
+        "bn" to "বাংলা",
+        "pa" to "ਪੰਜਾਬੀ",
+        "gu" to "ગુજરાતી",
+        "ta" to "தமிழ்",
+        "te" to "తెలుగు",
+        "kn" to "ಕನ್ನಡ",
+        "ml" to "മലയാളം",
+        "si" to "සිංහල",
+        "th" to "ภาษาไทย",
+        "lo" to "ລາວ",
+        "my" to "ဗမာ",
+        "ka" to "ქართული",
+        "am" to "አማርኛ",
+        "km" to "ខ្មែរ",
+        "zh-CN" to "中文 (简体)",
+        "zh-TW" to "中文 (繁體)",
+        "zh-HK" to "中文 (香港)",
+        "ja" to "日本語",
+        "ko" to "한국어",
+    )
+    const val KEY_LYRICS_PROVIDERS_ORDER = "pref_lyrics_providers_order"
+    const val KEY_LYRICS_PROVIDER_LOCAL = "pref_lyrics_provider_local"
+    const val KEY_LYRICS_PROVIDER_BETTERLYRICS = "pref_lyrics_provider_betterlyrics"
+    const val KEY_LYRICS_PROVIDER_LRCRED = "pref_lyrics_provider_lrcred"
+    const val KEY_LYRICS_PROVIDER_LRCLIB = "pref_lyrics_provider_lrclib"
+    const val KEY_LYRICS_PROVIDER_KUGOU = "pref_lyrics_provider_kugou"
+    const val KEY_LYRICS_PROVIDER_NETEASE = "pref_lyrics_provider_netease"
+    const val KEY_LYRICS_PROVIDER_GENIUS = "pref_lyrics_provider_genius"
+    const val KEY_FORCE_LOCAL_PLAYBACK = "pref_force_local_playback"
     const val KEY_CLEAN_SHARING = "pref_clean_sharing"
     const val KEY_SPOTIFY_AMOLED = "pref_spotify_amoled"
+    const val KEY_SPOTIFY_MONET = "pref_spotify_monet"
+    const val KEY_SPOTIFY_ROUNDY_UI = "pref_spotify_roundy_ui"
     const val KEY_HIDE_PODCASTS = "pref_hide_podcasts"
     const val KEY_HIDE_AUDIOBOOKS = "pref_hide_audiobooks"
     const val KEY_SHUFFLE_STATE = "pref_user_shuffle_state"
     const val KEY_SMART_SHUFFLE_IN_MODES = "pref_smart_shuffle_in_modes"
-    const val KEY_FORCE_LOCAL_PLAYBACK = "pref_force_local_playback"
-    const val KEY_BLOCK_PENDRAGON = "pref_block_pendragon"
-    const val KEY_FILTER_CONTEXT_MENU = "pref_filter_context_menu"
-    const val KEY_UNCAPPED_LYRICS = "pref_uncapped_lyrics"
-    const val KEY_SPOTIFY_MONET = "pref_spotify_monet"
-    const val KEY_SPOTIFY_ROUNDY_UI = "pref_spotify_roundy_ui"
 }

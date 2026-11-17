@@ -62,6 +62,9 @@ object NetworkAdBlockHook {
     private const val HERMES_CAPPING_URI = "hm://common-capping/update"
 
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
         hookNativeHttpConnection(module)
         hookOkHttpRealCall(module)
     }

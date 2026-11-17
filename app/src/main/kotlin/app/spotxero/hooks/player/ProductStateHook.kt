@@ -107,6 +107,9 @@ object ProductStateHook {
     )
 
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
         installMapSeam(module)
         installAttributeSeam(module)
         installUcsAttributeSeam(module)

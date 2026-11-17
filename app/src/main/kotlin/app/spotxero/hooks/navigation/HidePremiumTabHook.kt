@@ -10,6 +10,10 @@ import java.lang.reflect.Method
 object HidePremiumTabHook {
 
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
+
         val method = DexKitResolver.get<Method>(DexKitResolver.KEY_PREMIUM_TAB_FLAG)
         if (method == null ||
             method.parameterCount != 0 ||

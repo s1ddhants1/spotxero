@@ -86,16 +86,28 @@ object CleanSharingHook {
     }
 
     private fun sanitizeInboundIntent(intent: Intent?) {
-        val dataString = intent?.dataString ?: return
-        val sanitized = SharingLinksUtil.sanitizeUrl(dataString) ?: return
-        if (sanitized != dataString) {
-            runCatching {
-                intent.data = Uri.parse(sanitized)
+        if (intent == null) return
+        val dataString = intent.dataString
+        if (dataString != null) {
+            val sanitized = SharingLinksUtil.sanitizeUrl(dataString)
+            if (sanitized != null && sanitized != dataString) {
+                runCatching {
+                    intent.data = Uri.parse(sanitized)
+                }
+            }
+        }
+        val extraText = runCatching { intent.getStringExtra(Intent.EXTRA_TEXT) }.getOrNull()
+        if (extraText != null) {
+            val sanitizedText = SharingLinksUtil.sanitizeUrl(extraText)
+            if (sanitizedText != null && sanitizedText != extraText) {
+                runCatching {
+                    intent.putExtra(Intent.EXTRA_TEXT, sanitizedText)
+                }
             }
         }
     }
 
     private fun carriesUrl(method: Method): Boolean =
         method.returnType == String::class.java ||
-            method.returnType.declaredFields.any { it.type == Any::class.java }
+            method.returnType.declaredFields.any { it.type == Any::class.java || it.type == String::class.java }
 }

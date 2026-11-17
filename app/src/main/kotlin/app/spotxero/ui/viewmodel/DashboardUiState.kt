@@ -2,6 +2,7 @@ package app.spotxero.ui.viewmodel
 
 import androidx.compose.runtime.Immutable
 import app.spotxero.R
+import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
 
 enum class SettingsSubpage {
@@ -22,6 +23,7 @@ data class DashboardUiState(
     val isPremiumEnabled: Boolean = true,
     val isFrameworkConnected: Boolean = false,
     val isInjectable: Boolean = false,
+    val canRequestScope: Boolean = false,
     val titleRes: Int = R.string.framework_inactive_title,
     val titleArgs: List<String> = emptyList(),
     val descRes: Int = R.string.framework_inactive_desc,
@@ -33,6 +35,29 @@ data class DashboardUiState(
     val isAppAmoledEnabled: Boolean = false,
     val isLauncherIconHidden: Boolean = false,
     val isCleanSharingEnabled: Boolean = true,
+    val isLyricsEnabled: Boolean = true,
+    val showLyricsSources: Boolean = false,
+    val showAiLyricsTranslation: Boolean = false,
+    val isExternalLyricsEnabled: Boolean = false,
+    val isForceExternalLyricsEnabled: Boolean = false,
+    val aiTranslationProvider: String = "OpenRouter",
+    val aiTranslationApiKey: String = "",
+    val aiTranslationBaseUrl: String = PrefKeys.OpenRouterDefaultBaseUrl,
+    val aiTranslationModel: String = "google/gemini-2.5-flash-lite",
+    val aiTranslationTargetLang: String = "en",
+    val aiTranslationCustomPrompt: String = "",
+    val aiTranslationTranslateMode: String = "Literal",
+    val aiTranslationDeeplApiKey: String = "",
+    val aiTranslationDeeplFormality: String = "default",
+    val lyricsProvidersOrder: List<String> = listOf("local", "betterlyrics", "lrcred", "lrclib", "kugou", "netease", "genius"),
+    val isLocalLyricsEnabled: Boolean = true,
+    val isBetterlyricsEnabled: Boolean = true,
+    val isLrcredEnabled: Boolean = true,
+    val isLrclibEnabled: Boolean = true,
+    val isKugouEnabled: Boolean = true,
+    val isNeteaseEnabled: Boolean = true,
+    val isGeniusEnabled: Boolean = true,
+    val isForceLocalPlaybackEnabled: Boolean = true,
     val isSpotifyAmoledEnabled: Boolean = false,
     val isSpotifyMonetEnabled: Boolean = false,
     val isSpotifyRoundyUiEnabled: Boolean = false,

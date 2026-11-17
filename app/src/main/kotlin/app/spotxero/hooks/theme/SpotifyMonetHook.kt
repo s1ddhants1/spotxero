@@ -74,6 +74,9 @@ object SpotifyMonetHook {
     }
 
     fun install(module: XposedModule) {
+        if (!isMonetEnabled()) {
+            return
+        }
         hookPorterDuff(module)
         hookColorStateList(module)
         hookColorParse(module)
