@@ -292,14 +292,20 @@ object NeteaseProvider : LyricsProvider {
     override fun fetchLyrics(trackName: String, artistName: String, albumName: String?, durationSec: Long?): ParsedLyrics? {
         return try {
             val query = "$trackName $artistName".trim()
-            val searchUrl = "https://music.163.com/api/search/get/web?csrf_token=&hlpretag=&hlposttag=&s=" +
-                    URLEncoder.encode(query, "UTF-8") + "&type=1&offset=0&total=true&limit=1"
+            val searchUrl = "https://music.163.com/api/cloudsearch/pc?s=" +
+                    URLEncoder.encode(query, "UTF-8") + "&type=1&offset=0&limit=1"
 
-            val searchHeaders = mapOf("Cookie" to "os=pc")
+            val searchHeaders = mapOf("Cookie" to "os=pc", "User-Agent" to "Mozilla/5.0")
             val searchResp = httpGet(searchUrl, searchHeaders) ?: return null
             val searchJson = JSONObject(searchResp)
             val songs = searchJson.optJSONObject("result")?.optJSONArray("songs") ?: return null
-            if (songs.length() == 0) return null
+            if (songs.length() == 0) {
+                val simplified = removeExtraInfo(trackName)
+                if (simplified != trackName && simplified.isNotBlank()) {
+                    return fetchLyrics(simplified, artistName, albumName, durationSec)
+                }
+                return null
+            }
 
             val songId = songs.getJSONObject(0).optLong("id")
             if (songId <= 0) return null

@@ -38,7 +38,9 @@ object LyricsManager {
     var currentTrackId: String? = null
         private set
 
-    private val prefetchExecutor = Executors.newSingleThreadExecutor()
+    private val prefetchExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "LyricsPrefetch").apply { isDaemon = true }
+    }
 
     private val lyricsCache: MutableMap<String, String> = Collections.synchronizedMap(
         object : LinkedHashMap<String, String>(MAX_CACHE_SIZE, 0.75f, true) {
