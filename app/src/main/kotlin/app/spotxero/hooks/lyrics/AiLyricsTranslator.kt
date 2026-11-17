@@ -1,5 +1,6 @@
 package app.spotxero.hooks.lyrics
 
+import android.net.Uri
 import android.util.Log
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -12,6 +13,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 
+enum class AiProtocol {
+    OPENAI,
+    ANTHROPIC,
+    GEMINI
+}
+
 object AiLyricsTranslator {
 
     private const val TAG = "SpotXero.AiLyrics"
@@ -22,8 +29,15 @@ object AiLyricsTranslator {
         if (lyrics.lines.isEmpty()) return lyrics
 
         val provider = PreferencesManager.aiTranslationProvider.ifBlank { "OpenRouter" }
-        val apiKey = if (provider == "DeepL") PreferencesManager.aiTranslationDeeplApiKey else PreferencesManager.aiTranslationApiKey
-        if (apiKey.isBlank() && provider != "Custom") return lyrics
+        val apiKey = when (provider) {
+            "DeepL" -> PreferencesManager.aiTranslationDeeplApiKey
+            "DeepL (keyless)", "Google Translate" -> ""
+            else -> PreferencesManager.aiTranslationApiKey
+        }
+
+        if (apiKey.isBlank() && provider !in listOf("Custom", "DeepL (keyless)", "Google Translate")) {
+            return lyrics
+        }
 
         val targetLang = PreferencesManager.aiTranslationTargetLang.ifBlank { "en" }
         val mode = PreferencesManager.aiTranslationTranslateMode.ifBlank { "Literal" }
@@ -51,7 +65,7 @@ object AiLyricsTranslator {
                 customSystemPrompt = PreferencesManager.aiTranslationCustomPrompt
             ).getOrNull()
         } catch (t: Throwable) {
-            Log.w(TAG, "AI lyrics translation failed: ${t.message}")
+            Log.w(TAG, "AI lyrics translation failed: ${t.message}", t)
             null
         }
 
@@ -81,69 +95,360 @@ object AiLyricsTranslator {
             return Result.failure(Exception("Input text is empty"))
         }
 
-        if (provider == "DeepL") {
-            return translateViaDeepL(lines, targetLanguage, apiKey, deeplFormality)
+        return when {
+            provider.equals("DeepL", ignoreCase = true) -> {
+                translateViaDeepL(lines, targetLanguage, apiKey, deeplFormality)
+            }
+            provider.equals("DeepL (keyless)", ignoreCase = true) -> {
+                translateViaDeepLKeyless(lines, targetLanguage)
+            }
+            provider.equals("Google Translate", ignoreCase = true) -> {
+                translateViaGoogle(lines, targetLanguage, mode)
+            }
+            else -> {
+                translateViaAi(
+                    lines = lines,
+                    targetLanguage = targetLanguage,
+                    apiKey = apiKey,
+                    baseUrl = baseUrl,
+                    model = model,
+                    mode = mode,
+                    provider = provider,
+                    customSystemPrompt = customSystemPrompt,
+                    maxRetries = maxRetries
+                )
+            }
+        }
+    }
+
+    fun protocolFor(provider: String, baseUrl: String, model: String): AiProtocol {
+        return when {
+            provider.equals("Claude", ignoreCase = true) ||
+                provider.equals("Anthropic", ignoreCase = true) ||
+                provider.equals("Anthropic-compatible", ignoreCase = true) ||
+                baseUrl.contains("anthropic.com") -> AiProtocol.ANTHROPIC
+
+            provider.equals("Gemini", ignoreCase = true) ||
+                provider.equals("Gemini-compatible", ignoreCase = true) ||
+                (baseUrl.contains("generativelanguage.googleapis.com") && !baseUrl.contains("/openai/")) -> AiProtocol.GEMINI
+
+            else -> AiProtocol.OPENAI
+        }
+    }
+
+    private fun translateViaAi(
+        lines: List<String>,
+        targetLanguage: String,
+        apiKey: String,
+        baseUrl: String,
+        model: String,
+        mode: String,
+        provider: String,
+        customSystemPrompt: String,
+        maxRetries: Int
+    ): Result<List<String>> {
+        val lineCount = lines.size
+        val effectiveSystemPrompt = customSystemPrompt.takeIf { it.isNotBlank() }
+            ?.replace("{lineCount}", lineCount.toString())
+            ?: defaultLyricsSystemPrompt(lineCount)
+
+        val targetLangName = languageName(targetLanguage)
+        val inputJsonArray = JSONArray()
+        lines.forEach { inputJsonArray.put(it) }
+        val inputJson = inputJsonArray.toString()
+
+        val userPrompt = when (mode) {
+            "Transcribed" -> {
+                "Transliterate the `lines` JSON array phonetically into $targetLangName script. Do not translate meaning. Return exactly $lineCount output lines.\n\n{\"lines\":$inputJson}"
+            }
+            "Romanized" -> {
+                "Romanize the `lines` JSON array into simple ASCII Latin script. Do not translate meaning. Return exactly $lineCount output lines.\n\n{\"lines\":$inputJson}"
+            }
+            else -> {
+                "Translate the `lines` JSON array to $targetLangName for synced song lyrics. Keep line order, repeated hooks, names, punctuation, and empty lines. Return exactly $lineCount output lines.\n\n{\"lines\":$inputJson}"
+            }
         }
 
-        val effectiveBaseUrl = when {
-            baseUrl.isNotBlank() -> baseUrl
-            provider == "OpenAI" -> "https://api.openai.com/v1/chat/completions"
-            provider == "Claude" -> "https://api.anthropic.com/v1/messages"
-            provider == "Gemini" -> "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-            provider == "Perplexity" -> "https://api.perplexity.ai/chat/completions"
-            provider == "XAi" -> "https://api.x.ai/v1/chat/completions"
-            provider == "Mistral" -> "https://api.mistral.ai/v1/chat/completions"
-            provider == "Inception" -> "https://api.inceptionlabs.ai/v1/chat/completions"
-            else -> PrefKeys.OpenRouterDefaultBaseUrl
-        }
+        val schema = lyricsLinesSchema()
+        val maxTokens = (lineCount * 192 + 2048).coerceAtLeast(768)
+        val protocol = protocolFor(provider, baseUrl, model)
+
+        var lastException: Throwable? = null
 
         repeat(maxRetries) { attempt ->
             try {
-                val body = buildTranslationRequest(
-                    lines = lines,
-                    targetLanguage = targetLanguage,
-                    model = model,
-                    mode = mode,
-                    customSystemPrompt = customSystemPrompt,
-                    baseUrl = effectiveBaseUrl
-                )
-
-                val headers = mutableMapOf(
-                    "Content-Type" to "application/json",
-                    "HTTP-Referer" to "https://github.com/MetrolistGroup/Metrolist",
-                    "X-Title" to "Metrolist"
-                )
-                if (apiKey.isNotBlank()) {
-                    headers["Authorization"] = "Bearer ${apiKey.trim()}"
+                val completionResult = when (protocol) {
+                    AiProtocol.GEMINI -> {
+                        requestGeminiCompatible(
+                            apiKey = apiKey,
+                            baseUrl = baseUrl,
+                            model = model,
+                            systemPrompt = effectiveSystemPrompt,
+                            userPrompt = userPrompt,
+                            schema = schema,
+                            maxTokens = maxTokens
+                        )
+                    }
+                    AiProtocol.ANTHROPIC -> {
+                        requestAnthropicCompatible(
+                            apiKey = apiKey,
+                            baseUrl = baseUrl,
+                            model = model,
+                            systemPrompt = effectiveSystemPrompt,
+                            userPrompt = userPrompt,
+                            schema = schema,
+                            maxTokens = maxTokens
+                        )
+                    }
+                    AiProtocol.OPENAI -> {
+                        requestOpenAiWithFallback(
+                            provider = provider,
+                            apiKey = apiKey,
+                            baseUrl = baseUrl,
+                            model = model,
+                            systemPrompt = effectiveSystemPrompt,
+                            userPrompt = userPrompt,
+                            schema = schema,
+                            maxTokens = maxTokens
+                        )
+                    }
                 }
 
-                val endpoint = if (!effectiveBaseUrl.contains("/chat/completions") && !effectiveBaseUrl.endsWith("/messages")) {
-                    "${effectiveBaseUrl.trimEnd('/')}/chat/completions"
+                if (completionResult.isSuccess) {
+                    val content = completionResult.getOrThrow()
+                    val parsed = parseJsonLinePayload(content, lineCount)
+                    if (parsed != null) {
+                        val aligned = if (linesAreAligned(lines, parsed)) {
+                            parsed
+                        } else {
+                            // Pad or truncate to match exact input line count
+                            parsed.take(lineCount) + List((lineCount - parsed.size).coerceAtLeast(0)) { "" }
+                        }
+                        return Result.success(aligned)
+                    } else {
+                        throw Exception("AI response did not contain aligned lyric lines (length mismatch or unparseable JSON)")
+                    }
                 } else {
-                    effectiveBaseUrl
+                    lastException = completionResult.exceptionOrNull()
                 }
-
-                val responseBody = httpPost(endpoint, body.toString(), headers)
-                    ?: throw Exception("Empty response from AI server")
-
-                val respJson = JSONObject(responseBody)
-                if (respJson.has("error")) {
-                    val errMsg = respJson.optJSONObject("error")?.optString("message") ?: "API Error"
-                    return Result.failure(Exception("Translation failed: $errMsg"))
-                }
-
-                val choices = respJson.optJSONArray("choices")
-                val content = choices?.optJSONObject(0)?.optJSONObject("message")?.optString("content").orEmpty()
-                return parseTranslationContent(content, lines.size)
             } catch (e: Exception) {
-                if (attempt == maxRetries - 1) return Result.failure(e)
+                lastException = e
+            }
+
+            if (attempt < maxRetries - 1) {
                 try {
                     Thread.sleep(1000L * (attempt + 1))
                 } catch (_: InterruptedException) {}
             }
         }
 
-        return Result.failure(Exception("Max retries exceeded"))
+        return Result.failure(lastException ?: Exception("AI translation failed after $maxRetries retries"))
+    }
+
+    private fun requestGeminiCompatible(
+        apiKey: String,
+        baseUrl: String,
+        model: String,
+        systemPrompt: String,
+        userPrompt: String,
+        schema: JSONObject,
+        maxTokens: Int
+    ): Result<String> {
+        val effectiveModel = model.ifBlank { PrefKeys.GeminiDefaultModel }
+        val resolvedBase = when {
+            baseUrl.isBlank() ||
+                baseUrl == "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" ||
+                baseUrl == PrefKeys.LEGACY_GEMINI_ENDPOINT -> {
+                PrefKeys.GeminiDefaultEndpoint
+            }
+            else -> baseUrl
+        }
+
+        val url = when {
+            resolvedBase.contains("{model}") -> {
+                resolvedBase.replace("{model}", effectiveModel)
+            }
+            model.isNotBlank() -> {
+                resolvedBase.replace(Regex("/models/[^/:]+(:generateContent)")) { match ->
+                    "/models/$effectiveModel${match.groupValues[1]}"
+                }
+            }
+            else -> resolvedBase
+        }
+
+        val body = JSONObject().apply {
+            val contents = JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("parts", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("text", "$systemPrompt\n\n$userPrompt")
+                        })
+                    })
+                })
+            }
+            put("contents", contents)
+            put("generationConfig", JSONObject().apply {
+                put("temperature", 0.1)
+                put("maxOutputTokens", maxTokens)
+                put("responseMimeType", "application/json")
+                put("responseSchema", geminiSchema(schema))
+            })
+        }
+
+        val headers = mutableMapOf("Content-Type" to "application/json")
+        val finalUrl = if (url.contains("key=")) {
+            url
+        } else {
+            headers["x-goog-api-key"] = apiKey.trim()
+            url
+        }
+
+        val resp = executeHttpPost(finalUrl, body.toString(), headers)
+        if (resp.statusCode in 200..299) {
+            val extracted = extractGeminiContent(resp.body)
+            if (extracted != null) return Result.success(extracted)
+            return Result.failure(Exception("Gemini returned empty content: ${resp.body.take(200)}"))
+        }
+        return Result.failure(Exception("Gemini HTTP ${resp.statusCode}: ${resp.body.take(200)}"))
+    }
+
+    private fun requestAnthropicCompatible(
+        apiKey: String,
+        baseUrl: String,
+        model: String,
+        systemPrompt: String,
+        userPrompt: String,
+        schema: JSONObject,
+        maxTokens: Int
+    ): Result<String> {
+        val effectiveModel = model.ifBlank { PrefKeys.AnthropicDefaultModel }
+        val endpoint = baseUrl.ifBlank { PrefKeys.AnthropicDefaultEndpoint }
+        val toolName = "return_lyrics_translation"
+
+        val body = JSONObject().apply {
+            put("model", effectiveModel)
+            put("max_tokens", maxTokens)
+            put("temperature", 0.1)
+            put("system", systemPrompt)
+            put("messages", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", userPrompt)
+                })
+            })
+            put("tools", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("name", toolName)
+                    put("description", "Return the structured lyrics result.")
+                    put("input_schema", schema)
+                })
+            })
+            put("tool_choice", JSONObject().apply {
+                put("type", "tool")
+                put("name", toolName)
+            })
+        }
+
+        val headers = mapOf(
+            "Content-Type" to "application/json",
+            "x-api-key" to apiKey.trim(),
+            "anthropic-version" to "2023-06-01"
+        )
+
+        val resp = executeHttpPost(endpoint, body.toString(), headers)
+        if (resp.statusCode in 200..299) {
+            val extracted = extractAnthropicContent(resp.body)
+            if (extracted != null) return Result.success(extracted)
+            return Result.failure(Exception("Anthropic returned empty content: ${resp.body.take(200)}"))
+        }
+        return Result.failure(Exception("Anthropic HTTP ${resp.statusCode}: ${resp.body.take(200)}"))
+    }
+
+    private fun requestOpenAiWithFallback(
+        provider: String,
+        apiKey: String,
+        baseUrl: String,
+        model: String,
+        systemPrompt: String,
+        userPrompt: String,
+        schema: JSONObject,
+        maxTokens: Int
+    ): Result<String> {
+        val endpoint = baseUrl.ifBlank { PrefKeys.OpenRouterDefaultBaseUrl }
+        val effectiveModel = model.ifBlank { PrefKeys.OpenRouterDefaultModel }
+        val isOpenRouter = provider.equals("OpenRouter", ignoreCase = true) || endpoint.contains("openrouter.ai")
+
+        fun buildBody(responseFormat: JSONObject?, includeReasoning: Boolean = true): JSONObject {
+            return JSONObject().apply {
+                if (effectiveModel.isNotBlank()) put("model", effectiveModel)
+                val messages = JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "system")
+                        put("content", systemPrompt)
+                    })
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("content", userPrompt)
+                    })
+                }
+                put("messages", messages)
+                put("temperature", 0.1)
+                put("max_tokens", maxTokens)
+                if (includeReasoning && isOpenRouter) {
+                    put("reasoning", JSONObject().apply {
+                        put("enabled", false)
+                        put("exclude", true)
+                    })
+                }
+                if (responseFormat != null) {
+                    put("response_format", responseFormat)
+                }
+            }
+        }
+
+        val jsonSchemaFormat = JSONObject().apply {
+            put("type", "json_schema")
+            put("json_schema", JSONObject().apply {
+                put("name", "lyrics_translation")
+                put("strict", true)
+                put("schema", schema)
+            })
+        }
+        val jsonObjectFormat = JSONObject().apply {
+            put("type", "json_object")
+        }
+
+        val bodies = listOf(
+            buildBody(jsonSchemaFormat),
+            buildBody(jsonObjectFormat),
+            buildBody(null),
+            buildBody(null, includeReasoning = false)
+        )
+
+        val headers = mutableMapOf(
+            "Content-Type" to "application/json",
+            "HTTP-Referer" to "https://github.com/MetrolistGroup/Metrolist",
+            "X-Title" to "Metrolist"
+        )
+        if (apiKey.isNotBlank()) {
+            headers["Authorization"] = "Bearer ${apiKey.trim()}"
+        }
+
+        for ((index, body) in bodies.withIndex()) {
+            val resp = executeHttpPost(endpoint, body.toString(), headers)
+            if (resp.statusCode in 200..299) {
+                val extracted = extractOpenAiContent(resp.body)
+                if (extracted != null) return Result.success(extracted)
+            } else if (index < bodies.lastIndex && (resp.statusCode == 400 || resp.statusCode == 422)) {
+                Log.d(TAG, "OpenAI structured format attempt $index failed with HTTP ${resp.statusCode}, trying fallback format")
+                continue
+            } else {
+                return Result.failure(Exception("OpenAI HTTP ${resp.statusCode}: ${resp.body.take(200)}"))
+            }
+        }
+
+        return Result.failure(Exception("AI request failed across all structured format fallbacks"))
     }
 
     private fun translateViaDeepL(
@@ -159,11 +464,18 @@ object AiLyricsTranslator {
                 "https://api.deepl.com/v2/translate"
             }
 
+            val targetCode = if (targetLanguage.substringBefore('-').equals("zh", ignoreCase = true)) {
+                "ZH"
+            } else {
+                deepLTargetLanguage(targetLanguage)
+            }
+
             val root = JSONObject().apply {
                 val textArr = JSONArray()
                 lines.forEach { textArr.put(it) }
                 put("text", textArr)
-                put("target_lang", targetLanguage.uppercase().take(2))
+                put("target_lang", targetCode)
+                put("preserve_formatting", true)
                 if (formality in listOf("more", "less")) {
                     put("formality", if (formality == "more") "prefer_more" else "prefer_less")
                 }
@@ -174,12 +486,14 @@ object AiLyricsTranslator {
                 "Authorization" to "DeepL-Auth-Key ${apiKey.trim()}"
             )
 
-            val responseBody = httpPost(endpoint, root.toString(), headers)
-                ?: throw Exception("Empty response from DeepL")
+            val resp = executeHttpPost(endpoint, root.toString(), headers)
+            if (resp.statusCode !in 200..299) {
+                return Result.failure(Exception("DeepL HTTP ${resp.statusCode}: ${resp.body.take(200)}"))
+            }
 
-            val json = JSONObject(responseBody)
+            val json = JSONObject(resp.body)
             val translations = json.optJSONArray("translations")
-                ?: throw Exception("No translations returned by DeepL")
+                ?: return Result.failure(Exception("No translations returned by DeepL"))
 
             val result = mutableListOf<String>()
             for (i in 0 until translations.length()) {
@@ -191,164 +505,395 @@ object AiLyricsTranslator {
         }
     }
 
-    private fun buildTranslationRequest(
+    private fun translateViaDeepLKeyless(
+        lines: List<String>,
+        targetLanguage: String
+    ): Result<List<String>> {
+        return try {
+            val nonBlank = lines.withIndex().filter { it.value.isNotBlank() }
+            if (nonBlank.isEmpty()) return Result.success(lines)
+
+            val translated = MutableList(lines.size) { "" }
+            val batchSize = 30
+            for (i in 0 until nonBlank.size step batchSize) {
+                val batchEnd = (i + batchSize).coerceAtMost(nonBlank.size)
+                val batch = nonBlank.subList(i, batchEnd)
+                val textArr = JSONArray()
+                batch.forEach { textArr.put(it.value) }
+
+                val root = JSONObject().apply {
+                    put("text", textArr)
+                    put("target_lang", deepLTargetLanguage(targetLanguage))
+                    put("usage_type", "translate")
+                    put("app_information", JSONObject().apply {
+                        put("app_version", "1.59.0")
+                        put("app_build", "10059000")
+                        put("app_name", "chromeExtension")
+                        put("os", "macOS")
+                        put("os_version", "10.15.7")
+                        put("device", "MacIntel")
+                        put("instance_id", "00000000-0000-0000-0000-000000000000")
+                    })
+                }
+
+                val headers = mapOf(
+                    "Origin" to "chrome-extension://cofdbpoegempjloogbagkncekinflcnj",
+                    "Authorization" to "None",
+                    "Content-Type" to "application/json"
+                )
+
+                val resp = executeHttpPost("https://oneshot-free.www.deepl.com/v1/translate", root.toString(), headers)
+                if (resp.statusCode !in 200..299) {
+                    throw Exception("DeepL keyless HTTP ${resp.statusCode}: ${resp.body.take(200)}")
+                }
+
+                val json = JSONObject(resp.body)
+                val translations = json.optJSONArray("translations")
+                    ?: throw Exception("DeepL keyless returned no translations")
+
+                if (translations.length() != batch.size) {
+                    throw Exception("DeepL returned ${translations.length()} lines, expected ${batch.size}")
+                }
+
+                batch.forEachIndexed { index, original ->
+                    translated[original.index] = translations.getJSONObject(index).optString("text", "").trim()
+                }
+            }
+            Result.success(translated)
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    private fun translateViaGoogle(
         lines: List<String>,
         targetLanguage: String,
-        model: String,
-        mode: String,
-        customSystemPrompt: String,
-        baseUrl: String
-    ): JSONObject {
-        val lineCount = lines.size
-        val text = lines.joinToString("\n")
-
-        val systemPrompt = customSystemPrompt.takeIf { it.isNotBlank() }
-            ?.replace("{lineCount}", lineCount.toString())
-            ?: PrefKeys.DEFAULT_AI_SYSTEM_PROMPT.replace("{lineCount}", lineCount.toString())
-
-        val userPrompt = when (mode) {
-            "Romanized" -> {
-                """Romanize/transliterate the following $lineCount lines into simple Latin script using ONLY basic English letters (a-z, A-Z).
-
-CRITICAL REQUIREMENTS:
-- Use ONLY simple ASCII characters (a-z, A-Z, 0-9, basic punctuation)
-- NO special characters like ā, ī, ū, ñ, ç, etc.
-- NO diacritics or accent marks
-- If text is already in Latin script, return it UNCHANGED
-- For non-Latin scripts (Hindi, Chinese, Japanese, Korean, Cyrillic, etc.), provide simple romanization
-- DO NOT translate meaning, only convert script to simple English letters
-- Keep all punctuation and formatting
-- Preserve line-by-line structure exactly
-
-Input ($lineCount lines):
-$text
-
-Output MUST be a JSON object {"lines": [...]} with EXACTLY $lineCount strings using ONLY simple ASCII characters."""
-            }
-
-            "Transcribed" -> {
-                """Transcribe/transliterate the following $lineCount lines phonetically into $targetLanguage script.
-
-CRITICAL REQUIREMENTS:
-- Convert the SOUND/PRONUNCIATION of the original text into $targetLanguage script
-- DO NOT translate the meaning - only represent how the original words SOUND
-- Use the native script of $targetLanguage (e.g., Devanagari for Hindi, Hangul for Korean, etc.)
-- Preserve the original pronunciation as closely as possible in the target script
-- Keep punctuation and formatting
-- Preserve line-by-line structure exactly
-- If text is already in $targetLanguage script, return it UNCHANGED
-
-Input ($lineCount lines):
-$text
-
-Output MUST be a JSON object {"lines": [...]} with EXACTLY $lineCount strings in $targetLanguage script."""
-            }
-
-            else -> {
-                """Translate the following $lineCount lines to $targetLanguage.
-
-IMPORTANT:
-- Provide natural, accurate translation
-- Maintain poetic flow and meaning
-- Keep punctuation appropriate for target language
-- Preserve line-by-line structure exactly
-- For song lyrics, prioritize singability
-
-Input ($lineCount lines):
-$text
-
-Output MUST be a JSON object {"lines": [...]} with EXACTLY $lineCount strings."""
-            }
-        }
-
-        val root = JSONObject().apply {
-            val messages = JSONArray().apply {
-                put(JSONObject().apply {
-                    put("role", "system")
-                    put("content", systemPrompt)
-                })
-                put(JSONObject().apply {
-                    put("role", "user")
-                    put("content", userPrompt)
-                })
-            }
-            put("messages", messages)
-
-            if (model.isNotBlank()) {
-                put("model", model)
-            }
-
-            if (!baseUrl.contains("api.openai.com")) {
-                put("temperature", 0.3)
-                put("max_tokens", lineCount * 100)
-            }
-
-            put("response_format", JSONObject().apply {
-                put("type", "json_object")
-            })
-
-            if (baseUrl.contains("openrouter.ai")) {
-                put("provider", JSONObject().apply {
-                    put("require_parameters", true)
-                })
-            }
-        }
-
-        return root
-    }
-
-    private fun parseTranslationContent(content: String, expectedLineCount: Int): Result<List<String>> {
-        val cleaned = content.replace("```json", "").replace("```", "").trim()
-        val bracketed = cleaned
-            .substringAfter('[', "")
-            .substringBeforeLast(']', "")
-            .takeIf { it.isNotEmpty() }
-            ?.let { "[$it]" }
-
-        val candidates = listOfNotNull(content.trim(), cleaned, bracketed)
-        for (candidate in candidates) {
-            val lines = extractLinesFromJson(candidate)
-            if (lines != null) {
-                val padded = lines.take(expectedLineCount) + List((expectedLineCount - lines.size).coerceAtLeast(0)) { "" }
-                return Result.success(padded)
-            }
-        }
-
-        val fallbackLines = cleaned.lines()
-            .filter { it.isNotBlank() }
-            .map { it.trim().removeSurrounding("\"").removeSurrounding("'") }
-
-        if (fallbackLines.isNotEmpty()) {
-            val padded = fallbackLines.take(expectedLineCount) + List((expectedLineCount - fallbackLines.size).coerceAtLeast(0)) { "" }
-            return Result.success(padded)
-        }
-
-        return Result.failure(Exception("Failed to parse translation JSON"))
-    }
-
-    private fun extractLinesFromJson(jsonStr: String): List<String>? {
+        mode: String
+    ): Result<List<String>> {
         return try {
-            if (jsonStr.startsWith("{")) {
-                val obj = JSONObject(jsonStr)
-                val linesArray = obj.optJSONArray("lines")
-                if (linesArray != null) {
-                    val result = mutableListOf<String>()
-                    for (i in 0 until linesArray.length()) {
-                        result.add(linesArray.optString(i))
-                    }
-                    return result
+            val nonBlank = lines.withIndex().filter { it.value.isNotBlank() }
+            if (nonBlank.isEmpty()) return Result.success(lines)
+
+            val translated = MutableList(lines.size) { "" }
+            val batchSize = 40
+            for (i in 0 until nonBlank.size step batchSize) {
+                val batchEnd = (i + batchSize).coerceAtMost(nonBlank.size)
+                val batch = nonBlank.subList(i, batchEnd)
+                val markers = List((batch.size - 1).coerceAtLeast(0)) { "__METROLIST_LINE_${it + 1}__" }
+                val input = batch.mapIndexed { index, item ->
+                    item.value + markers.getOrNull(index)?.let { "\n$it\n" }.orEmpty()
+                }.joinToString("")
+
+                val (transText, romText) = translateGoogleText(input, targetLanguage)
+                val splitTrans = splitByMarkers(transText, markers)
+                    ?: batch.map { translateGoogleText(it.value, targetLanguage).first }
+
+                val chosen = if (mode == "Romanized") {
+                    val splitRom = romText?.let { splitByMarkers(it, markers) }
+                    splitRom?.takeIf { it.size == batch.size } ?: splitTrans
+                } else {
+                    splitTrans
                 }
-            } else if (jsonStr.startsWith("[")) {
-                val array = JSONArray(jsonStr)
-                val result = mutableListOf<String>()
-                for (i in 0 until array.length()) {
-                    result.add(array.optString(i))
+
+                batch.forEachIndexed { index, original ->
+                    translated[original.index] = chosen.getOrNull(index)?.trim().orEmpty()
                 }
-                return result
+            }
+            Result.success(translated)
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    private fun translateGoogleText(text: String, targetLanguage: String): Pair<String, String?> {
+        val encoded = Uri.encode(text)
+        val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=$targetLanguage&dt=t&dt=rm&q=$encoded"
+        val responseBody = httpGet(url, emptyMap()) ?: throw Exception("Empty response from Google Translate")
+        val root = JSONArray(responseBody)
+        val firstArr = root.optJSONArray(0) ?: return Pair("", null)
+        val translated = StringBuilder()
+        var romanized: String? = null
+        for (i in 0 until firstArr.length()) {
+            val segment = firstArr.optJSONArray(i) ?: continue
+            val part = segment.optString(0)
+            if (!part.isNullOrEmpty() && part != "null") {
+                translated.append(part)
+            }
+            if (segment.length() >= 3 && segment.isNull(0)) {
+                val candidate = segment.optString(2).takeIf { it.isNotBlank() && it != "null" }
+                    ?: segment.optString(3).takeIf { it.isNotBlank() && it != "null" }
+                if (candidate != null && romanized == null) {
+                    romanized = candidate
+                }
+            }
+        }
+        return Pair(translated.toString(), romanized)
+    }
+
+    private fun splitByMarkers(translated: String, markers: List<String>): List<String>? {
+        if (markers.isEmpty()) return listOf(translated.trim())
+        val parts = mutableListOf<String>()
+        var remaining = translated
+        for (marker in markers) {
+            val markerIndex = remaining.indexOf(marker)
+            if (markerIndex < 0) return null
+            parts.add(remaining.substring(0, markerIndex).trim())
+            remaining = remaining.substring(markerIndex + marker.length)
+        }
+        parts.add(remaining.trim())
+        return parts
+    }
+
+    private fun extractGeminiContent(responseText: String): String? {
+        return runCatching {
+            val root = JSONObject(responseText)
+            val candidates = root.optJSONArray("candidates") ?: return null
+            val firstCandidate = candidates.optJSONObject(0) ?: return null
+            val content = firstCandidate.optJSONObject("content") ?: return null
+            val parts = content.optJSONArray("parts") ?: return null
+            val sb = StringBuilder()
+            for (i in 0 until parts.length()) {
+                val part = parts.optJSONObject(i) ?: continue
+                if (part.optBoolean("thought", false)) continue
+                val text = part.optString("text", "")
+                if (text.isNotEmpty()) {
+                    sb.append(text)
+                }
+            }
+            sb.toString().trim().takeIf { it.isNotEmpty() }
+        }.getOrNull()
+    }
+
+    private fun extractAnthropicContent(responseText: String): String? {
+        return runCatching {
+            val root = JSONObject(responseText)
+            val content = root.optJSONArray("content") ?: return null
+            for (i in 0 until content.length()) {
+                val part = content.optJSONObject(i) ?: continue
+                if (part.optString("type") == "tool_use") {
+                    val input = part.opt("input")
+                    if (input != null) return input.toString().trim().takeIf { it.isNotEmpty() }
+                }
+            }
+            val sb = StringBuilder()
+            for (i in 0 until content.length()) {
+                val part = content.optJSONObject(i) ?: continue
+                if (part.optString("type") == "text") {
+                    val text = part.optString("text", "")
+                    if (text.isNotEmpty()) sb.append(text)
+                }
+            }
+            sb.toString().trim().takeIf { it.isNotEmpty() }
+        }.getOrNull()
+    }
+
+    private fun extractOpenAiContent(responseText: String): String? {
+        return runCatching {
+            val root = JSONObject(responseText)
+            val choices = root.optJSONArray("choices") ?: return null
+            val firstChoice = choices.optJSONObject(0) ?: return null
+            val message = firstChoice.optJSONObject("message") ?: return null
+
+            val content = message.optString("content", "").trim()
+            if (content.isNotEmpty()) return content
+
+            val toolCalls = message.optJSONArray("tool_calls")
+            if (toolCalls != null && toolCalls.length() > 0) {
+                val firstCall = toolCalls.optJSONObject(0)
+                val function = firstCall?.optJSONObject("function")
+                val arguments = function?.optString("arguments", "")?.trim()
+                if (!arguments.isNullOrEmpty()) return arguments
             }
             null
-        } catch (_: Throwable) {
-            null
+        }.getOrNull()
+    }
+
+    private fun parseJsonPayload(content: String, opening: Char, closing: Char): Any? {
+        for (start in content.indices.filter { content[it] == opening }) {
+            var depth = 0
+            var quoted = false
+            var escaped = false
+            for (index in start until content.length) {
+                val char = content[index]
+                if (quoted) {
+                    when {
+                        escaped -> escaped = false
+                        char == '\\' -> escaped = true
+                        char == '"' -> quoted = false
+                    }
+                } else {
+                    when (char) {
+                        '"' -> quoted = true
+                        opening -> depth++
+                        closing -> depth--
+                    }
+                    if (depth == 0) {
+                        val substr = content.substring(start, index + 1)
+                        val parsed = runCatching {
+                            if (opening == '{') JSONObject(substr) else JSONArray(substr)
+                        }.getOrNull()
+                        if (parsed != null) return parsed
+                        break
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    private fun parseJsonLinePayload(content: String, expectedLines: Int): List<String>? {
+        val json = parseJsonPayload(content, '{', '}') as? JSONObject
+        val linesArray = json?.optJSONArray("lines")
+        if (linesArray != null) {
+            val lines = (0 until linesArray.length()).map { linesArray.optString(it) }
+            if (lines.size == expectedLines) return lines
+        }
+        val arr = parseJsonPayload(content, '[', ']') as? JSONArray
+        if (arr != null) {
+            val lines = (0 until arr.length()).map { arr.optString(it) }
+            if (lines.size == expectedLines) return lines
+        }
+        return null
+    }
+
+    private fun linesAreAligned(source: List<String>, output: List<String>): Boolean {
+        return source.size == output.size && source.indices.all { source[it].isBlank() == output[it].isBlank() }
+    }
+
+    private fun lyricsLinesSchema(): JSONObject {
+        return JSONObject().apply {
+            put("type", "object")
+            put("properties", JSONObject().apply {
+                put("lines", JSONObject().apply {
+                    put("type", "array")
+                    put("items", JSONObject().apply {
+                        put("type", "string")
+                    })
+                })
+            })
+            put("required", JSONArray().apply { put("lines") })
+            put("additionalProperties", false)
+        }
+    }
+
+    private fun geminiSchema(schema: JSONObject): JSONObject {
+        val result = JSONObject()
+        val keys = schema.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            if (key == "additionalProperties") continue
+            val value = schema.get(key)
+            if (key == "type" && value is String) {
+                result.put(key, value.uppercase())
+            } else if (value is JSONObject) {
+                result.put(key, geminiSchema(value))
+            } else if (value is JSONArray) {
+                val arr = JSONArray()
+                for (i in 0 until value.length()) {
+                    val item = value.get(i)
+                    if (item is JSONObject) {
+                        arr.put(geminiSchema(item))
+                    } else if (item is String && item in setOf("object", "array", "string", "boolean", "number", "integer")) {
+                        arr.put(item.uppercase())
+                    } else {
+                        arr.put(item)
+                    }
+                }
+                result.put(key, arr)
+            } else {
+                result.put(key, value)
+            }
+        }
+        return result
+    }
+
+    fun defaultLyricsSystemPrompt(lineCount: Int): String =
+        "You are a lyrics localization engine. Return only JSON that matches the provided schema. " +
+            "Do not explain, think aloud, use markdown, merge lines, split lines, or add notes. " +
+            "Return exactly $lineCount strings in `lines`, preserving input line order. Empty input lines must stay empty. " +
+            "Make translations natural for music listening while staying faithful to meaning, tense, names, punctuation, " +
+            "and repeated hooks. " +
+            "Preserve text already in the target language verbatim, including the target-language parts of mixed lines."
+
+    fun languageName(code: String): String =
+        when (code.lowercase()) {
+            "en" -> "English"
+            "es" -> "Spanish"
+            "fr" -> "French"
+            "de" -> "German"
+            "it" -> "Italian"
+            "pt" -> "Portuguese"
+            "ru" -> "Russian"
+            "ja" -> "Japanese"
+            "ko" -> "Korean"
+            "zh" -> "Chinese"
+            "ar" -> "Arabic"
+            "hi" -> "Hindi"
+            "bn" -> "Bengali"
+            "pa" -> "Punjabi"
+            "tr" -> "Turkish"
+            "vi" -> "Vietnamese"
+            "th" -> "Thai"
+            "id" -> "Indonesian"
+            "pl" -> "Polish"
+            "nl" -> "Dutch"
+            "sv" -> "Swedish"
+            "uk" -> "Ukrainian"
+            else -> PrefKeys.LanguageCodeToName[code] ?: code
+        }
+
+    fun deepLTargetLanguage(code: String): String =
+        when (code.lowercase()) {
+            "zh-cn", "zh-hans" -> "zh-Hans"
+            "zh-tw", "zh-hant" -> "zh-Hant"
+            "en" -> "en-US"
+            "pt" -> "pt-BR"
+            else -> code.uppercase().take(2)
+        }
+
+    private data class HttpResponse(val statusCode: Int, val body: String)
+
+    private fun executeHttpPost(urlString: String, jsonBody: String, headers: Map<String, String>): HttpResponse {
+        val url = URL(urlString)
+        val conn = url.openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.connectTimeout = 30000
+        conn.readTimeout = 90000
+        conn.doOutput = true
+        conn.doInput = true
+        conn.setRequestProperty("User-Agent", "SpotXero/2.0 (Android; +https://github.com/s1ddhants1/SpotXero)")
+        for ((k, v) in headers) {
+            conn.setRequestProperty(k, v)
+        }
+
+        OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
+            writer.write(jsonBody)
+            writer.flush()
+        }
+
+        val code = conn.responseCode
+        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+        val responseText = stream?.let {
+            BufferedReader(InputStreamReader(it, Charsets.UTF_8)).use { reader -> reader.readText() }
+        }.orEmpty()
+
+        return HttpResponse(code, responseText)
+    }
+
+    private fun httpGet(urlString: String, headers: Map<String, String>): String? {
+        val url = URL(urlString)
+        val conn = url.openConnection() as HttpURLConnection
+        conn.requestMethod = "GET"
+        conn.connectTimeout = 30000
+        conn.readTimeout = 30000
+        conn.setRequestProperty("User-Agent", "SpotXero/2.0 (Android; +https://github.com/s1ddhants1/SpotXero)")
+        for ((k, v) in headers) {
+            conn.setRequestProperty(k, v)
+        }
+        val code = conn.responseCode
+        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+        return stream?.let {
+            BufferedReader(InputStreamReader(it, Charsets.UTF_8)).use { reader -> reader.readText() }
         }
     }
 
@@ -367,39 +912,5 @@ Output MUST be a JSON object {"lines": [...]} with EXACTLY $lineCount strings.""
             line.copy(words = finalWords)
         }
         return lyrics.copy(lines = newLines)
-    }
-
-    private fun httpPost(urlString: String, jsonBody: String, headers: Map<String, String>): String? {
-        return try {
-            val url = URL(urlString)
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.connectTimeout = 30000
-            conn.readTimeout = 90000
-            conn.doOutput = true
-            conn.doInput = true
-            conn.setRequestProperty("User-Agent", "SpotXero/2.0 (Android; +https://github.com/s1ddhants1/SpotXero)")
-            for ((k, v) in headers) {
-                conn.setRequestProperty(k, v)
-            }
-
-            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
-                writer.write(jsonBody)
-                writer.flush()
-            }
-
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            if (stream != null) {
-                BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { reader ->
-                    reader.readText()
-                }
-            } else {
-                null
-            }
-        } catch (t: Throwable) {
-            Log.e(TAG, "HTTP POST error: ${t.message}")
-            throw t
-        }
     }
 }

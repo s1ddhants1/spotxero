@@ -63,7 +63,6 @@ fun LyricsSourcesScreen(
     isExternalLyricsEnabled: Boolean,
     isForceExternalLyricsEnabled: Boolean,
     lyricsProvidersOrder: List<String>,
-    isLocalLyricsEnabled: Boolean,
     isBetterlyricsEnabled: Boolean,
     isLrcredEnabled: Boolean,
     isLrclibEnabled: Boolean,
@@ -122,14 +121,13 @@ fun LyricsSourcesScreen(
             Spacer(Modifier.height(AppSpacing.xxs))
             CategoryHeader(
                 title = stringResource(R.string.lyrics_providers_header),
-                subtitle = stringResource(R.string.provider_local_desc)
+                subtitle = stringResource(R.string.lyrics_providers_desc)
             )
         }
 
         item(key = "providers_list") {
             LyricsProviderOrderCard(
                 providersOrder = lyricsProvidersOrder,
-                isLocalLyricsEnabled = isLocalLyricsEnabled,
                 isBetterlyricsEnabled = isBetterlyricsEnabled,
                 isLrcredEnabled = isLrcredEnabled,
                 isLrclibEnabled = isLrclibEnabled,
@@ -253,7 +251,6 @@ fun ReorderMenu(
 @Composable
 private fun LyricsProviderOrderCard(
     providersOrder: List<String>,
-    isLocalLyricsEnabled: Boolean,
     isBetterlyricsEnabled: Boolean,
     isLrcredEnabled: Boolean,
     isLrclibEnabled: Boolean,
@@ -300,7 +297,6 @@ private fun LyricsProviderOrderCard(
 
                 val isItemDragging = draggingIndex == index
                 val isChecked = when (providerId) {
-                    "local" -> isLocalLyricsEnabled
                     "betterlyrics" -> isBetterlyricsEnabled
                     "lrcred" -> isLrcredEnabled
                     "lrclib" -> isLrclibEnabled
@@ -311,7 +307,6 @@ private fun LyricsProviderOrderCard(
                 }
 
                 val title = when (providerId) {
-                    "local" -> stringResource(R.string.provider_local_title)
                     "betterlyrics" -> stringResource(R.string.provider_betterlyrics_title)
                     "lrcred" -> stringResource(R.string.provider_lrcred_title)
                     "lrclib" -> stringResource(R.string.provider_lrclib_title)
@@ -322,7 +317,6 @@ private fun LyricsProviderOrderCard(
                 }
 
                 val description = when (providerId) {
-                    "local" -> stringResource(R.string.provider_local_desc)
                     "betterlyrics" -> stringResource(R.string.provider_betterlyrics_desc)
                     "lrcred" -> stringResource(R.string.provider_lrcred_desc)
                     "lrclib" -> stringResource(R.string.provider_lrclib_desc)

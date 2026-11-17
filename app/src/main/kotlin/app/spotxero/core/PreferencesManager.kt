@@ -34,15 +34,14 @@ object PreferencesManager {
     var aiTranslationProvider: String = "OpenRouter"
     var aiTranslationApiKey: String = ""
     var aiTranslationBaseUrl: String = PrefKeys.OpenRouterDefaultBaseUrl
-    var aiTranslationModel: String = "google/gemini-2.5-flash-lite"
+    var aiTranslationModel: String = PrefKeys.OpenRouterDefaultModel
     var aiTranslationTargetLang: String = "en"
     var aiTranslationCustomPrompt: String = ""
     var isAiTranslationDualLine: Boolean = true
     var aiTranslationTranslateMode: String = "Literal"
     var aiTranslationDeeplApiKey: String = ""
     var aiTranslationDeeplFormality: String = "default"
-    var lyricsProvidersOrder: String = "local,betterlyrics,lrcred,lrclib,kugou,netease,genius"
-    var isLocalLyricsEnabled: Boolean = true
+    var lyricsProvidersOrder: String = "betterlyrics,lrcred,lrclib,kugou,netease,genius"
     var isBetterlyricsEnabled: Boolean = true
     var isLrcredEnabled: Boolean = true
     var isLrclibEnabled: Boolean = true
@@ -264,7 +263,7 @@ object PreferencesManager {
         inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_API_KEY] = aiTranslationApiKey
         aiTranslationBaseUrl = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_BASE_URL, PrefKeys.OpenRouterDefaultBaseUrl) ?: PrefKeys.OpenRouterDefaultBaseUrl
         inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_BASE_URL] = aiTranslationBaseUrl
-        aiTranslationModel = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_MODEL, "google/gemini-2.5-flash-lite") ?: "google/gemini-2.5-flash-lite"
+        aiTranslationModel = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_MODEL, PrefKeys.OpenRouterDefaultModel) ?: PrefKeys.OpenRouterDefaultModel
         inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_MODEL] = aiTranslationModel
         aiTranslationTargetLang = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_TARGET_LANG, "en") ?: "en"
         inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_TARGET_LANG] = aiTranslationTargetLang
@@ -278,10 +277,8 @@ object PreferencesManager {
         inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_DEEPL_API_KEY] = aiTranslationDeeplApiKey
         aiTranslationDeeplFormality = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY, "default") ?: "default"
         inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY] = aiTranslationDeeplFormality
-        lyricsProvidersOrder = prefs.getString(PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, "local,betterlyrics,lrcred,lrclib,kugou,netease,genius") ?: "local,betterlyrics,lrcred,lrclib,kugou,netease,genius"
+        lyricsProvidersOrder = prefs.getString(PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, "betterlyrics,lrcred,lrclib,kugou,netease,genius") ?: "betterlyrics,lrcred,lrclib,kugou,netease,genius"
         inMemoryStrings[PrefKeys.KEY_LYRICS_PROVIDERS_ORDER] = lyricsProvidersOrder
-        isLocalLyricsEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_LOCAL, true)
-        inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_LOCAL] = isLocalLyricsEnabled
         isBetterlyricsEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS, true)
         inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS] = isBetterlyricsEnabled
         isLrcredEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_LRCRED, true)
@@ -450,7 +447,6 @@ object PreferencesManager {
             PrefKeys.KEY_LYRICS_TRANSLATIONS -> isLyricsTranslationsEnabled = value
             PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED -> isAiLyricsTranslationEnabled = value
             PrefKeys.KEY_AI_TRANSLATION_DUAL_LINE -> isAiTranslationDualLine = value
-            PrefKeys.KEY_LYRICS_PROVIDER_LOCAL -> isLocalLyricsEnabled = value
             PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS -> isBetterlyricsEnabled = value
             PrefKeys.KEY_LYRICS_PROVIDER_LRCRED -> isLrcredEnabled = value
             PrefKeys.KEY_LYRICS_PROVIDER_LRCLIB -> isLrclibEnabled = value

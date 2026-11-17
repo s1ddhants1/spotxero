@@ -110,6 +110,8 @@ fun SpotXeroApp(
             when (currentScreen) {
                 Screen.AI_LYRICS_TRANSLATION -> {
                     AiLyricsTranslationScreen(
+                        isAiTranslationEnabled = uiState.isAiLyricsTranslationEnabled,
+                        isAiTranslationDualLine = uiState.isAiTranslationDualLine,
                         aiProvider = uiState.aiTranslationProvider,
                         openRouterApiKey = uiState.aiTranslationApiKey,
                         openRouterBaseUrl = uiState.aiTranslationBaseUrl,
@@ -119,6 +121,8 @@ fun SpotXeroApp(
                         deeplApiKey = uiState.aiTranslationDeeplApiKey,
                         deeplFormality = uiState.aiTranslationDeeplFormality,
                         aiSystemPrompt = uiState.aiTranslationCustomPrompt,
+                        onAiTranslationEnabledChange = { viewModel.setAiLyricsTranslationEnabled(it) },
+                        onAiTranslationDualLineChange = { viewModel.setAiTranslationDualLine(it) },
                         onAiProviderChange = { viewModel.setAiTranslationProvider(it) },
                         onOpenRouterApiKeyChange = { viewModel.setAiTranslationApiKey(it) },
                         onOpenRouterBaseUrlChange = { viewModel.setAiTranslationBaseUrl(it) },
@@ -135,7 +139,6 @@ fun SpotXeroApp(
                         isExternalLyricsEnabled = uiState.isExternalLyricsEnabled,
                         isForceExternalLyricsEnabled = uiState.isForceExternalLyricsEnabled,
                         lyricsProvidersOrder = uiState.lyricsProvidersOrder,
-                        isLocalLyricsEnabled = uiState.isLocalLyricsEnabled,
                         isBetterlyricsEnabled = uiState.isBetterlyricsEnabled,
                         isLrcredEnabled = uiState.isLrcredEnabled,
                         isLrclibEnabled = uiState.isLrclibEnabled,

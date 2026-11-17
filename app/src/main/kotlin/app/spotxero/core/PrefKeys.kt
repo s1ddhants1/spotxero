@@ -22,17 +22,14 @@ object PrefKeys {
     const val KEY_AI_TRANSLATION_DEEPL_FORMALITY = "pref_ai_translation_deepl_formality"
 
     const val OpenRouterDefaultBaseUrl = "https://openrouter.ai/api/v1/chat/completions"
-    const val OpenRouterDefaultModel = "google/gemini-2.5-flash-lite"
+    const val OpenRouterDefaultModel = "qwen/qwen3.7-flash"
+    const val GeminiDefaultEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent"
+    const val GeminiDefaultModel = "gemini-flash-lite-latest"
+    const val LEGACY_GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    const val AnthropicDefaultEndpoint = "https://api.anthropic.com/v1/messages"
+    const val AnthropicDefaultModel = "claude-haiku-5-5"
 
-    const val DEFAULT_AI_SYSTEM_PROMPT = """You are a precise lyrics translation assistant. Your output must ALWAYS be a valid JSON object of the form {"lines": ["line1", "line2", "line3"]}.
-
-CRITICAL RULES:
-1. Output ONLY the JSON object: {"lines": ["line1", "line2", "line3"]}
-2. NO explanations, NO questions, NO additional text
-3. Each input line maps to exactly one entry in the "lines" array
-4. Preserve empty lines as empty strings ""
-5. The "lines" array must contain EXACTLY {lineCount} items
-6. If uncertain, provide best approximation but maintain line count"""
+    const val DEFAULT_AI_SYSTEM_PROMPT = "You are a lyrics localization engine. Return only JSON that matches the provided schema. Do not explain, think aloud, use markdown, merge lines, split lines, or add notes. Return exactly {lineCount} strings in `lines`, preserving input line order. Empty input lines must stay empty. Make translations natural for music listening while staying faithful to meaning, tense, names, punctuation, and repeated hooks. Preserve text already in the target language verbatim, including the target-language parts of mixed lines."
 
     val LanguageCodeToName = mapOf(
         "af" to "Afrikaans",
@@ -114,7 +111,6 @@ CRITICAL RULES:
         "ko" to "한국어",
     )
     const val KEY_LYRICS_PROVIDERS_ORDER = "pref_lyrics_providers_order"
-    const val KEY_LYRICS_PROVIDER_LOCAL = "pref_lyrics_provider_local"
     const val KEY_LYRICS_PROVIDER_BETTERLYRICS = "pref_lyrics_provider_betterlyrics"
     const val KEY_LYRICS_PROVIDER_LRCRED = "pref_lyrics_provider_lrcred"
     const val KEY_LYRICS_PROVIDER_LRCLIB = "pref_lyrics_provider_lrclib"

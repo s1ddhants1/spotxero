@@ -1,7 +1,6 @@
 package app.spotxero.hooks.lyrics
 
 import android.net.Uri
-import android.os.Environment
 import android.text.Html
 import android.util.Base64
 import android.util.Log
@@ -9,7 +8,6 @@ import app.spotxero.core.PreferencesManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
-import java.io.File
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
@@ -21,64 +19,6 @@ interface LyricsProvider {
     val id: String
     val displayName: String
     fun fetchLyrics(trackName: String, artistName: String, albumName: String?, durationSec: Long?): ParsedLyrics?
-}
-
-object LocalLrcProvider : LyricsProvider {
-    override val id = "local"
-    override val displayName = "Local Files"
-    private const val TAG = "SpotXero.LocalLyrics"
-
-    override fun fetchLyrics(trackName: String, artistName: String, albumName: String?, durationSec: Long?): ParsedLyrics? {
-        val searchDirs = listOfNotNull(
-            runCatching { File("/sdcard/Android/data/com.spotify.music/files/Lyrics") }.getOrNull(),
-            runCatching { File("/data/user/0/com.spotify.music/files/Lyrics") }.getOrNull(),
-            runCatching { File("/data/data/com.spotify.music/files/Lyrics") }.getOrNull(),
-            runCatching { File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Lyrics") }.getOrNull(),
-            runCatching { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC) }.getOrNull(),
-            runCatching { File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Lyrics") }.getOrNull(),
-            runCatching { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) }.getOrNull(),
-            runCatching { File(Environment.getExternalStorageDirectory(), "Lyrics") }.getOrNull(),
-            runCatching { File("/sdcard/Music/Lyrics") }.getOrNull(),
-            runCatching { File("/sdcard/Lyrics") }.getOrNull(),
-            runCatching { File("/sdcard/Download/Lyrics") }.getOrNull()
-        ).filter { it.isDirectory && it.canRead() }
-
-        val cleanTrack = sanitizeFilename(trackName)
-        val cleanArtist = sanitizeFilename(artistName)
-
-        val candidateNames = listOf(
-            "$trackName.lrc",
-            "$artistName - $trackName.lrc",
-            "$trackName - $artistName.lrc",
-            "$cleanTrack.lrc",
-            "$cleanArtist - $cleanTrack.lrc",
-            "$cleanTrack - $cleanArtist.lrc"
-        ).distinct()
-
-        for (dir in searchDirs) {
-            val files = dir.listFiles() ?: continue
-            for (candidate in candidateNames) {
-                val matched = files.firstOrNull { it.isFile && it.name.equals(candidate, ignoreCase = true) }
-                if (matched != null) {
-                    try {
-                        val content = matched.readText(Charsets.UTF_8)
-                        val parsed = LrcParser.parse(content)
-                        if (parsed != null && parsed.lines.isNotEmpty()) {
-                            Log.i(TAG, "Loaded local lyrics: ${matched.absolutePath}")
-                            return parsed
-                        }
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "Error reading local lyrics ${matched.absolutePath}: ${t.message}")
-                    }
-                }
-            }
-        }
-        return null
-    }
-
-    private fun sanitizeFilename(name: String): String {
-        return name.replace(Regex("""[/\\?%*:|"<>]+"""), "_").trim()
-    }
 }
 
 object BetterLyricsProvider : LyricsProvider {

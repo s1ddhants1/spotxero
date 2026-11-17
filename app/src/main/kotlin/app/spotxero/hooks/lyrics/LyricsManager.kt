@@ -42,9 +42,11 @@ object LyricsManager {
         Thread(runnable, "LyricsPrefetch").apply { isDaemon = true }
     }
 
-    private val lyricsCache: MutableMap<String, String> = Collections.synchronizedMap(
-        object : LinkedHashMap<String, String>(MAX_CACHE_SIZE, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean {
+    data class CachedLyrics(val lyrics: ParsedLyrics, val providerDisplayName: String)
+
+    private val parsedCache: MutableMap<String, CachedLyrics> = Collections.synchronizedMap(
+        object : LinkedHashMap<String, CachedLyrics>(MAX_CACHE_SIZE, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedLyrics>?): Boolean {
                 return size > MAX_CACHE_SIZE
             }
         }
@@ -68,7 +70,7 @@ object LyricsManager {
 
             val cacheKey = "$title::$artist".lowercase()
             val trackKey = currentTrackId?.let { "track:$it" }
-            if (lyricsCache[cacheKey] == null && (trackKey == null || lyricsCache[trackKey] == null)) {
+            if (parsedCache[cacheKey] == null && (trackKey == null || parsedCache[trackKey] == null)) {
                 prefetchExecutor.execute {
                     runCatching {
                         fetchAndCache(title, artist ?: "", album, currentTrackDurationSec, cacheKey, trackKey)
@@ -78,10 +80,10 @@ object LyricsManager {
         }
     }
 
-    fun getLyricsJson(trackId: String? = null): String? {
+    fun getLyrics(trackId: String? = null): CachedLyrics? {
         val trackKey = trackId?.let { "track:$it" }
         if (trackKey != null) {
-            lyricsCache[trackKey]?.let { return it }
+            parsedCache[trackKey]?.let { return it }
         }
 
         var title = currentTrackTitle
@@ -101,12 +103,22 @@ object LyricsManager {
         if (title.isNullOrBlank()) return null
 
         val cacheKey = "$title::$artist".lowercase()
-        lyricsCache[cacheKey]?.let {
-            if (trackKey != null) lyricsCache[trackKey] = it
+        parsedCache[cacheKey]?.let {
+            if (trackKey != null) parsedCache[trackKey] = it
             return it
         }
 
         return fetchAndCache(title, artist, album, durationSec, cacheKey, trackKey)
+    }
+
+    fun getLyricsProto(trackId: String? = null): ByteArray? {
+        val cached = getLyrics(trackId) ?: return null
+        return LyricsProtobuf.buildColorLyricsResponse(cached.lyrics, cached.providerDisplayName)
+    }
+
+    fun getLyricsJson(trackId: String? = null): String? {
+        val cached = getLyrics(trackId) ?: return null
+        return buildSpotifyLyricsJson(cached.lyrics, cached.providerDisplayName)
     }
 
     private fun fetchAndCache(
@@ -116,15 +128,16 @@ object LyricsManager {
         durationSec: Long?,
         cacheKey: String,
         trackKey: String?
-    ): String? {
+    ): CachedLyrics? {
         val order = PreferencesManager.lyricsProvidersOrder
             .split(",")
             .map { it.trim().lowercase() }
             .filter { it.isNotEmpty() }
 
+        Log.i(TAG, "fetchAndCache: requesting lyrics for '$title' by '$artist' (duration=${durationSec}s), order=$order")
+
         for (providerId in order) {
             val provider: LyricsProvider? = when (providerId) {
-                "local" -> if (PreferencesManager.isLocalLyricsEnabled) LocalLrcProvider else null
                 "betterlyrics" -> if (PreferencesManager.isBetterlyricsEnabled) BetterLyricsProvider else null
                 "lrcred" -> if (PreferencesManager.isLrcredEnabled) LrcRedProvider else null
                 "lrclib" -> if (PreferencesManager.isLrclibEnabled) LrclibProvider else null
@@ -134,33 +147,40 @@ object LyricsManager {
                 else -> null
             }
 
-            if (provider == null) continue
+            if (provider == null) {
+                Log.d(TAG, "Provider $providerId is disabled or not found")
+                continue
+            }
 
             try {
+                Log.i(TAG, "Querying provider: ${provider.displayName} ($providerId)")
                 val lyrics = provider.fetchLyrics(
                     trackName = title,
                     artistName = artist,
                     albumName = album,
                     durationSec = durationSec
                 )
+                Log.i(TAG, "Provider ${provider.displayName} returned ${lyrics?.lines?.size ?: 0} lines")
                 if (lyrics != null && lyrics.lines.isNotEmpty()) {
                     val finalLyrics = if (PreferencesManager.isAiLyricsTranslationEnabled) {
                         AiLyricsTranslator.translateLyrics(lyrics, cacheKey)
                     } else {
                         lyrics
                     }
-                    val synthesized = buildSpotifyLyricsJson(finalLyrics, provider.displayName)
-                    lyricsCache[cacheKey] = synthesized
+                    val cached = CachedLyrics(finalLyrics, provider.displayName)
+                    Log.i(TAG, "Fetched ${lyrics.lines.size} lines from ${provider.displayName}")
+                    parsedCache[cacheKey] = cached
                     if (trackKey != null) {
-                        lyricsCache[trackKey] = synthesized
+                        parsedCache[trackKey] = cached
                     }
-                    return synthesized
+                    return cached
                 }
             } catch (t: Throwable) {
-                Log.w(TAG, "Provider ${provider.displayName} error: ${t.message}")
+                Log.w(TAG, "Provider ${provider.displayName} error: ${t.message}", t)
             }
         }
 
+        Log.w(TAG, "No lyrics found from any configured provider for '$title' by '$artist'")
         return null
     }
 
@@ -215,7 +235,7 @@ object LyricsManager {
         lyricsObj.put("lines", linesArray)
         lyricsObj.put("provider", providerName)
         lyricsObj.put("providerLyricsId", "0")
-        lyricsObj.put("providerDisplayName", providerName)
+        lyricsObj.put("providerDisplayName", "$providerName (SpotXero)")
         lyricsObj.put("syncLyricsUri", "")
         lyricsObj.put("isDenseTypeface", false)
         lyricsObj.put("alternatives", JSONArray())

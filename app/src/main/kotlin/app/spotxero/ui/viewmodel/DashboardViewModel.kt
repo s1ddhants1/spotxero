@@ -152,6 +152,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isLyricsEnabled = PreferencesManager.isLyricsEnabled,
                 isExternalLyricsEnabled = PreferencesManager.isExternalLyricsEnabled,
                 isForceExternalLyricsEnabled = PreferencesManager.isForceExternalLyricsEnabled,
+                isAiLyricsTranslationEnabled = PreferencesManager.isAiLyricsTranslationEnabled,
+                isAiTranslationDualLine = PreferencesManager.isAiTranslationDualLine,
                 aiTranslationProvider = PreferencesManager.aiTranslationProvider,
                 aiTranslationApiKey = PreferencesManager.aiTranslationApiKey,
                 aiTranslationBaseUrl = PreferencesManager.aiTranslationBaseUrl,
@@ -162,7 +164,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 aiTranslationDeeplApiKey = PreferencesManager.aiTranslationDeeplApiKey,
                 aiTranslationDeeplFormality = PreferencesManager.aiTranslationDeeplFormality,
                 lyricsProvidersOrder = parseLyricsProviders(PreferencesManager.lyricsProvidersOrder),
-                isLocalLyricsEnabled = PreferencesManager.isLocalLyricsEnabled,
                 isBetterlyricsEnabled = PreferencesManager.isBetterlyricsEnabled,
                 isLrcredEnabled = PreferencesManager.isLrcredEnabled,
                 isLrclibEnabled = PreferencesManager.isLrclibEnabled,
@@ -365,6 +366,18 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(aiTranslationDeeplApiKey = key) }
     }
 
+    fun setAiLyricsTranslationEnabled(enabled: Boolean) {
+        val app = getApplication<Application>()
+        PreferencesManager.setBoolean(app, PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, enabled)
+        _uiState.update { it.copy(isAiLyricsTranslationEnabled = enabled) }
+    }
+
+    fun setAiTranslationDualLine(enabled: Boolean) {
+        val app = getApplication<Application>()
+        PreferencesManager.setBoolean(app, PrefKeys.KEY_AI_TRANSLATION_DUAL_LINE, enabled)
+        _uiState.update { it.copy(isAiTranslationDualLine = enabled) }
+    }
+
     fun setAiTranslationDeeplFormality(formality: String) {
         val app = getApplication<Application>()
         PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY, formality)
@@ -384,10 +397,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun setLyricsProviderEnabled(id: String, enabled: Boolean) {
         val app = getApplication<Application>()
         when (id) {
-            "local" -> {
-                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_LOCAL, enabled)
-                _uiState.update { it.copy(isLocalLyricsEnabled = enabled) }
-            }
             "betterlyrics" -> {
                 PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS, enabled)
                 _uiState.update { it.copy(isBetterlyricsEnabled = enabled) }
@@ -451,7 +460,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun parseLyricsProviders(raw: String): List<String> {
-        val defaultList = listOf("local", "betterlyrics", "lrcred", "lrclib", "kugou", "netease", "genius")
+        val defaultList = listOf("betterlyrics", "lrcred", "lrclib", "kugou", "netease", "genius")
         val items = raw.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
         val result = items.filter { defaultList.contains(it) }.distinct().toMutableList()
         for (d in defaultList) {
