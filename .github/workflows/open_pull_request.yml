@@ -24,4 +24,6 @@ jobs:
       - name: Open pull request
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh pr create -d -B main -H dev --title '${{ env.TITLE }}' --body '${{ env.BODY }}' ||  gh pr edit -B main --title '${{ env.TITLE }}' --body '${{ env.BODY }}'
+          PR_TITLE: ${{ env.TITLE }}
+          PR_BODY: ${{ env.BODY }}
+        run: gh pr create -d -B main -H dev --title "$PR_TITLE" --body "$PR_BODY" || gh pr edit dev -B main --title "$PR_TITLE" --body "$PR_BODY"
