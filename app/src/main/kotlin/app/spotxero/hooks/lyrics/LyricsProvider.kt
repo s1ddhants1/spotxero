@@ -261,7 +261,7 @@ object NeteaseProvider : LyricsProvider {
 
             val originalParsed = LrcParser.parse(lrcString) ?: return null
 
-            val translationsEnabled = PreferencesManager.isLyricsTranslationsEnabled
+            val translationsEnabled = PreferencesManager.isLyricsTranslationsEnabled && !PreferencesManager.isAiLyricsTranslationEnabled
             if (translationsEnabled && !tlyricString.isNullOrBlank()) {
                 val transParsed = LrcParser.parse(tlyricString)
                 if (transParsed != null && transParsed.lines.isNotEmpty()) {

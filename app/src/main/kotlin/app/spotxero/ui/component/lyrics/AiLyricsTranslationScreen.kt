@@ -186,7 +186,7 @@ val ALL_PRESETS = listOf(
     AiProviderPreset(
         id = "Gemini-compatible",
         group = AiProviderGroup.CUSTOM,
-        endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent",
+        endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
         editableEndpoint = true
     ),
 
@@ -379,7 +379,8 @@ fun AiLyricsTranslationScreen(
     var showSystemPromptDialog by rememberSaveable { mutableStateOf(false) }
 
     val currentKey = if (provider == DEEPL_PROVIDER) deeplApiKey else openRouterApiKey
-    val modelsReady = openRouterApiKey.isNotBlank() || currentPreset.publicModelList
+    val isCustomEndpoint = currentPreset.group == AiProviderGroup.CUSTOM || currentPreset.editableEndpoint
+    val modelsReady = openRouterApiKey.isNotBlank() || currentPreset.publicModelList || isCustomEndpoint
 
     // Dialogs
     if (showSetupWizardDialog) {
@@ -715,6 +716,7 @@ fun AiLyricsTranslationScreen(
         }
 
         // Group 6: Prompt (Always present in Metrolist)
+        val canEditPrompt = currentPreset.isAi && !directProvider && (openRouterApiKey.isNotBlank() || currentPreset.publicModelList || isCustomEndpoint)
         MetrolistSettingsGroup(
             title = stringResource(R.string.ai_prompt),
             description = stringResource(R.string.ai_prompt_line_count_description),
@@ -725,10 +727,10 @@ fun AiLyricsTranslationScreen(
                         if (aiSystemPrompt.isBlank()) R.string.ai_default_json_array_prompt else R.string.configured
                     ),
                     valueLabel = if (aiSystemPrompt.isNotBlank()) stringResource(R.string.configured) else "",
-                    enabled = currentPreset.isAi && !directProvider && (openRouterApiKey.isNotBlank() || currentPreset.publicModelList),
+                    enabled = canEditPrompt,
                     showChevron = true,
                     onClick = {
-                        if (currentPreset.isAi && !directProvider && (openRouterApiKey.isNotBlank() || currentPreset.publicModelList)) {
+                        if (canEditPrompt) {
                             showSystemPromptDialog = true
                         }
                     }
@@ -761,7 +763,8 @@ fun AiLyricsTranslationScreen(
                                         val canRun = when (provider) {
                                             DEEPL_PROVIDER -> deeplApiKey.isNotBlank()
                                             DEEPL_KEYLESS_PROVIDER, GOOGLE_TRANSLATE_PROVIDER -> true
-                                            else -> openRouterApiKey.isNotBlank() || currentPreset.publicModelList
+                                            "Custom", "OpenAI-compatible", "Anthropic-compatible", "Gemini-compatible" -> true
+                                            else -> openRouterApiKey.isNotBlank() || currentPreset.publicModelList || isCustomEndpoint
                                         }
 
                                         if (!canRun) {

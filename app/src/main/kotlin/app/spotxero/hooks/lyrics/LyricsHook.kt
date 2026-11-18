@@ -244,14 +244,15 @@ object LyricsHook {
 
                     val externalEnabled = PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false)
                     val force = PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_EXTERNAL_LYRICS, false)
+                    val aiTranslationEnabled = PreferencesManager.isAiLyricsTranslationEnabled
 
                     val trackId = if (url.contains("/track/")) {
                         url.substringAfter("/track/").substringBefore("?").substringBefore("/")
                     } else null
 
-                    Log.i(TAG, "Color-lyrics requested: trackId=$trackId, externalEnabled=$externalEnabled, force=$force")
+                    Log.i(TAG, "Color-lyrics requested: trackId=$trackId, externalEnabled=$externalEnabled, force=$force, aiTranslationEnabled=$aiTranslationEnabled")
 
-                    if (externalEnabled && force) {
+                    if (externalEnabled && (force || aiTranslationEnabled)) {
                         val protoBytes = LyricsManager.getLyricsProto(trackId)
                         Log.i(TAG, "LyricsManager proto returned: ${if (protoBytes != null) "${protoBytes.size} bytes" else "null"}")
                         if (protoBytes != null) {

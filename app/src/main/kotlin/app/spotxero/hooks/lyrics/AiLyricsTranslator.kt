@@ -37,7 +37,7 @@ object AiLyricsTranslator {
         }
 
         Log.i(TAG, "translateLyrics: provider=$provider, keyBlank=${apiKey.isBlank()}, targetLang=${PreferencesManager.aiTranslationTargetLang}, model=${PreferencesManager.aiTranslationModel}")
-        if (apiKey.isBlank() && provider !in listOf("Custom", "DeepL (keyless)", "Google Translate")) {
+        if (apiKey.isBlank() && !isCustomOrKeyless(provider, PreferencesManager.aiTranslationBaseUrl)) {
             Log.w(TAG, "API key is blank for provider $provider, skipping translation")
             return lyrics
         }
@@ -143,6 +143,21 @@ object AiLyricsTranslator {
 
             else -> AiProtocol.OPENAI
         }
+    }
+
+    fun isCustomOrKeyless(provider: String, baseUrl: String = ""): Boolean {
+        return provider in listOf(
+            "Custom",
+            "OpenAI-compatible",
+            "Anthropic-compatible",
+            "Gemini-compatible",
+            "DeepL (keyless)",
+            "Google Translate"
+        ) || (baseUrl.isNotBlank() &&
+            !baseUrl.startsWith("https://openrouter.ai") &&
+            !baseUrl.startsWith("https://api.openai.com") &&
+            !baseUrl.startsWith("https://api.anthropic.com") &&
+            !baseUrl.startsWith("https://generativelanguage.googleapis.com"))
     }
 
     private fun translateViaAi(
@@ -367,11 +382,13 @@ object AiLyricsTranslator {
             })
         }
 
-        val headers = mapOf(
+        val headers = mutableMapOf(
             "Content-Type" to "application/json",
-            "x-api-key" to apiKey.trim(),
             "anthropic-version" to "2023-06-01"
         )
+        if (apiKey.isNotBlank()) {
+            headers["x-api-key"] = apiKey.trim()
+        }
 
         val resp = executeHttpPost(endpoint, body.toString(), headers)
         if (resp.statusCode in 200..299) {

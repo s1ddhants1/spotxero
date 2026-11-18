@@ -68,8 +68,8 @@ object LyricsManager {
 
             Log.d(TAG, "Current track updated: $title by $artist (id=$currentTrackId, $currentTrackDurationSec s)")
 
-            val cacheKey = "$title::$artist".lowercase()
-            val trackKey = currentTrackId?.let { "track:$it" }
+            val cacheKey = buildCacheKey(title, artist ?: "")
+            val trackKey = currentTrackId?.let { buildTrackKey(it) }
             if (parsedCache[cacheKey] == null && (trackKey == null || parsedCache[trackKey] == null)) {
                 prefetchExecutor.execute {
                     runCatching {
@@ -80,8 +80,26 @@ object LyricsManager {
         }
     }
 
+    private fun buildCacheKey(title: String, artist: String): String {
+        val transKey = if (PreferencesManager.isAiLyricsTranslationEnabled) {
+            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}"
+        } else {
+            "orig"
+        }
+        return "$title::$artist::$transKey".lowercase()
+    }
+
+    private fun buildTrackKey(trackId: String): String {
+        val transKey = if (PreferencesManager.isAiLyricsTranslationEnabled) {
+            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}"
+        } else {
+            "orig"
+        }
+        return "track:$trackId::$transKey".lowercase()
+    }
+
     fun getLyrics(trackId: String? = null): CachedLyrics? {
-        val trackKey = trackId?.let { "track:$it" }
+        val trackKey = trackId?.let { buildTrackKey(it) }
         if (trackKey != null) {
             parsedCache[trackKey]?.let { return it }
         }
@@ -102,7 +120,7 @@ object LyricsManager {
 
         if (title.isNullOrBlank()) return null
 
-        val cacheKey = "$title::$artist".lowercase()
+        val cacheKey = buildCacheKey(title, artist)
         parsedCache[cacheKey]?.let {
             if (trackKey != null) parsedCache[trackKey] = it
             return it
