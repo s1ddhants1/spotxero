@@ -70,7 +70,7 @@
     <string name="pref_force_external_lyrics_title">Force Third-Party Lyrics</string>
     <string name="pref_force_external_lyrics_desc">Always use third-party lyrics even if Spotify provides lyrics</string>
     <string name="title_ai_lyrics_translation">AI Lyrics Translation</string>
-    <string name="ai_lyrics_translation_desc">Translate lyrics using Google Gemini, OpenAI, OpenRouter, or Custom LLM</string>
+    <string name="ai_lyrics_translation_desc">Translation languages, providers and models</string>
     <string name="lyrics_providers_header">Providers &amp; Priority</string>
     <string name="lyrics_providers_desc">Drag or move items to configure fallback priority</string>
     <string name="provider_betterlyrics_title">BetterLyrics</string>
