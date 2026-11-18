@@ -46,7 +46,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.spotxero.ui.component.ExpressiveSwitch
-import app.spotxero.ui.haptics.HapticEvent
 import app.spotxero.ui.haptics.rememberAppHaptics
 import app.spotxero.ui.theme.AppIcons
 
@@ -207,7 +206,6 @@ private fun MetrolistSettingsItemRow(
                             interactionSource = interactionSource,
                             indication = null,
                             onClick = {
-                                haptics.perform(HapticEvent.PRESS)
                                 item.onClick?.invoke()
                             }
                         )
