@@ -16,7 +16,6 @@
     <string name="btn_open_spotify">Open Spotify</string>
     <string name="title_settings">Settings</string>
     <string name="feature_master_switch_title">Enable Module</string>
-    <string name="feature_master_switch_desc">Enable or disable all SpotXero enhancements</string>
     <string name="category_playback">Playback</string>
     <string name="category_lyrics">Lyrics</string>
     <string name="category_privacy">Privacy</string>

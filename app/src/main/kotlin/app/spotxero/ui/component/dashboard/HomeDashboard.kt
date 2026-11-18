@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -220,28 +221,21 @@ private fun MasterSwitchCard(
                 }
             }
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.feature_master_switch_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (checked) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    }
-                )
-                Spacer(Modifier.height(AppSpacing.xxs))
-                Text(
-                    text = stringResource(R.string.feature_master_switch_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (checked) {
-                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-            }
+            Spacer(Modifier.width(AppSpacing.sm))
+
+            Text(
+                text = stringResource(R.string.feature_master_switch_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (checked) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                modifier = Modifier.weight(1f)
+            )
+
+            Spacer(Modifier.width(AppSpacing.xs))
             Switch(
                 checked = checked,
                 onCheckedChange = null,
