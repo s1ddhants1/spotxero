@@ -2,18 +2,33 @@ package app.spotxero.hooks.lyrics
 
 import android.media.MediaMetadata
 import android.media.session.MediaSession
+import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
-import android.util.Log
 import java.lang.reflect.Method
 import java.net.URI
+import java.util.Collections
+import java.util.LinkedHashMap
 
 object LyricsHook {
 
     private const val TAG = "SpotXero.LyricsHook"
+    private const val MAX_STOCK_CACHE = 30
+
+    private val stockTranslatedCache: MutableMap<String, ByteArray> = Collections.synchronizedMap(
+        object : LinkedHashMap<String, ByteArray>(MAX_STOCK_CACHE, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?): Boolean {
+                return size > MAX_STOCK_CACHE
+            }
+        }
+    )
+
+    private fun getStockCacheKey(trackId: String): String {
+        return "$trackId:${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}".lowercase()
+    }
 
     fun install(module: XposedModule) {
         Log.i(TAG, "Installing lyrics hooks")
@@ -117,6 +132,47 @@ object LyricsHook {
         val bBodyField = builderClass.declaredFields.firstOrNull { it.type == responseBodyClass }?.apply { isAccessible = true }
         Log.i(TAG, "hookThirdPartyLyrics: responseBodyClass=$responseBodyClass, bBodyField=$bBodyField")
         if (responseBodyClass == null || bBodyField == null) return
+
+        val respBodyMethod = responseClass.declaredMethods.firstOrNull {
+            !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                it.parameterCount == 0 &&
+                responseBodyClass.isAssignableFrom(it.returnType)
+        }?.apply { isAccessible = true }
+
+        val respBodyField = responseClass.declaredFields.firstOrNull {
+            responseBodyClass.isAssignableFrom(it.type)
+        }?.apply { isAccessible = true }
+
+        val respBytesMethod = runCatching {
+            responseBodyClass.getMethod("bytes")
+        }.getOrNull() ?: responseBodyClass.declaredMethods.firstOrNull {
+            !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                it.parameterCount == 0 &&
+                it.returnType == ByteArray::class.java
+        }?.apply { isAccessible = true }
+
+        val respByteStreamMethod = runCatching {
+            responseBodyClass.getMethod("byteStream")
+        }.getOrNull() ?: responseBodyClass.declaredMethods.firstOrNull {
+            !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                it.parameterCount == 0 &&
+                java.io.InputStream::class.java.isAssignableFrom(it.returnType)
+        }?.apply { isAccessible = true }
+
+        fun extractBodyBytes(responseObj: Any?): ByteArray? {
+            if (responseObj == null) return null
+            val bodyObj = runCatching {
+                respBodyMethod?.invoke(responseObj) ?: respBodyField?.get(responseObj)
+            }.getOrNull() ?: return null
+
+            return runCatching {
+                if (respBytesMethod != null) {
+                    respBytesMethod.invoke(bodyObj) as? ByteArray
+                } else if (respByteStreamMethod != null) {
+                    (respByteStreamMethod.invoke(bodyObj) as? java.io.InputStream)?.use { it.readBytes() }
+                } else null
+            }.getOrNull()
+        }
 
         try {
             val concreteBodyClass = responseBodyClass.declaredFields.firstOrNull {
@@ -252,6 +308,23 @@ object LyricsHook {
 
                     Log.i(TAG, "Color-lyrics requested: trackId=$trackId, externalEnabled=$externalEnabled, force=$force, aiTranslationEnabled=$aiTranslationEnabled")
 
+                    // 1. Check cached translated stock response
+                    if (aiTranslationEnabled && trackId != null) {
+                        val stockCacheKey = getStockCacheKey(trackId)
+                        val cachedStock = stockTranslatedCache[stockCacheKey]
+                        if (cachedStock != null) {
+                            val body = createBody(cachedStock, "application/protobuf")
+                            if (body != null) {
+                                val response = buildResponse(request, body, "application/protobuf")
+                                if (response != null) {
+                                    Log.i(TAG, "===> INJECTED CACHED TRANSLATED STOCK LYRICS FOR $trackId <===")
+                                    return@intercept response
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Try third-party lyrics if external is enabled and force or ai translation is active
                     if (externalEnabled && (force || aiTranslationEnabled)) {
                         val protoBytes = LyricsManager.getLyricsProto(trackId)
                         Log.i(TAG, "LyricsManager proto returned: ${if (protoBytes != null) "${protoBytes.size} bytes" else "null"}")
@@ -288,6 +361,58 @@ object LyricsHook {
 
                     Log.d(TAG, "Original color-lyrics response code: $statusCode for $trackId")
 
+                    // 3. If Spotify returned 200 and AI translation is enabled, translate stock lyrics!
+                    if (statusCode == 200 && aiTranslationEnabled && trackId != null) {
+                        val rawBytes = extractBodyBytes(originalResponse)
+                        if (rawBytes != null && rawBytes.isNotEmpty()) {
+                            val parsed = runCatching { LyricsProtobuf.parseColorLyricsResponse(rawBytes) }.getOrNull()
+                            if (parsed != null && parsed.lyrics.lines.isNotEmpty()) {
+                                Log.i(TAG, "Stock Spotify lyrics parsed: ${parsed.lyrics.lines.size} lines from ${parsed.providerDisplayName}. Translating...")
+                                val translatedLyrics = runCatching {
+                                    AiLyricsTranslator.translateLyrics(parsed.lyrics, trackKey = trackId)
+                                }.getOrDefault(parsed.lyrics)
+
+                                val hasTranslated = translatedLyrics !== parsed.lyrics &&
+                                    translatedLyrics.lines.isNotEmpty() &&
+                                    translatedLyrics.lines != parsed.lyrics.lines
+
+                                if (hasTranslated) {
+                                    val translatedProtoBytes = LyricsProtobuf.buildColorLyricsResponse(
+                                        lyrics = translatedLyrics,
+                                        providerName = parsed.provider,
+                                        providerDisplayName = "${parsed.providerDisplayName} (Translated)",
+                                        customColorData = parsed.colorDataBytes,
+                                        hasVocalRemoval = parsed.hasVocalRemoval
+                                    )
+
+                                    val stockCacheKey = getStockCacheKey(trackId)
+                                    stockTranslatedCache[stockCacheKey] = translatedProtoBytes
+
+                                    val newBody = createBody(translatedProtoBytes, "application/protobuf")
+                                    if (newBody != null) {
+                                        val replacement = buildResponse(request, newBody, "application/protobuf")
+                                        if (replacement != null) {
+                                            runCatching { (originalResponse as? java.io.Closeable)?.close() }
+                                            Log.i(TAG, "===> INJECTED TRANSLATED STOCK SPOTIFY PROTOBUF LYRICS FOR $trackId <===")
+                                            return@intercept replacement
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Reconstruct response from consumed rawBytes if translation didn't replace
+                            val fallbackBody = createBody(rawBytes, "application/protobuf")
+                            if (fallbackBody != null) {
+                                val fallbackResp = buildResponse(request, fallbackBody, "application/protobuf")
+                                if (fallbackResp != null) {
+                                    runCatching { (originalResponse as? java.io.Closeable)?.close() }
+                                    return@intercept fallbackResp
+                                }
+                            }
+                        }
+                    }
+
+                    // 4. Fallback if Spotify returned non-200 and external lyrics is enabled
                     if (externalEnabled && statusCode != 200) {
                         val protoBytes = LyricsManager.getLyricsProto(trackId)
                         if (protoBytes != null) {

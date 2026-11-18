@@ -52,6 +52,8 @@ object LyricsManager {
         }
     )
 
+    private val pendingFetches: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
+
     fun updateCurrentTrack(metadata: MediaMetadata) {
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)
@@ -71,9 +73,13 @@ object LyricsManager {
             val cacheKey = buildCacheKey(title, artist ?: "")
             val trackKey = currentTrackId?.let { buildTrackKey(it) }
             if (parsedCache[cacheKey] == null && (trackKey == null || parsedCache[trackKey] == null)) {
-                prefetchExecutor.execute {
-                    runCatching {
-                        fetchAndCache(title, artist ?: "", album, currentTrackDurationSec, cacheKey, trackKey)
+                if (pendingFetches.add(cacheKey)) {
+                    prefetchExecutor.execute {
+                        try {
+                            fetchAndCache(title, artist ?: "", album, currentTrackDurationSec, cacheKey, trackKey)
+                        } finally {
+                            pendingFetches.remove(cacheKey)
+                        }
                     }
                 }
             }
