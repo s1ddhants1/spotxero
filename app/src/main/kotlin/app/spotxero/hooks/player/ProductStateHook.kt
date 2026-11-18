@@ -128,7 +128,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val map = result as? Map<*, *> ?: return@intercept result
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || map.isEmpty()) {
+                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || map.isEmpty()) {
                     return@intercept result
                 }
                 @Suppress("UNCHECKED_CAST")
@@ -157,7 +157,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val map = result as? Map<*, *> ?: return@intercept result
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || map.isEmpty()) {
+                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || map.isEmpty()) {
                     return@intercept result
                 }
                 map.forEach { (key, attribute) ->
@@ -190,7 +190,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val originalMap = result as? Map<*, *> ?: return@intercept result
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || originalMap.isEmpty()) {
+                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || originalMap.isEmpty()) {
                     return@intercept result
                 }
                 val mutableMap = originalMap.toMutableMap()
@@ -215,7 +215,7 @@ object ProductStateHook {
                         }
                     }
                 }
-                mutableMap
+                java.util.Collections.unmodifiableMap(mutableMap)
             }
     }
 
@@ -270,7 +270,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val list = result as? List<*> ?: return@intercept result
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept result
                 }
                 list.filterNot { assignedValue ->
@@ -337,7 +337,7 @@ object ProductStateHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val snapshot = chain.proceed() ?: return@intercept null
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept snapshot
                 }
                 val origHeader = headerField.get(snapshot) ?: return@intercept snapshot
@@ -384,7 +384,7 @@ object ProductStateHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val result = chain.proceed()
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept result
                 }
                 val scope = chain.getArg(0) as? String ?: return@intercept result

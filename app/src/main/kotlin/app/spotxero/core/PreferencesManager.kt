@@ -76,25 +76,66 @@ object PreferencesManager {
     private val inMemoryStrings = ConcurrentHashMap<String, String>()
     private val inMemoryInts = ConcurrentHashMap<String, Int>()
 
-    private fun resolveTargetContext(): Context? {
-        return runCatching {
+    @Volatile
+    var targetContext: Context? = null
+        private set
+
+    @Volatile
+    private var cachedUserLoggedIn: Boolean? = null
+    @Volatile
+    private var lastUserLoggedInCheckMs: Long = 0L
+
+    fun resolveTargetContext(): Context? {
+        targetContext?.let { return it }
+        val resolved = runCatching {
             val atClass = Class.forName("android.app.ActivityThread")
             val currentApp = atClass.getMethod("currentApplication").invoke(null) as? Context
             if (currentApp != null) return@runCatching currentApp
             val at = atClass.getMethod("currentActivityThread").invoke(null)
             atClass.getMethod("getApplication").invoke(at) as? Context
         }.getOrNull()
+        if (resolved != null) {
+            targetContext = resolved
+        }
+        return resolved
     }
 
     fun initTarget(context: Context) {
-        val targetContext = context.applicationContext ?: context
+        val target = context.applicationContext ?: context
+        targetContext = target
         runCatching {
-            val tp = targetContext.getSharedPreferences(TARGET_PREFS_NAME, Context.MODE_PRIVATE)
+            val tp = target.getSharedPreferences(TARGET_PREFS_NAME, Context.MODE_PRIVATE)
             targetPrefs = tp
             if (tp.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
                 inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = tp.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
             }
         }
+    }
+
+    private fun checkUserLoggedInInternal(): Boolean {
+        val ctx = targetContext ?: resolveTargetContext() ?: return true
+        return runCatching {
+            val prefs = ctx.getSharedPreferences("spotify_preferences", Context.MODE_PRIVATE)
+            val npvLoggedIn = prefs.getBoolean("com.spotify.proactiveplatforms.npvwidget.KEY_PREFS_LOGGED_IN", false)
+            val notLoggedOut = !prefs.getBoolean("last_known_is_logged_out_status", true)
+            val sessionStage = prefs.getString("deeplink.session.stage", null) == "LOGGED_IN"
+            val signedInMilestone = prefs.getString("crashlytics_persistent_usage_milestone", null) == "signed_in"
+            val hasEventOwner = !prefs.getString("event-sender-event-owner", null).isNullOrEmpty()
+
+            npvLoggedIn || notLoggedOut || sessionStage || signedInMilestone || hasEventOwner
+        }.getOrDefault(true)
+    }
+
+    fun isUserLoggedIn(): Boolean {
+        val now = android.os.SystemClock.uptimeMillis()
+        val cached = cachedUserLoggedIn
+        if (cached != null && (now - lastUserLoggedInCheckMs) < 1000L) {
+            return cached
+        }
+        val result = checkUserLoggedInInternal()
+        cachedUserLoggedIn = result
+        lastUserLoggedInCheckMs = now
+        return result
     }
 
     private fun getTargetPrefs(): SharedPreferences? {
@@ -167,6 +208,9 @@ object PreferencesManager {
         remotePrefs = null
         localPrefs = null
         targetPrefs = null
+        targetContext = null
+        cachedUserLoggedIn = null
+        lastUserLoggedInCheckMs = 0L
         onPreferenceChangedListener = null
         inMemoryBooleans.clear()
         inMemoryStrings.clear()
