@@ -128,4 +128,7 @@ object PrefKeys {
     const val KEY_HIDE_AUDIOBOOKS = "pref_hide_audiobooks"
     const val KEY_SHUFFLE_STATE = "pref_user_shuffle_state"
     const val KEY_SMART_SHUFFLE_IN_MODES = "pref_smart_shuffle_in_modes"
+    const val KEY_DOUBLE_TAP_TO_SEEK = "pref_double_tap_to_seek"
+    const val KEY_SEEK_DURATION_SECONDS = "pref_seek_duration_seconds"
+    const val KEY_SEEK_PROGRESSIVE = "pref_seek_progressive"
 }

@@ -65,6 +65,9 @@ data class DashboardUiState(
     val isSpotifyRoundyUiEnabled: Boolean = false,
     val isHidePodcastsEnabled: Boolean = false,
     val isHideAudiobooksEnabled: Boolean = false,
+    val isDoubleTapToSeekEnabled: Boolean = true,
+    val seekDurationSeconds: Int = 10,
+    val isSeekProgressive: Boolean = false,
 
     val activeSpotify: InstalledSpotifyInfo? = null,
     val installedSpotifyVariants: List<InstalledSpotifyInfo> = emptyList()

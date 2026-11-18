@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.HapticFeedbackConstantsCompat
 import androidx.core.view.ViewCompat
 import app.spotxero.core.PreferencesManager
+import kotlin.math.roundToInt
 
 enum class HapticEvent {
     PRESS,
@@ -110,3 +111,29 @@ internal fun HapticFeedbackType.toHapticEvent(): HapticEvent =
         -> HapticEvent.SEGMENT_TICK
         else -> HapticEvent.PRESS
     }
+
+class SliderDetents(
+    private val range: ClosedFloatingPointRange<Float>,
+    private val steps: Int,
+    initialValue: Float,
+) {
+    private var previous = detent(initialValue)
+
+    fun moved(value: Float): Boolean {
+        val current = detent(value)
+        val changed = current != null && previous != null && current != previous
+        previous = current
+        return changed
+    }
+
+    fun reset(value: Float) {
+        previous = detent(value)
+    }
+
+    private fun detent(value: Float): Int? {
+        val length = range.endInclusive - range.start
+        if (steps <= 0 || length <= 0f || !length.isFinite() || !value.isFinite()) return null
+        return ((value.coerceIn(range) - range.start) / length * (steps + 1)).roundToInt()
+    }
+}
+

@@ -34,6 +34,7 @@ import app.spotxero.ui.theme.AppSpacing
 import app.spotxero.ui.viewmodel.DashboardUiEffect
 import app.spotxero.ui.viewmodel.DashboardUiState
 import app.spotxero.ui.viewmodel.DashboardViewModel
+import kotlin.math.roundToInt
 
 private enum class Screen {
     DASHBOARD,
@@ -192,6 +193,9 @@ fun SpotXeroApp(
                                 onHideAudiobooksToggle = { viewModel.setHideAudiobooks(it) },
                                 onLyricsToggle = { viewModel.setLyrics(it) },
                                 onForceLocalPlaybackToggle = { viewModel.setForceLocalPlayback(it) },
+                                onDoubleTapToSeekToggle = { viewModel.setDoubleTapToSeekEnabled(it) },
+                                onSeekDurationChange = { viewModel.setSeekDurationSeconds(it.roundToInt()) },
+                                onSeekProgressiveToggle = { viewModel.setSeekProgressive(it) },
                                 onOpenLyricsSources = { viewModel.showLyricsSourcesScreen() },
                                 onRequestScope = { viewModel.requestScope() }
                             )

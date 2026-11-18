@@ -10,6 +10,7 @@ import app.spotxero.hooks.ads.PlayerAdCardsHook
 import app.spotxero.hooks.content.ContentFilterHook
 import app.spotxero.hooks.lyrics.LyricsHook
 import app.spotxero.hooks.navigation.HidePremiumTabHook
+import app.spotxero.hooks.player.ArtworkSeekHook
 import app.spotxero.hooks.player.DisableSmartShuffleHook
 import app.spotxero.hooks.player.OnDemandInFreeHook
 import app.spotxero.hooks.player.PlayerRestrictionsHook
@@ -96,6 +97,7 @@ object HookRegistry {
             HookEntry("OnDemandInFree", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { OnDemandInFreeHook.install(module) },
             HookEntry("PlayerShuffle", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PlayerShuffleHook.install(module) },
             HookEntry("ForceLocalPlayback", { PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, true) }) { ForceLocalPlaybackHook.install(module) },
+            HookEntry("ArtworkSeek", { true }) { ArtworkSeekHook.install(module) },
             HookEntry("Lyrics", { true }) { LyricsHook.install(module) },
         )
 

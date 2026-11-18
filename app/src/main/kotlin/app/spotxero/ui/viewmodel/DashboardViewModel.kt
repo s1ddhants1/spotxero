@@ -176,7 +176,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isSpotifyMonetEnabled = PreferencesManager.isSpotifyMonetEnabled,
                 isSpotifyRoundyUiEnabled = PreferencesManager.isSpotifyRoundyUiEnabled,
                 isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled,
-                isHideAudiobooksEnabled = PreferencesManager.isHideAudiobooksEnabled
+                isHideAudiobooksEnabled = PreferencesManager.isHideAudiobooksEnabled,
+                isDoubleTapToSeekEnabled = PreferencesManager.isDoubleTapToSeekEnabled,
+                seekDurationSeconds = PreferencesManager.seekDurationSeconds,
+                isSeekProgressive = PreferencesManager.isSeekProgressive
             )
         }
     }
@@ -473,6 +476,21 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             if (!result.contains(d)) result.add(d)
         }
         return result
+    }
+
+    fun setDoubleTapToSeekEnabled(enabled: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_DOUBLE_TAP_TO_SEEK, enabled)
+        refreshState()
+    }
+
+    fun setSeekDurationSeconds(seconds: Int) {
+        PreferencesManager.setInt(getApplication(), PrefKeys.KEY_SEEK_DURATION_SECONDS, seconds)
+        refreshState()
+    }
+
+    fun setSeekProgressive(progressive: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_SEEK_PROGRESSIVE, progressive)
+        refreshState()
     }
 
     fun notifyEffect(effect: DashboardUiEffect) {

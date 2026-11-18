@@ -1014,4 +1014,14 @@ object AppIcons {
         viewportWidth = 24f,
         viewportHeight = 24f
     )
+
+    val FastForward: ImageVector = materialSymbol(
+        name = "FastForward",
+        pathData = "M100-240v-480l360 240-360 240Zm400 0v-480l360 240-360 240ZM180-480Zm400 0Zm-400 90 136-90-136-90v180Zm400 0 136-90-136-90v180Z"
+    )
+
+    val Replay: ImageVector = materialSymbol(
+        name = "Replay",
+        pathData = "M480-80q-75 0-140.5-28.5t-114-77q-48.5-48.5-77-114T120-440h80q0 117 81.5 198.5T480-160q117 0 198.5-81.5T760-440q0-117-81.5-198.5T480-720h-6l62 62-56 58-160-160 160-160 56 58-62 62h6q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-440q0 75-28.5 140.5t-77 114q-48.5 48.5-77 114T480-80Z"
+    )
 }

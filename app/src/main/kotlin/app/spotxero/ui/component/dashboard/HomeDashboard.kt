@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import app.spotxero.R
 import app.spotxero.ui.component.settings.CategoryHeader
 import app.spotxero.ui.component.settings.NavigationSettingCard
+import app.spotxero.ui.component.settings.SliderSettingCard
 import app.spotxero.ui.component.settings.SwitchSettingCard
 import app.spotxero.ui.haptics.HapticEvent
 import app.spotxero.ui.haptics.LocalAppHaptics
@@ -61,6 +62,9 @@ fun HomeDashboard(
     onHideAudiobooksToggle: (Boolean) -> Unit = {},
     onLyricsToggle: (Boolean) -> Unit = {},
     onForceLocalPlaybackToggle: (Boolean) -> Unit = {},
+    onDoubleTapToSeekToggle: (Boolean) -> Unit = {},
+    onSeekDurationChange: (Float) -> Unit = {},
+    onSeekProgressiveToggle: (Boolean) -> Unit = {},
     onOpenLyricsSources: () -> Unit = {},
     onRequestScope: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -91,6 +95,32 @@ fun HomeDashboard(
             checked = uiState.isForceLocalPlaybackEnabled,
             onCheckedChange = onForceLocalPlaybackToggle
         )
+        SwitchSettingCard(
+            title = stringResource(R.string.feature_double_tap_to_seek_title),
+            subtitle = stringResource(R.string.feature_double_tap_to_seek_desc),
+            icon = AppIcons.FastForward,
+            checked = uiState.isDoubleTapToSeekEnabled,
+            onCheckedChange = onDoubleTapToSeekToggle
+        )
+        if (uiState.isDoubleTapToSeekEnabled) {
+            SliderSettingCard(
+                title = stringResource(R.string.seek_duration),
+                description = stringResource(R.string.seek_duration_description),
+                value = uiState.seekDurationSeconds.toFloat(),
+                defaultValue = 10f,
+                range = 5f..30f,
+                steps = 4,
+                valueLabel = stringResource(R.string.settings_seconds_value, uiState.seekDurationSeconds),
+                onValueChange = onSeekDurationChange
+            )
+            SwitchSettingCard(
+                title = stringResource(R.string.seek_seconds_addup),
+                subtitle = stringResource(R.string.seek_seconds_addup_desc),
+                icon = AppIcons.Replay,
+                checked = uiState.isSeekProgressive,
+                onCheckedChange = onSeekProgressiveToggle
+            )
+        }
 
         CategoryHeader(title = stringResource(R.string.category_lyrics))
         SwitchSettingCard(

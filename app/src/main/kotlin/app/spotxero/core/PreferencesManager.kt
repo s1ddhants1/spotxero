@@ -57,6 +57,9 @@ object PreferencesManager {
     var isSpotifyRoundyUiEnabled: Boolean = false
     var isHidePodcastsEnabled: Boolean = false
     var isHideAudiobooksEnabled: Boolean = false
+    var isDoubleTapToSeekEnabled: Boolean = true
+    var seekDurationSeconds: Int = 10
+    var isSeekProgressive: Boolean = false
 
     var onPreferenceChangedListener: (() -> Unit)? = null
 
@@ -71,6 +74,7 @@ object PreferencesManager {
 
     private val inMemoryBooleans = ConcurrentHashMap<String, Boolean>()
     private val inMemoryStrings = ConcurrentHashMap<String, String>()
+    private val inMemoryInts = ConcurrentHashMap<String, Int>()
 
     private fun resolveTargetContext(): Context? {
         return runCatching {
@@ -311,6 +315,12 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_HIDE_PODCASTS] = isHidePodcastsEnabled
         isHideAudiobooksEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_AUDIOBOOKS, false)
         inMemoryBooleans[PrefKeys.KEY_HIDE_AUDIOBOOKS] = isHideAudiobooksEnabled
+        isDoubleTapToSeekEnabled = prefs.getBoolean(PrefKeys.KEY_DOUBLE_TAP_TO_SEEK, true)
+        inMemoryBooleans[PrefKeys.KEY_DOUBLE_TAP_TO_SEEK] = isDoubleTapToSeekEnabled
+        seekDurationSeconds = prefs.getInt(PrefKeys.KEY_SEEK_DURATION_SECONDS, 10)
+        inMemoryInts[PrefKeys.KEY_SEEK_DURATION_SECONDS] = seekDurationSeconds
+        isSeekProgressive = prefs.getBoolean(PrefKeys.KEY_SEEK_PROGRESSIVE, false)
+        inMemoryBooleans[PrefKeys.KEY_SEEK_PROGRESSIVE] = isSeekProgressive
         isLauncherIconHidden = prefs.getBoolean(KEY_HIDE_LAUNCHER_ICON, false)
         inMemoryBooleans[KEY_HIDE_LAUNCHER_ICON] = isLauncherIconHidden
         val tp = getTargetPrefs()
@@ -427,6 +437,58 @@ object PreferencesManager {
         }
     }
 
+    fun getInt(key: String, default: Int): Int {
+        inMemoryInts[key]?.let { return it }
+        val tp = getTargetPrefs()
+        if (tp != null && tp.contains(key)) {
+            val v = tp.getInt(key, default)
+            inMemoryInts[key] = v
+            return v
+        }
+        val rp = remotePrefs
+        if (rp != null && rp.contains(key)) {
+            val v = rp.getInt(key, default)
+            inMemoryInts[key] = v
+            return v
+        }
+        val lp = localPrefs
+        if (lp != null && lp.contains(key)) {
+            val v = lp.getInt(key, default)
+            inMemoryInts[key] = v
+            return v
+        }
+        return default
+    }
+
+    fun setInt(context: Context? = null, key: String, value: Int) {
+        inMemoryInts[key] = value
+        updateIntFieldDirectly(key, value)
+        val tp = getTargetPrefs()
+        if (tp != null) {
+            runCatching {
+                tp.edit().putInt(key, value).commit()
+            }
+        }
+        val rp = remotePrefs
+        if (rp != null) {
+            runCatching {
+                rp.edit().putInt(key, value).apply()
+            }
+        }
+        val prefs = runCatching { getPrefs(context) }.getOrNull()
+        if (prefs != null && prefs != tp && prefs != rp) {
+            runCatching {
+                prefs.edit().putInt(key, value).apply()
+            }
+        }
+    }
+
+    fun updateIntFieldDirectly(key: String, value: Int) {
+        when (key) {
+            PrefKeys.KEY_SEEK_DURATION_SECONDS -> seekDurationSeconds = value
+        }
+    }
+
     fun updateStringFieldDirectly(key: String, value: String) {
         when (key) {
             PrefKeys.KEY_LYRICS_PROVIDERS_ORDER -> lyricsProvidersOrder = value
@@ -467,6 +529,8 @@ object PreferencesManager {
             PrefKeys.KEY_SPOTIFY_ROUNDY_UI -> isSpotifyRoundyUiEnabled = value
             PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = value
             PrefKeys.KEY_HIDE_AUDIOBOOKS -> isHideAudiobooksEnabled = value
+            PrefKeys.KEY_DOUBLE_TAP_TO_SEEK -> isDoubleTapToSeekEnabled = value
+            PrefKeys.KEY_SEEK_PROGRESSIVE -> isSeekProgressive = value
             KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = value
             KEY_APP_AMOLED_THEME -> isAppAmoledEnabled = value
             KEY_HIDE_LAUNCHER_ICON -> isLauncherIconHidden = value
@@ -484,6 +548,10 @@ object PreferencesManager {
                 is String -> {
                     inMemoryStrings[key] = v
                     updateStringFieldDirectly(key, v)
+                }
+                is Int -> {
+                    inMemoryInts[key] = v
+                    updateIntFieldDirectly(key, v)
                 }
             }
         }

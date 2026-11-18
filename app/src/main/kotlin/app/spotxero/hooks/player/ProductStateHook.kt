@@ -128,7 +128,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val map = result as? Map<*, *> ?: return@intercept result
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || map.isEmpty()) {
                     return@intercept result
                 }
                 @Suppress("UNCHECKED_CAST")
@@ -157,7 +157,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val map = result as? Map<*, *> ?: return@intercept result
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || map.isEmpty()) {
                     return@intercept result
                 }
                 map.forEach { (key, attribute) ->
@@ -190,7 +190,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val originalMap = result as? Map<*, *> ?: return@intercept result
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || originalMap.isEmpty()) {
                     return@intercept result
                 }
                 val mutableMap = originalMap.toMutableMap()
