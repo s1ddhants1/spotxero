@@ -243,19 +243,9 @@ private fun MasterSwitchCard(
             )
 
             Spacer(Modifier.width(AppSpacing.xs))
-            Switch(
+            app.spotxero.ui.component.ExpressiveSwitch(
                 checked = checked,
                 onCheckedChange = null,
-                thumbContent = if (checked) {
-                    {
-                        Icon(
-                            imageVector = Icons.Filled.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(SwitchDefaults.IconSize)
-                        )
-                    }
-                } else null,
-                colors = appSwitchColors()
             )
         }
     }

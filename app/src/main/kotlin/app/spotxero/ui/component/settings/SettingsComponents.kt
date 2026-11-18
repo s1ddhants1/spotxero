@@ -228,20 +228,10 @@ fun SwitchSettingCard(
 
             Spacer(Modifier.width(AppSpacing.xs))
 
-            Switch(
+            app.spotxero.ui.component.ExpressiveSwitch(
                 checked = checked,
                 enabled = enabled,
-                onCheckedChange = handleCheckedChange,
-                thumbContent = if (checked && enabled) {
-                    {
-                        Icon(
-                            imageVector = Icons.Filled.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(SwitchDefaults.IconSize)
-                        )
-                    }
-                } else null,
-                colors = appSwitchColors()
+                onCheckedChange = null,
             )
         }
     }

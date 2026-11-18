@@ -10,5 +10,6 @@ fun appSwitchColors() = SwitchDefaults.colors(
     checkedTrackColor = MaterialTheme.colorScheme.primary,
     checkedIconColor = MaterialTheme.colorScheme.primary,
     uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    uncheckedIconColor = MaterialTheme.colorScheme.surfaceContainerHighest
 )

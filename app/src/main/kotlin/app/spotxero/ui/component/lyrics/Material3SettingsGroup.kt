@@ -173,31 +173,10 @@ fun MetrolistSettingsGroup(
                         Spacer(Modifier.width(16.dp))
 
                         if (item.isSwitch) {
-                            Switch(
+                            app.spotxero.ui.component.ExpressiveSwitch(
                                 checked = item.checked,
-                                onCheckedChange = item.onCheckedChange?.let { onChange ->
-                                    { value ->
-                                        haptics.toggle(value)
-                                        onChange(value)
-                                    }
-                                },
+                                onCheckedChange = null,
                                 enabled = item.enabled,
-                                thumbContent = {
-                                    if (item.checked) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(SwitchDefaults.IconSize),
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = AppIcons.Close,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(SwitchDefaults.IconSize),
-                                        )
-                                    }
-                                },
-                                colors = appSwitchColors()
                             )
                         } else {
                             item.valueLabel?.let { label ->

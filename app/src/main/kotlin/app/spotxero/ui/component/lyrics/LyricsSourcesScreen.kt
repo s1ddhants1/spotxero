@@ -396,25 +396,12 @@ private fun LyricsProviderOrderCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Switch(
+                    app.spotxero.ui.component.ExpressiveSwitch(
                         checked = isChecked,
-                        onCheckedChange = {
-                            if (enabled) {
-                                haptics.toggle(it)
-                                onProviderToggle(providerId, it)
-                            }
-                        },
-                        enabled = enabled,
-                        thumbContent = if (isChecked) {
-                            {
-                                Icon(
-                                    imageVector = Icons.Filled.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
+                        onCheckedChange = if (enabled) {
+                            { onProviderToggle(providerId, it) }
                         } else null,
-                        colors = appSwitchColors()
+                        enabled = enabled,
                     )
                 }
             }
