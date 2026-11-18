@@ -135,8 +135,8 @@ val ALL_PRESETS = listOf(
     AiProviderPreset(
         id = "Gemini",
         group = AiProviderGroup.DIRECT,
-        endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent",
-        defaultModel = "gemini-flash-lite-latest"
+        endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+        defaultModel = "gemini-3.5-flash-lite"
     ),
     AiProviderPreset(
         id = "XAi",
@@ -275,9 +275,9 @@ private val MODELS_BY_PRESET = mapOf(
         AiModelInfo("claude-opus-5", "claude-opus-5", 15.00, 75.00),
     ),
     "Gemini" to listOf(
+        AiModelInfo("gemini-3.5-flash-lite", "gemini-3.5-flash-lite", 0.075, 0.30),
         AiModelInfo("gemini-flash-lite-latest", "gemini-flash-lite-latest", 0.075, 0.30),
-        AiModelInfo("gemini-2.5-flash", "gemini-2.5-flash", 0.10, 0.40),
-        AiModelInfo("gemini-2.5-flash-lite", "gemini-2.5-flash-lite", 0.075, 0.30),
+        AiModelInfo("gemini-3.8-flash", "gemini-3.8-flash", 0.10, 0.40),
         AiModelInfo("gemini-pro-latest", "gemini-pro-latest", 1.25, 5.00),
     ),
     "Perplexity" to listOf(

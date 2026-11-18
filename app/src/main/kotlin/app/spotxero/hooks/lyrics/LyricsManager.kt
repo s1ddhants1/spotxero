@@ -163,8 +163,10 @@ object LyricsManager {
                 Log.i(TAG, "Provider ${provider.displayName} returned ${lyrics?.lines?.size ?: 0} lines")
                 if (lyrics != null && lyrics.lines.isNotEmpty()) {
                     val finalLyrics = if (PreferencesManager.isAiLyricsTranslationEnabled) {
+                        Log.i(TAG, "AI translation is enabled. Translating ${lyrics.lines.size} lines...")
                         AiLyricsTranslator.translateLyrics(lyrics, cacheKey)
                     } else {
+                        Log.i(TAG, "AI translation is disabled.")
                         lyrics
                     }
                     val cached = CachedLyrics(finalLyrics, provider.displayName)

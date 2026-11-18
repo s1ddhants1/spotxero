@@ -25,8 +25,8 @@ object PrefKeys {
 
     const val OpenRouterDefaultBaseUrl = "https://openrouter.ai/api/v1/chat/completions"
     const val OpenRouterDefaultModel = "qwen/qwen3.7-flash"
-    const val GeminiDefaultEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent"
-    const val GeminiDefaultModel = "gemini-flash-lite-latest"
+    const val GeminiDefaultEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent"
+    const val GeminiDefaultModel = "gemini-3.5-flash-lite"
     const val LEGACY_GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     const val AnthropicDefaultEndpoint = "https://api.anthropic.com/v1/messages"
     const val AnthropicDefaultModel = "claude-haiku-5-5"

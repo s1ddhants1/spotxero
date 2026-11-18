@@ -25,6 +25,7 @@ object AiLyricsTranslator {
     private val translationCache = ConcurrentHashMap<String, List<String>>()
 
     fun translateLyrics(lyrics: ParsedLyrics, trackKey: String? = null): ParsedLyrics {
+        Log.i(TAG, "translateLyrics called: enabled=${PreferencesManager.isAiLyricsTranslationEnabled}, lines=${lyrics.lines.size}, trackKey=$trackKey")
         if (!PreferencesManager.isAiLyricsTranslationEnabled) return lyrics
         if (lyrics.lines.isEmpty()) return lyrics
 
@@ -35,7 +36,9 @@ object AiLyricsTranslator {
             else -> PreferencesManager.aiTranslationApiKey
         }
 
+        Log.i(TAG, "translateLyrics: provider=$provider, keyBlank=${apiKey.isBlank()}, targetLang=${PreferencesManager.aiTranslationTargetLang}, model=${PreferencesManager.aiTranslationModel}")
         if (apiKey.isBlank() && provider !in listOf("Custom", "DeepL (keyless)", "Google Translate")) {
+            Log.w(TAG, "API key is blank for provider $provider, skipping translation")
             return lyrics
         }
 
@@ -46,6 +49,7 @@ object AiLyricsTranslator {
         if (cacheKey != null) {
             translationCache[cacheKey]?.let { cachedLines ->
                 if (cachedLines.size == lyrics.lines.size) {
+                    Log.i(TAG, "Returning cached translation (${cachedLines.size} lines)")
                     return applyTranslationToLyrics(lyrics, cachedLines, PreferencesManager.isAiTranslationDualLine)
                 }
             }
@@ -53,7 +57,7 @@ object AiLyricsTranslator {
 
         val rawLines = lyrics.lines.map { it.words }
         val translated = try {
-            translate(
+            val res = translate(
                 lines = rawLines,
                 targetLanguage = targetLang,
                 apiKey = apiKey,
@@ -63,19 +67,24 @@ object AiLyricsTranslator {
                 provider = provider,
                 deeplFormality = PreferencesManager.aiTranslationDeeplFormality,
                 customSystemPrompt = PreferencesManager.aiTranslationCustomPrompt
-            ).getOrNull()
+            )
+            Log.i(TAG, "translate result: isSuccess=${res.isSuccess}, error=${res.exceptionOrNull()?.message}")
+            res.getOrNull()
         } catch (t: Throwable) {
             Log.w(TAG, "AI lyrics translation failed: ${t.message}", t)
             null
         }
 
+        Log.i(TAG, "translated lines count: ${translated?.size} vs original ${lyrics.lines.size}")
         if (translated != null && translated.size == lyrics.lines.size) {
             if (cacheKey != null) {
                 translationCache[cacheKey] = translated
             }
+            Log.i(TAG, "Successfully applied translation to lyrics! Sample translated line 0: '${translated.firstOrNull()}'")
             return applyTranslationToLyrics(lyrics, translated, PreferencesManager.isAiTranslationDualLine)
         }
 
+        Log.w(TAG, "Returning untranslated lyrics due to mismatch or failure")
         return lyrics
     }
 
@@ -254,10 +263,15 @@ object AiLyricsTranslator {
         schema: JSONObject,
         maxTokens: Int
     ): Result<String> {
-        val effectiveModel = model.ifBlank { PrefKeys.GeminiDefaultModel }
+        val effectiveModel = when (model.ifBlank { PrefKeys.GeminiDefaultModel }) {
+            "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite" -> "gemini-3.5-flash-lite"
+            else -> model.ifBlank { PrefKeys.GeminiDefaultModel }
+        }
         val resolvedBase = when {
             baseUrl.isBlank() ||
                 baseUrl == "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" ||
+                baseUrl.contains("gemini-flash-lite-latest") ||
+                baseUrl.contains("gemini-2.5-flash") ||
                 baseUrl == PrefKeys.LEGACY_GEMINI_ENDPOINT -> {
                 PrefKeys.GeminiDefaultEndpoint
             }
@@ -268,7 +282,7 @@ object AiLyricsTranslator {
             resolvedBase.contains("{model}") -> {
                 resolvedBase.replace("{model}", effectiveModel)
             }
-            model.isNotBlank() -> {
+            effectiveModel.isNotBlank() -> {
                 resolvedBase.replace(Regex("/models/[^/:]+(:generateContent)")) { match ->
                     "/models/$effectiveModel${match.groupValues[1]}"
                 }
@@ -305,11 +319,14 @@ object AiLyricsTranslator {
         }
 
         val resp = executeHttpPost(finalUrl, body.toString(), headers)
+        Log.i(TAG, "Gemini request finalUrl=$finalUrl, effectiveModel=$effectiveModel, code=${resp.statusCode}, body length=${resp.body.length}")
         if (resp.statusCode in 200..299) {
             val extracted = extractGeminiContent(resp.body)
+            Log.i(TAG, "Gemini extracted content: ${extracted?.take(150)}...")
             if (extracted != null) return Result.success(extracted)
             return Result.failure(Exception("Gemini returned empty content: ${resp.body.take(200)}"))
         }
+        Log.w(TAG, "Gemini HTTP failed: ${resp.statusCode}: ${resp.body.take(300)}")
         return Result.failure(Exception("Gemini HTTP ${resp.statusCode}: ${resp.body.take(200)}"))
     }
 
@@ -746,12 +763,14 @@ object AiLyricsTranslator {
         val linesArray = json?.optJSONArray("lines")
         if (linesArray != null) {
             val lines = (0 until linesArray.length()).map { linesArray.optString(it) }
-            if (lines.size == expectedLines) return lines
+            Log.d(TAG, "parseJsonLinePayload from object: ${lines.size} lines (expected $expectedLines)")
+            if (lines.isNotEmpty()) return lines
         }
         val arr = parseJsonPayload(content, '[', ']') as? JSONArray
         if (arr != null) {
             val lines = (0 until arr.length()).map { arr.optString(it) }
-            if (lines.size == expectedLines) return lines
+            Log.d(TAG, "parseJsonLinePayload from array: ${lines.size} lines (expected $expectedLines)")
+            if (lines.isNotEmpty()) return lines
         }
         return null
     }
