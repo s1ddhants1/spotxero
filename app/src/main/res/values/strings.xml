@@ -74,17 +74,11 @@
     <string name="lyrics_providers_header">Providers &amp; Priority</string>
     <string name="lyrics_providers_desc">Drag or move items to configure fallback priority</string>
     <string name="provider_betterlyrics_title">BetterLyrics</string>
-    <string name="provider_betterlyrics_desc">Word-synced TTML with singer roles, background vocals, and transliterations when available</string>
     <string name="provider_lrcred_title">lrc.red</string>
-    <string name="provider_lrcred_desc">Word &amp; line synced lyrics database</string>
     <string name="provider_lrclib_title">LRCLIB</string>
-    <string name="provider_lrclib_desc">Open-source lyrics provider (synced &amp; plain)</string>
     <string name="provider_kugou_title">KuGou</string>
-    <string name="provider_kugou_desc">Line-synced LRC with duration matching, especially useful for Chinese and Asian music</string>
     <string name="provider_netease_title">NetEase Cloud Music</string>
-    <string name="provider_netease_desc">Extensive database with Asian &amp; international coverage</string>
     <string name="provider_genius_title">Genius</string>
-    <string name="provider_genius_desc">Crowd-sourced song lyrics &amp; annotations</string>
     <string name="action_move_to_top">Move to top</string>
     <string name="action_move_up">Move up</string>
     <string name="action_move_down">Move down</string>

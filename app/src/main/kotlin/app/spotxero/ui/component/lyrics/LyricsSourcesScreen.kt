@@ -317,16 +317,6 @@ private fun LyricsProviderOrderCard(
                     else -> providerId.replaceFirstChar { it.uppercase() }
                 }
 
-                val description = when (providerId) {
-                    "betterlyrics" -> stringResource(R.string.provider_betterlyrics_desc)
-                    "lrcred" -> stringResource(R.string.provider_lrcred_desc)
-                    "lrclib" -> stringResource(R.string.provider_lrclib_desc)
-                    "kugou" -> stringResource(R.string.provider_kugou_desc)
-                    "netease" -> stringResource(R.string.provider_netease_desc)
-                    "genius" -> stringResource(R.string.provider_genius_desc)
-                    else -> ""
-                }
-
                 val itemElevation by animateFloatAsState(
                     targetValue = if (isItemDragging) 8f else 0f,
                     animationSpec = tween(150),
@@ -385,23 +375,12 @@ private fun LyricsProviderOrderCard(
                         }
                     )
 
-                    Column(
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        if (description.isNotEmpty()) {
-                            Spacer(Modifier.height(AppSpacing.xxs))
-                            Text(
-                                text = description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                    )
 
                     Switch(
                         checked = isChecked,
