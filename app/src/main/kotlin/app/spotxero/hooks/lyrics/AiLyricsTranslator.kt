@@ -11,18 +11,27 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-enum class AiProtocol {
-    OPENAI,
-    ANTHROPIC,
-    GEMINI
-}
+data class LyricsAiResult(
+    val translatedLines: List<String>? = null,
+    val romanizedLines: List<String>? = null,
+    val romanizedWordsPerLine: List<List<String>?>? = null,
+)
 
 object AiLyricsTranslator {
 
     private const val TAG = "SpotXero.AiLyrics"
-    private val translationCache = ConcurrentHashMap<String, List<String>>()
+
+    private class FreeModelSession {
+        val throttled = mutableMapOf<String, Long>()
+        var lastBusyFailure: Throwable? = null
+        var dailyFailure: Throwable? = null
+        var dailyResetMillis = 0L
+    }
+
+    private val freeModelSessions = ConcurrentHashMap<String, FreeModelSession>()
 
     fun translateLyrics(lyrics: ParsedLyrics, trackKey: String? = null): ParsedLyrics {
         Log.i(TAG, "translateLyrics called: enabled=${PreferencesManager.isAiLyricsTranslationEnabled}, lines=${lyrics.lines.size}, trackKey=$trackKey")
@@ -44,29 +53,52 @@ object AiLyricsTranslator {
 
         val targetLang = PreferencesManager.aiTranslationTargetLang.ifBlank { "en" }
         val mode = PreferencesManager.aiTranslationTranslateMode.ifBlank { "Literal" }
-        val cacheKey = if (!trackKey.isNullOrBlank()) "$trackKey::$targetLang::$mode" else null
+        val dualLine = PreferencesManager.isAiTranslationDualLine
+        val model = PreferencesManager.aiTranslationModel
+        val cacheKey = if (!trackKey.isNullOrBlank()) "$trackKey::$targetLang::$mode::$provider::$model" else null
 
         if (cacheKey != null) {
-            translationCache[cacheKey]?.let { cachedLines ->
+            PersistentLyricsCache.getLines(cacheKey)?.let { cachedLines ->
                 if (cachedLines.size == lyrics.lines.size) {
-                    Log.i(TAG, "Returning cached translation (${cachedLines.size} lines)")
-                    return applyTranslationToLyrics(lyrics, cachedLines, PreferencesManager.isAiTranslationDualLine)
+                    Log.i(TAG, "Returning persistent cached translation (${cachedLines.size} lines)")
+                    return applyTranslationToLyrics(lyrics, cachedLines, dualLine)
                 }
             }
         }
 
         val rawLines = lyrics.lines.map { it.words }
+        val wordsPerLine: List<List<String>?>? = if (mode == "Romanized") {
+            lyrics.lines.map { line ->
+                if (line.syllables.isNotEmpty()) {
+                    var offset = 0
+                    val sylWords = mutableListOf<String>()
+                    for (syl in line.syllables) {
+                        val end = (offset + syl.numChars).coerceAtMost(line.words.length)
+                        if (offset <= line.words.length) {
+                            sylWords.add(line.words.substring(offset, end))
+                            offset = end
+                        }
+                    }
+                    if (offset < line.words.length) {
+                        sylWords.add(line.words.substring(offset))
+                    }
+                    sylWords.takeIf { it.isNotEmpty() }
+                } else null
+            }
+        } else null
+
         val translated = try {
             val res = translate(
                 lines = rawLines,
                 targetLanguage = targetLang,
                 apiKey = apiKey,
                 baseUrl = PreferencesManager.aiTranslationBaseUrl,
-                model = PreferencesManager.aiTranslationModel,
+                model = model,
                 mode = mode,
                 provider = provider,
                 deeplFormality = PreferencesManager.aiTranslationDeeplFormality,
-                customSystemPrompt = PreferencesManager.aiTranslationCustomPrompt
+                customSystemPrompt = PreferencesManager.aiTranslationCustomPrompt,
+                wordsPerLine = wordsPerLine
             )
             Log.i(TAG, "translate result: isSuccess=${res.isSuccess}, error=${res.exceptionOrNull()?.message}")
             res.getOrNull()
@@ -78,10 +110,10 @@ object AiLyricsTranslator {
         Log.i(TAG, "translated lines count: ${translated?.size} vs original ${lyrics.lines.size}")
         if (translated != null && translated.size == lyrics.lines.size) {
             if (cacheKey != null) {
-                translationCache[cacheKey] = translated
+                PersistentLyricsCache.putLines(cacheKey, translated)
             }
             Log.i(TAG, "Successfully applied translation to lyrics! Sample translated line 0: '${translated.firstOrNull()}'")
-            return applyTranslationToLyrics(lyrics, translated, PreferencesManager.isAiTranslationDualLine)
+            return applyTranslationToLyrics(lyrics, translated, dualLine)
         }
 
         Log.w(TAG, "Returning untranslated lyrics due to mismatch or failure")
@@ -98,10 +130,11 @@ object AiLyricsTranslator {
         provider: String = "OpenRouter",
         deeplFormality: String = "default",
         customSystemPrompt: String = "",
+        wordsPerLine: List<List<String>?>? = null,
         maxRetries: Int = 3
     ): Result<List<String>> {
         if (lines.isEmpty() || lines.all { it.isBlank() }) {
-            return Result.failure(Exception("Input text is empty"))
+            return Result.failure(LyricsTranslationException(LyricsTranslationFailure.EMPTY_RESPONSE, "Input text is empty"))
         }
 
         return when {
@@ -124,6 +157,7 @@ object AiLyricsTranslator {
                     mode = mode,
                     provider = provider,
                     customSystemPrompt = customSystemPrompt,
+                    wordsPerLine = wordsPerLine,
                     maxRetries = maxRetries
                 )
             }
@@ -131,18 +165,7 @@ object AiLyricsTranslator {
     }
 
     fun protocolFor(provider: String, baseUrl: String, model: String): AiProtocol {
-        return when {
-            provider.equals("Claude", ignoreCase = true) ||
-                provider.equals("Anthropic", ignoreCase = true) ||
-                provider.equals("Anthropic-compatible", ignoreCase = true) ||
-                baseUrl.contains("anthropic.com") -> AiProtocol.ANTHROPIC
-
-            provider.equals("Gemini", ignoreCase = true) ||
-                provider.equals("Gemini-compatible", ignoreCase = true) ||
-                (baseUrl.contains("generativelanguage.googleapis.com") && !baseUrl.contains("/openai/")) -> AiProtocol.GEMINI
-
-            else -> AiProtocol.OPENAI
-        }
+        return AiProviderPresets.protocolFor(provider, baseUrl, model)
     }
 
     fun isCustomOrKeyless(provider: String, baseUrl: String = ""): Boolean {
@@ -160,6 +183,75 @@ object AiLyricsTranslator {
             !baseUrl.startsWith("https://generativelanguage.googleapis.com"))
     }
 
+    private fun freeModelSession(apiKey: String): FreeModelSession =
+        freeModelSessions.getOrPut(apiKey) { FreeModelSession() }
+
+    private fun withFreeModelFallback(
+        provider: String,
+        apiKey: String,
+        baseUrl: String,
+        model: String,
+        request: (String) -> Result<String>,
+    ): Result<String> {
+        val preset = AiProviderPresets.find("OpenRouter") ?: return request(model)
+        if (!provider.equals(preset.id, ignoreCase = true) || baseUrl.ifBlank { preset.endpoint } != preset.endpoint ||
+            !model.endsWith(":free")
+        ) {
+            return request(model)
+        }
+        val session = freeModelSession(apiKey)
+        synchronized(session) {
+            val now = System.currentTimeMillis()
+            session.dailyFailure?.takeIf { now < session.dailyResetMillis }?.let { return Result.failure(it) }
+            session.dailyFailure = null
+            val attempted = mutableSetOf<String>()
+            var candidates: List<String>? = null
+            var selected = model.takeUnless { (session.throttled[it] ?: 0) > now }
+            while (true) {
+                if (selected == null) {
+                    if (candidates == null) {
+                        candidates = listOf(
+                            AiProviderPresets.FREE_LYRICS_AI_MODEL,
+                            "google/gemma-4-31b-it:free",
+                            "meta-llama/llama-3.3-70b-instruct:free",
+                            "qwen/qwen-2.5-72b-instruct:free"
+                        )
+                    }
+                    selected = candidates.firstOrNull {
+                        it !in attempted && (session.throttled[it] ?: 0) <= System.currentTimeMillis()
+                    }
+                }
+                val candidate = selected ?: return Result.failure(
+                    session.lastBusyFailure ?: LyricsTranslationException(LyricsTranslationFailure.MODEL_BUSY, "Free models are busy")
+                )
+                attempted += candidate
+                val result = request(candidate)
+                if (result.isSuccess) {
+                    return result
+                }
+                val error = result.exceptionOrNull() ?: Exception("Unknown error")
+                val failure = (error as? LyricsTranslationException)?.failure
+                    ?: LyricsTranslationFailure.REQUEST_FAILED
+                when (failure) {
+                    LyricsTranslationFailure.FREE_DAILY_LIMIT -> {
+                        session.dailyFailure = error
+                        session.dailyResetMillis = (error as? LyricsTranslationException)?.retryAtMillis
+                            ?: ((now / 86_400_000 + 1) * 86_400_000)
+                        return result
+                    }
+                    LyricsTranslationFailure.MODEL_BUSY -> {
+                        session.throttled[candidate] = (error as? LyricsTranslationException)?.retryAtMillis ?: (now + 60_000)
+                        session.lastBusyFailure = error
+                        selected = null
+                    }
+                    else -> {
+                        return result
+                    }
+                }
+            }
+        }
+    }
+
     private fun translateViaAi(
         lines: List<String>,
         targetLanguage: String,
@@ -169,7 +261,8 @@ object AiLyricsTranslator {
         mode: String,
         provider: String,
         customSystemPrompt: String,
-        maxRetries: Int
+        wordsPerLine: List<List<String>?>? = null,
+        maxRetries: Int = 3
     ): Result<List<String>> {
         val lineCount = lines.size
         val effectiveSystemPrompt = customSystemPrompt.takeIf { it.isNotBlank() }
@@ -177,15 +270,41 @@ object AiLyricsTranslator {
             ?: defaultLyricsSystemPrompt(lineCount)
 
         val targetLangName = languageName(targetLanguage)
-        val inputJsonArray = JSONArray()
-        lines.forEach { inputJsonArray.put(it) }
-        val inputJson = inputJsonArray.toString()
+        val hasWords = mode == "Romanized" && wordsPerLine != null && wordsPerLine.any { !it.isNullOrEmpty() }
 
-        val userPrompt = when (mode) {
-            "Transcribed" -> {
+        val inputJson = if (hasWords) {
+            val arr = JSONArray()
+            lines.forEachIndexed { i, line ->
+                val obj = JSONObject().apply {
+                    put("line", line)
+                    val words = wordsPerLine.getOrNull(i)
+                    if (!words.isNullOrEmpty()) {
+                        val wArr = JSONArray()
+                        words.forEach { wArr.put(it) }
+                        put("words", wArr)
+                    }
+                }
+                arr.put(obj)
+            }
+            arr.toString()
+        } else {
+            val inputJsonArray = JSONArray()
+            lines.forEach { inputJsonArray.put(it) }
+            inputJsonArray.toString()
+        }
+
+        val userPrompt = when {
+            mode == "Transcribed" -> {
                 "Transliterate the `lines` JSON array phonetically into $targetLangName script. Do not translate meaning. Return exactly $lineCount output lines.\n\n{\"lines\":$inputJson}"
             }
-            "Romanized" -> {
+            mode == "Romanized" && hasWords -> {
+                "Romanize each item in the `lines` JSON array into simple ASCII Latin script. Do not translate meaning. " +
+                    "For items with a `words` array, preserve full line context for pronunciation, " +
+                    "return `romanizedLine` for the full line, and return `romanizedWords` with exact 1-to-1 ASCII Latin " +
+                    "romanization for each word in `words`. " +
+                    "Return exactly $lineCount output items in `lines`.\n\n{\"lines\":$inputJson}"
+            }
+            mode == "Romanized" -> {
                 "Romanize the `lines` JSON array into simple ASCII Latin script. Do not translate meaning. Return exactly $lineCount output lines.\n\n{\"lines\":$inputJson}"
             }
             else -> {
@@ -193,7 +312,8 @@ object AiLyricsTranslator {
             }
         }
 
-        val schema = lyricsLinesSchema()
+        val schema = if (hasWords) lyricsRomanizedLinesWithWordsSchema() else lyricsLinesSchema()
+        val schemaName = if (hasWords) "lyrics_romanization_words" else "lyrics_translation"
         val maxTokens = (lineCount * 192 + 2048).coerceAtLeast(768)
         val protocol = protocolFor(provider, baseUrl, model)
 
@@ -220,26 +340,36 @@ object AiLyricsTranslator {
                             model = model,
                             systemPrompt = effectiveSystemPrompt,
                             userPrompt = userPrompt,
+                            schemaName = schemaName,
                             schema = schema,
                             maxTokens = maxTokens
                         )
                     }
                     AiProtocol.OPENAI -> {
-                        requestOpenAiWithFallback(
-                            provider = provider,
-                            apiKey = apiKey,
-                            baseUrl = baseUrl,
-                            model = model,
-                            systemPrompt = effectiveSystemPrompt,
-                            userPrompt = userPrompt,
-                            schema = schema,
-                            maxTokens = maxTokens
-                        )
+                        withFreeModelFallback(provider, apiKey, baseUrl, model) { selectedModel ->
+                            requestOpenAiWithFallback(
+                                provider = provider,
+                                apiKey = apiKey,
+                                baseUrl = baseUrl,
+                                model = selectedModel,
+                                systemPrompt = effectiveSystemPrompt,
+                                userPrompt = userPrompt,
+                                schema = schema,
+                                maxTokens = maxTokens
+                            )
+                        }
                     }
                 }
 
                 if (completionResult.isSuccess) {
                     val content = completionResult.getOrThrow()
+                    if (hasWords) {
+                        val parsedWithWords = parseJsonRomanizedLinesWithWordsPayload(content, lineCount)
+                        if (parsedWithWords != null) {
+                            return Result.success(parsedWithWords.first)
+                        }
+                    }
+
                     val parsed = parseJsonLinePayload(content, lineCount)
                     if (parsed != null) {
                         val aligned = if (linesAreAligned(lines, parsed)) {
@@ -250,7 +380,10 @@ object AiLyricsTranslator {
                         }
                         return Result.success(aligned)
                     } else {
-                        throw Exception("AI response did not contain aligned lyric lines (length mismatch or unparseable JSON)")
+                        throw LyricsTranslationException(
+                            LyricsTranslationFailure.INVALID_RESPONSE,
+                            "AI response did not contain aligned lyric lines (length mismatch or unparseable JSON)"
+                        )
                     }
                 } else {
                     lastException = completionResult.exceptionOrNull()
@@ -266,7 +399,7 @@ object AiLyricsTranslator {
             }
         }
 
-        return Result.failure(lastException ?: Exception("AI translation failed after $maxRetries retries"))
+        return Result.failure(lastException ?: LyricsTranslationException(LyricsTranslationFailure.REQUEST_FAILED, "AI translation failed after $maxRetries retries"))
     }
 
     private fun requestGeminiCompatible(
@@ -337,12 +470,11 @@ object AiLyricsTranslator {
         Log.i(TAG, "Gemini request finalUrl=$finalUrl, effectiveModel=$effectiveModel, code=${resp.statusCode}, body length=${resp.body.length}")
         if (resp.statusCode in 200..299) {
             val extracted = extractGeminiContent(resp.body)
-            Log.i(TAG, "Gemini extracted content: ${extracted?.take(150)}...")
             if (extracted != null) return Result.success(extracted)
-            return Result.failure(Exception("Gemini returned empty content: ${resp.body.take(200)}"))
+            return Result.failure(LyricsTranslationException(LyricsTranslationFailure.EMPTY_RESPONSE, "Gemini returned empty content: ${resp.body.take(200)}"))
         }
-        Log.w(TAG, "Gemini HTTP failed: ${resp.statusCode}: ${resp.body.take(300)}")
-        return Result.failure(Exception("Gemini HTTP ${resp.statusCode}: ${resp.body.take(200)}"))
+        val failure = classifyLyricsTranslationHttpFailure(resp.statusCode, resp.body, resp.headers)
+        return Result.failure(LyricsTranslationException(failure, "Gemini HTTP ${resp.statusCode}: ${resp.body.take(200)}", resp.statusCode, parseRetryAtMillis(resp.headers)))
     }
 
     private fun requestAnthropicCompatible(
@@ -351,12 +483,13 @@ object AiLyricsTranslator {
         model: String,
         systemPrompt: String,
         userPrompt: String,
+        schemaName: String,
         schema: JSONObject,
         maxTokens: Int
     ): Result<String> {
         val effectiveModel = model.ifBlank { PrefKeys.AnthropicDefaultModel }
         val endpoint = baseUrl.ifBlank { PrefKeys.AnthropicDefaultEndpoint }
-        val toolName = "return_lyrics_translation"
+        val toolName = "return_$schemaName"
 
         val body = JSONObject().apply {
             put("model", effectiveModel)
@@ -394,9 +527,10 @@ object AiLyricsTranslator {
         if (resp.statusCode in 200..299) {
             val extracted = extractAnthropicContent(resp.body)
             if (extracted != null) return Result.success(extracted)
-            return Result.failure(Exception("Anthropic returned empty content: ${resp.body.take(200)}"))
+            return Result.failure(LyricsTranslationException(LyricsTranslationFailure.EMPTY_RESPONSE, "Anthropic returned empty content: ${resp.body.take(200)}"))
         }
-        return Result.failure(Exception("Anthropic HTTP ${resp.statusCode}: ${resp.body.take(200)}"))
+        val failure = classifyLyricsTranslationHttpFailure(resp.statusCode, resp.body, resp.headers)
+        return Result.failure(LyricsTranslationException(failure, "Anthropic HTTP ${resp.statusCode}: ${resp.body.take(200)}", resp.statusCode, parseRetryAtMillis(resp.headers)))
     }
 
     private fun requestOpenAiWithFallback(
@@ -478,11 +612,12 @@ object AiLyricsTranslator {
                 Log.d(TAG, "OpenAI structured format attempt $index failed with HTTP ${resp.statusCode}, trying fallback format")
                 continue
             } else {
-                return Result.failure(Exception("OpenAI HTTP ${resp.statusCode}: ${resp.body.take(200)}"))
+                val failure = classifyLyricsTranslationHttpFailure(resp.statusCode, resp.body, resp.headers)
+                return Result.failure(LyricsTranslationException(failure, "OpenAI HTTP ${resp.statusCode}: ${resp.body.take(200)}", resp.statusCode, parseRetryAtMillis(resp.headers)))
             }
         }
 
-        return Result.failure(Exception("AI request failed across all structured format fallbacks"))
+        return Result.failure(LyricsTranslationException(LyricsTranslationFailure.INVALID_RESPONSE, "AI request failed across all structured format fallbacks"))
     }
 
     private fun translateViaDeepL(
@@ -522,12 +657,13 @@ object AiLyricsTranslator {
 
             val resp = executeHttpPost(endpoint, root.toString(), headers)
             if (resp.statusCode !in 200..299) {
-                return Result.failure(Exception("DeepL HTTP ${resp.statusCode}: ${resp.body.take(200)}"))
+                val failure = classifyLyricsTranslationHttpFailure(resp.statusCode, resp.body, resp.headers)
+                return Result.failure(LyricsTranslationException(failure, "DeepL HTTP ${resp.statusCode}: ${resp.body.take(200)}", resp.statusCode))
             }
 
             val json = JSONObject(resp.body)
             val translations = json.optJSONArray("translations")
-                ?: return Result.failure(Exception("No translations returned by DeepL"))
+                ?: return Result.failure(LyricsTranslationException(LyricsTranslationFailure.EMPTY_RESPONSE, "No translations returned by DeepL"))
 
             val result = mutableListOf<String>()
             for (i in 0 until translations.length()) {
@@ -548,10 +684,30 @@ object AiLyricsTranslator {
             if (nonBlank.isEmpty()) return Result.success(lines)
 
             val translated = MutableList(lines.size) { "" }
-            val batchSize = 30
-            for (i in 0 until nonBlank.size step batchSize) {
-                val batchEnd = (i + batchSize).coerceAtMost(nonBlank.size)
-                val batch = nonBlank.subList(i, batchEnd)
+            val maxBatchCharacters = 1_400
+            val instanceId = UUID.randomUUID().toString()
+
+            var cursor = 0
+            while (cursor < nonBlank.size) {
+                val batch = mutableListOf<IndexedValue<String>>()
+                var characters = 0
+                while (cursor < nonBlank.size) {
+                    val candidate = nonBlank[cursor]
+                    if (candidate.value.length > maxBatchCharacters) {
+                        if (batch.isEmpty()) {
+                            batch.add(candidate)
+                            cursor++
+                        }
+                        break
+                    }
+                    if (batch.isNotEmpty() && characters + candidate.value.length > maxBatchCharacters) {
+                        break
+                    }
+                    batch.add(candidate)
+                    characters += candidate.value.length
+                    cursor++
+                }
+
                 val textArr = JSONArray()
                 batch.forEach { textArr.put(it.value) }
 
@@ -566,7 +722,7 @@ object AiLyricsTranslator {
                         put("os", "macOS")
                         put("os_version", "10.15.7")
                         put("device", "MacIntel")
-                        put("instance_id", "00000000-0000-0000-0000-000000000000")
+                        put("instance_id", instanceId)
                     })
                 }
 
@@ -578,15 +734,16 @@ object AiLyricsTranslator {
 
                 val resp = executeHttpPost("https://oneshot-free.www.deepl.com/v1/translate", root.toString(), headers)
                 if (resp.statusCode !in 200..299) {
-                    throw Exception("DeepL keyless HTTP ${resp.statusCode}: ${resp.body.take(200)}")
+                    val failure = classifyLyricsTranslationHttpFailure(resp.statusCode, resp.body, resp.headers)
+                    throw LyricsTranslationException(failure, "DeepL keyless HTTP ${resp.statusCode}: ${resp.body.take(200)}", resp.statusCode)
                 }
 
                 val json = JSONObject(resp.body)
                 val translations = json.optJSONArray("translations")
-                    ?: throw Exception("DeepL keyless returned no translations")
+                    ?: throw LyricsTranslationException(LyricsTranslationFailure.INVALID_RESPONSE, "DeepL keyless returned no translations")
 
                 if (translations.length() != batch.size) {
-                    throw Exception("DeepL returned ${translations.length()} lines, expected ${batch.size}")
+                    throw LyricsTranslationException(LyricsTranslationFailure.INVALID_RESPONSE, "DeepL returned ${translations.length()} lines, expected ${batch.size}")
                 }
 
                 batch.forEachIndexed { index, original ->
@@ -609,10 +766,28 @@ object AiLyricsTranslator {
             if (nonBlank.isEmpty()) return Result.success(lines)
 
             val translated = MutableList(lines.size) { "" }
-            val batchSize = 40
-            for (i in 0 until nonBlank.size step batchSize) {
-                val batchEnd = (i + batchSize).coerceAtMost(nonBlank.size)
-                val batch = nonBlank.subList(i, batchEnd)
+            val maxBatchCharacters = 1_200
+            var cursor = 0
+            while (cursor < nonBlank.size) {
+                val batch = mutableListOf<IndexedValue<String>>()
+                var characters = 0
+                while (cursor < nonBlank.size) {
+                    val candidate = nonBlank[cursor]
+                    if (candidate.value.length > maxBatchCharacters) {
+                        if (batch.isEmpty()) {
+                            batch.add(candidate)
+                            cursor++
+                        }
+                        break
+                    }
+                    if (batch.isNotEmpty() && characters + candidate.value.length > maxBatchCharacters) {
+                        break
+                    }
+                    batch.add(candidate)
+                    characters += candidate.value.length
+                    cursor++
+                }
+
                 val markers = List((batch.size - 1).coerceAtLeast(0)) { "__METROLIST_LINE_${it + 1}__" }
                 val input = batch.mapIndexed { index, item ->
                     item.value + markers.getOrNull(index)?.let { "\n$it\n" }.orEmpty()
@@ -640,10 +815,15 @@ object AiLyricsTranslator {
     }
 
     private fun translateGoogleText(text: String, targetLanguage: String): Pair<String, String?> {
-        val encoded = Uri.encode(text)
-        val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=$targetLanguage&dt=t&dt=rm&q=$encoded"
-        val responseBody = httpGet(url, emptyMap()) ?: throw Exception("Empty response from Google Translate")
-        val root = JSONArray(responseBody)
+        val postData = "client=gtx&sl=auto&tl=${Uri.encode(targetLanguage)}&dt=t&dt=rm&q=${Uri.encode(text)}"
+        val url = "https://translate.googleapis.com/translate_a/single"
+        val headers = mapOf("Content-Type" to "application/x-www-form-urlencoded; charset=utf-8")
+        val resp = executeHttpPost(url, postData, headers)
+        if (resp.statusCode !in 200..299) {
+            val failure = classifyLyricsTranslationHttpFailure(resp.statusCode, resp.body, resp.headers)
+            throw LyricsTranslationException(failure, "Google Translate HTTP ${resp.statusCode}: ${resp.body.take(200)}", resp.statusCode)
+        }
+        val root = JSONArray(resp.body)
         val firstArr = root.optJSONArray(0) ?: return Pair("", null)
         val translated = StringBuilder()
         var romanized: String? = null
@@ -792,6 +972,38 @@ object AiLyricsTranslator {
         return null
     }
 
+    private fun parseJsonRomanizedLinesWithWordsPayload(
+        content: String,
+        expectedLines: Int,
+    ): Pair<List<String>, List<List<String>?>>? {
+        val json = parseJsonPayload(content, '{', '}') as? JSONObject ?: return null
+        val linesArray = json.optJSONArray("lines") ?: return null
+        val parsedLines = mutableListOf<String>()
+        val parsedWords = mutableListOf<List<String>?>()
+
+        for (i in 0 until linesArray.length()) {
+            val elem = linesArray.opt(i)
+            if (elem is JSONObject) {
+                val line = elem.optString("romanizedLine").takeIf { it.isNotEmpty() }
+                    ?: elem.optString("line", "")
+                val wArr = elem.optJSONArray("romanizedWords") ?: elem.optJSONArray("words")
+                val words = if (wArr != null) {
+                    (0 until wArr.length()).map { wArr.optString(it, "") }
+                } else null
+                parsedLines.add(line)
+                parsedWords.add(words)
+            } else if (elem is String) {
+                parsedLines.add(elem)
+                parsedWords.add(null)
+            } else {
+                parsedLines.add("")
+                parsedWords.add(null)
+            }
+        }
+        if (parsedLines.size != expectedLines) return null
+        return Pair(parsedLines, parsedWords)
+    }
+
     private fun linesAreAligned(source: List<String>, output: List<String>): Boolean {
         return source.size == output.size && source.indices.all { source[it].isBlank() == output[it].isBlank() }
     }
@@ -804,6 +1016,34 @@ object AiLyricsTranslator {
                     put("type", "array")
                     put("items", JSONObject().apply {
                         put("type", "string")
+                    })
+                })
+            })
+            put("required", JSONArray().apply { put("lines") })
+            put("additionalProperties", false)
+        }
+    }
+
+    private fun lyricsRomanizedLinesWithWordsSchema(): JSONObject {
+        return JSONObject().apply {
+            put("type", "object")
+            put("properties", JSONObject().apply {
+                put("lines", JSONObject().apply {
+                    put("type", "array")
+                    put("items", JSONObject().apply {
+                        put("type", "object")
+                        put("properties", JSONObject().apply {
+                            put("romanizedLine", JSONObject().apply { put("type", "string") })
+                            put("romanizedWords", JSONObject().apply {
+                                put("type", "array")
+                                put("items", JSONObject().apply { put("type", "string") })
+                            })
+                        })
+                        put("required", JSONArray().apply {
+                            put("romanizedLine")
+                            put("romanizedWords")
+                        })
+                        put("additionalProperties", false)
                     })
                 })
             })
@@ -887,9 +1127,9 @@ object AiLyricsTranslator {
             else -> code.uppercase().take(2)
         }
 
-    private data class HttpResponse(val statusCode: Int, val body: String)
+    private data class HttpResponse(val statusCode: Int, val body: String, val headers: Map<String, List<String>> = emptyMap())
 
-    private fun executeHttpPost(urlString: String, jsonBody: String, headers: Map<String, String>): HttpResponse {
+    private fun executeHttpPost(urlString: String, jsonOrFormData: String, headers: Map<String, String>): HttpResponse {
         val url = URL(urlString)
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
@@ -903,34 +1143,18 @@ object AiLyricsTranslator {
         }
 
         OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
-            writer.write(jsonBody)
+            writer.write(jsonOrFormData)
             writer.flush()
         }
 
         val code = conn.responseCode
+        val responseHeaders = conn.headerFields ?: emptyMap()
         val stream = if (code in 200..299) conn.inputStream else conn.errorStream
         val responseText = stream?.let {
             BufferedReader(InputStreamReader(it, Charsets.UTF_8)).use { reader -> reader.readText() }
         }.orEmpty()
 
-        return HttpResponse(code, responseText)
-    }
-
-    private fun httpGet(urlString: String, headers: Map<String, String>): String? {
-        val url = URL(urlString)
-        val conn = url.openConnection() as HttpURLConnection
-        conn.requestMethod = "GET"
-        conn.connectTimeout = 30000
-        conn.readTimeout = 30000
-        conn.setRequestProperty("User-Agent", "SpotXero/2.0 (Android; +https://github.com/s1ddhants1/SpotXero)")
-        for ((k, v) in headers) {
-            conn.setRequestProperty(k, v)
-        }
-        val code = conn.responseCode
-        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        return stream?.let {
-            BufferedReader(InputStreamReader(it, Charsets.UTF_8)).use { reader -> reader.readText() }
-        }
+        return HttpResponse(code, responseText, responseHeaders)
     }
 
     private fun applyTranslationToLyrics(

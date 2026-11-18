@@ -27,7 +27,7 @@ object LyricsHook {
     )
 
     private fun getStockCacheKey(trackId: String): String {
-        return "$trackId:${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}".lowercase()
+        return "$trackId:${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}".lowercase()
     }
 
     fun install(module: XposedModule) {
@@ -311,8 +311,9 @@ object LyricsHook {
                     // 1. Check cached translated stock response
                     if (aiTranslationEnabled && trackId != null) {
                         val stockCacheKey = getStockCacheKey(trackId)
-                        val cachedStock = stockTranslatedCache[stockCacheKey]
+                        val cachedStock = PersistentLyricsCache.getProtobuf(stockCacheKey) ?: stockTranslatedCache[stockCacheKey]
                         if (cachedStock != null) {
+                            stockTranslatedCache[stockCacheKey] = cachedStock
                             val body = createBody(cachedStock, "application/protobuf")
                             if (body != null) {
                                 val response = buildResponse(request, body, "application/protobuf")
@@ -387,6 +388,7 @@ object LyricsHook {
 
                                     val stockCacheKey = getStockCacheKey(trackId)
                                     stockTranslatedCache[stockCacheKey] = translatedProtoBytes
+                                    PersistentLyricsCache.putProtobuf(stockCacheKey, translatedProtoBytes)
 
                                     val newBody = createBody(translatedProtoBytes, "application/protobuf")
                                     if (newBody != null) {

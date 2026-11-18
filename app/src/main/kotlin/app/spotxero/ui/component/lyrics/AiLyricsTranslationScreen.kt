@@ -1,6 +1,7 @@
 package app.spotxero.ui.component.lyrics
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,12 +35,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -51,6 +54,13 @@ import app.spotxero.R
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
 import app.spotxero.hooks.lyrics.AiLyricsTranslator
+import app.spotxero.hooks.lyrics.AiModelCatalog
+import app.spotxero.hooks.lyrics.AiModelInfo
+import app.spotxero.hooks.lyrics.AiProviderGroup
+import app.spotxero.hooks.lyrics.AiProviderPreset
+import app.spotxero.hooks.lyrics.AiProviderPresets
+import app.spotxero.hooks.lyrics.LyricsTranslationException
+import app.spotxero.hooks.lyrics.LyricsTranslationFailure
 import app.spotxero.ui.theme.AppIcons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -66,147 +76,10 @@ private const val GOOGLE_TRANSLATE_PROVIDER = "Google Translate"
 private const val LITERAL_MODE = "Literal"
 private const val TRANSCRIBED_MODE = "Transcribed"
 
-enum class AiProviderGroup(val titleRes: Int) {
-    GATEWAY(R.string.ai_provider_group_gateways),
-    DIRECT(R.string.ai_provider_group_direct),
-    CUSTOM(R.string.ai_provider_group_custom),
-    SERVICE(R.string.ai_provider_group_services)
-}
-
-data class AiProviderPreset(
-    val id: String,
-    val group: AiProviderGroup,
-    val endpoint: String = "",
-    val defaultModel: String = "",
-    val editableEndpoint: Boolean = false,
-    val supportsOAuth: Boolean = false,
-    val publicModelList: Boolean = false,
-) {
-    val isAi: Boolean get() = group != AiProviderGroup.SERVICE
-}
-
 fun isDirectLyricsTranslationProvider(provider: String): Boolean =
     provider == DEEPL_KEYLESS_PROVIDER || provider == GOOGLE_TRANSLATE_PROVIDER
 
-val ALL_PRESETS = listOf(
-    // Gateways
-    AiProviderPreset(
-        id = "OpenRouter",
-        group = AiProviderGroup.GATEWAY,
-        endpoint = "https://openrouter.ai/api/v1/chat/completions",
-        defaultModel = "qwen/qwen3.7-flash",
-        supportsOAuth = true,
-        publicModelList = true
-    ),
-    AiProviderPreset(
-        id = "OpenCodeZen",
-        group = AiProviderGroup.GATEWAY,
-        endpoint = "https://opencode.ai/zen/v1/chat/completions",
-        defaultModel = "deepseek-v4-flash",
-        publicModelList = true
-    ),
-    AiProviderPreset(
-        id = "OpenCodeGo",
-        group = AiProviderGroup.GATEWAY,
-        endpoint = "https://opencode.ai/zen/go/v1/chat/completions",
-        defaultModel = "glm-5.3-flash",
-        publicModelList = true
-    ),
-    AiProviderPreset(
-        id = "Groq",
-        group = AiProviderGroup.GATEWAY,
-        endpoint = "https://api.groq.com/openai/v1/chat/completions",
-        defaultModel = "openai/gpt-oss-20b"
-    ),
-
-    // Direct providers
-    AiProviderPreset(
-        id = "OpenAI",
-        group = AiProviderGroup.DIRECT,
-        endpoint = "https://api.openai.com/v1/chat/completions",
-        defaultModel = "gpt-6-luna"
-    ),
-    AiProviderPreset(
-        id = "Anthropic",
-        group = AiProviderGroup.DIRECT,
-        endpoint = "https://api.anthropic.com/v1/messages",
-        defaultModel = "claude-haiku-5-5"
-    ),
-    AiProviderPreset(
-        id = "Gemini",
-        group = AiProviderGroup.DIRECT,
-        endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
-        defaultModel = "gemini-3.5-flash-lite"
-    ),
-    AiProviderPreset(
-        id = "XAi",
-        group = AiProviderGroup.DIRECT,
-        endpoint = "https://api.x.ai/v1/chat/completions",
-        defaultModel = "grok-build-0.1"
-    ),
-    AiProviderPreset(
-        id = "Mistral",
-        group = AiProviderGroup.DIRECT,
-        endpoint = "https://api.mistral.ai/v1/chat/completions",
-        defaultModel = "mistral-small-latest"
-    ),
-    AiProviderPreset(
-        id = "Inception",
-        group = AiProviderGroup.DIRECT,
-        endpoint = "https://api.inceptionlabs.ai/v1/chat/completions",
-        defaultModel = "mercury-2.5",
-        publicModelList = true
-    ),
-    AiProviderPreset(
-        id = "DeepSeek",
-        group = AiProviderGroup.DIRECT,
-        endpoint = "https://api.deepseek.com/v1/chat/completions",
-        defaultModel = "deepseek-flash"
-    ),
-    AiProviderPreset(
-        id = "Perplexity",
-        group = AiProviderGroup.DIRECT,
-        endpoint = "https://api.perplexity.ai/chat/completions",
-        defaultModel = "sonar"
-    ),
-
-    // Custom
-    AiProviderPreset(
-        id = "OpenAI-compatible",
-        group = AiProviderGroup.CUSTOM,
-        endpoint = "https://api.openai.com/v1/chat/completions",
-        editableEndpoint = true
-    ),
-    AiProviderPreset(
-        id = "Anthropic-compatible",
-        group = AiProviderGroup.CUSTOM,
-        endpoint = "https://api.anthropic.com/v1/messages",
-        editableEndpoint = true
-    ),
-    AiProviderPreset(
-        id = "Gemini-compatible",
-        group = AiProviderGroup.CUSTOM,
-        endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-        editableEndpoint = true
-    ),
-
-    // Services
-    AiProviderPreset(
-        id = DEEPL_PROVIDER,
-        group = AiProviderGroup.SERVICE,
-        endpoint = "https://api.deepl.com/v2/translate"
-    ),
-    AiProviderPreset(
-        id = DEEPL_KEYLESS_PROVIDER,
-        group = AiProviderGroup.SERVICE,
-        endpoint = "https://oneshot-free.www.deepl.com/v1/translate"
-    ),
-    AiProviderPreset(
-        id = GOOGLE_TRANSLATE_PROVIDER,
-        group = AiProviderGroup.SERVICE,
-        endpoint = "https://translate.googleapis.com/translate_a/single"
-    )
-)
+val ALL_PRESETS: List<AiProviderPreset> get() = AiProviderPresets.all
 
 @Composable
 fun lyricsAiProviderLabel(provider: String): String =
@@ -232,84 +105,6 @@ fun lyricsAiProviderLabel(provider: String): String =
         else -> provider
     }
 
-data class AiModelInfo(
-    val id: String,
-    val name: String = id,
-    val inputUsdPerMTok: Double? = null,
-    val outputUsdPerMTok: Double? = null,
-    val tokensPerSecond: Double? = null,
-) {
-    val free: Boolean get() = (inputUsdPerMTok == 0.0 && outputUsdPerMTok == 0.0) || id.endsWith(":free")
-}
-
-private val MODELS_BY_PRESET = mapOf(
-    "OpenRouter" to listOf(
-        AiModelInfo("google/gemma-4-26b-a4b-it:free", "google/gemma-4-26b-a4b-it:free", 0.0, 0.0),
-        AiModelInfo("google/gemma-4-31b-it:free", "google/gemma-4-31b-it:free", 0.0, 0.0),
-        AiModelInfo("qwen/qwen3.7-flash", "qwen/qwen3.7-flash", 0.03, 0.13),
-        AiModelInfo("google/gemini-2.5-flash-lite", "google/gemini-2.5-flash-lite", 0.1, 0.4),
-        AiModelInfo("inception/mercury-2.5-preview", "inception/mercury-2.5-preview", 0.05, 0.20),
-        AiModelInfo("meta/muse-spark-1.3", "meta/muse-spark-1.3", 0.08, 0.30),
-        AiModelInfo("z-ai/glm-5.3-flash", "z-ai/glm-5.3-flash", 0.04, 0.15),
-        AiModelInfo("openai/gpt-oss-120b", "openai/gpt-oss-120b", 0.15, 0.60),
-    ),
-    "OpenCodeZen" to listOf(
-        AiModelInfo("deepseek-v4-flash", "deepseek-v4-flash", 0.02, 0.08),
-        AiModelInfo("qwen-2.5-coder-32b", "qwen-2.5-coder-32b", 0.03, 0.12),
-    ),
-    "OpenCodeGo" to listOf(
-        AiModelInfo("glm-5.3-flash", "glm-5.3-flash", 0.02, 0.08),
-        AiModelInfo("deepseek-v4-flash", "deepseek-v4-flash", 0.02, 0.08),
-    ),
-    "OpenAI" to listOf(
-        AiModelInfo("gpt-6-luna", "gpt-6-luna", 0.20, 0.80),
-        AiModelInfo("gpt-5.6-sol", "gpt-5.6-sol", 0.50, 2.00),
-        AiModelInfo("gpt-5.6-terra", "gpt-5.6-terra", 0.25, 1.00),
-        AiModelInfo("gpt-5.5-2026-04-23", "gpt-5.5-2026-04-23", 0.30, 1.20),
-        AiModelInfo("gpt-5.4-2026-03-05", "gpt-5.4-2026-03-05", 0.15, 0.60),
-    ),
-    "Anthropic" to listOf(
-        AiModelInfo("claude-haiku-5-5", "claude-haiku-5-5", 0.25, 1.25),
-        AiModelInfo("claude-3-5-haiku-latest", "claude-3-5-haiku-latest", 0.25, 1.25),
-        AiModelInfo("claude-sonnet-5", "claude-sonnet-5", 3.00, 15.00),
-        AiModelInfo("claude-opus-5", "claude-opus-5", 15.00, 75.00),
-    ),
-    "Gemini" to listOf(
-        AiModelInfo("gemini-3.5-flash-lite", "gemini-3.5-flash-lite", 0.075, 0.30),
-        AiModelInfo("gemini-flash-lite-latest", "gemini-flash-lite-latest", 0.075, 0.30),
-        AiModelInfo("gemini-3.8-flash", "gemini-3.8-flash", 0.10, 0.40),
-        AiModelInfo("gemini-pro-latest", "gemini-pro-latest", 1.25, 5.00),
-    ),
-    "Perplexity" to listOf(
-        AiModelInfo("sonar", "sonar", 1.00, 1.00),
-        AiModelInfo("sonar-pro", "sonar-pro", 3.00, 15.00),
-        AiModelInfo("sonar-reasoning-pro", "sonar-reasoning-pro", 2.00, 8.00),
-    ),
-    "XAi" to listOf(
-        AiModelInfo("grok-build-0.1", "grok-build-0.1", 0.50, 2.00),
-        AiModelInfo("grok-4.3", "grok-4.3", 1.00, 4.00),
-        AiModelInfo("grok-4.6", "grok-4.6", 2.00, 8.00),
-        AiModelInfo("grok-4.1-fast", "grok-4.1-fast", 0.30, 1.20),
-    ),
-    "Mistral" to listOf(
-        AiModelInfo("mistral-small-latest", "mistral-small-latest", 0.20, 0.60),
-        AiModelInfo("mistral-large-latest", "mistral-large-latest", 2.00, 6.00),
-        AiModelInfo("mistral-medium-latest", "mistral-medium-latest", 0.60, 1.80),
-    ),
-    "Inception" to listOf(
-        AiModelInfo("mercury-2.5", "mercury-2.5", 0.05, 0.20),
-        AiModelInfo("mercury-2", "mercury-2", 0.04, 0.15),
-    ),
-    "DeepSeek" to listOf(
-        AiModelInfo("deepseek-flash", "deepseek-flash", 0.07, 0.28),
-        AiModelInfo("deepseek-chat", "deepseek-chat", 0.14, 0.56),
-    ),
-    "Groq" to listOf(
-        AiModelInfo("openai/gpt-oss-20b", "openai/gpt-oss-20b", 0.05, 0.20),
-        AiModelInfo("llama-3.3-70b-versatile", "llama-3.3-70b-versatile", 0.59, 0.79),
-    ),
-)
-
 internal fun formatUsd(value: Double): String {
     val digits = if (value >= 1.0) 2 else 3
     val scale = 10.0.pow(digits).roundToLong()
@@ -321,7 +116,7 @@ private sealed interface ConnectionTestState {
     data object Idle : ConnectionTestState
     data object Testing : ConnectionTestState
     data class Success(val sample: String) : ConnectionTestState
-    data class Failed(val message: String) : ConnectionTestState
+    data class Failed(val failure: LyricsTranslationFailure?, val message: String) : ConnectionTestState
     data object MissingCredentials : ConnectionTestState
 }
 
@@ -499,6 +294,8 @@ fun AiLyricsTranslationScreen(
     if (showModelDialog) {
         ModelPickerDialog(
             currentPreset = currentPreset,
+            apiKey = currentKey,
+            baseUrl = openRouterBaseUrl.ifBlank { currentPreset.endpoint },
             currentModel = openRouterModel,
             onSelect = {
                 onOpenRouterModelChange(it)
@@ -795,7 +592,8 @@ fun AiLyricsTranslationScreen(
                                                     testState = ConnectionTestState.Success(sample)
                                                 },
                                                 onFailure = { error ->
-                                                    testState = ConnectionTestState.Failed(error.message ?: "Unknown error")
+                                                    val failure = (error as? LyricsTranslationException)?.failure
+                                                    testState = ConnectionTestState.Failed(failure, error.message ?: "Unknown error")
                                                 }
                                             )
                                         }
@@ -834,8 +632,30 @@ fun AiLyricsTranslationScreen(
                                         }
                                     }
                                     is ConnectionTestState.Failed -> {
+                                        val failureLabel = when (state.failure) {
+                                            LyricsTranslationFailure.AUTHENTICATION -> "Authentication failed: check your API key"
+                                            LyricsTranslationFailure.CREDIT_LIMIT -> "Credit limit reached: quota/balance exhausted"
+                                            LyricsTranslationFailure.RATE_LIMIT -> "Rate limit hit: please wait before retrying"
+                                            LyricsTranslationFailure.FREE_DAILY_LIMIT -> "Free model daily quota exceeded"
+                                            LyricsTranslationFailure.FREE_MINUTE_LIMIT -> "Free model minute rate limit hit"
+                                            LyricsTranslationFailure.MODEL_BUSY -> "Free model busy: provider overloaded"
+                                            LyricsTranslationFailure.MODEL_UNAVAILABLE -> "Model unavailable or decommissioned"
+                                            LyricsTranslationFailure.TIMEOUT -> "Request timed out"
+                                            LyricsTranslationFailure.NETWORK -> "Network error: cannot reach endpoint"
+                                            LyricsTranslationFailure.INVALID_RESPONSE -> "Invalid response from provider"
+                                            LyricsTranslationFailure.EMPTY_RESPONSE -> "Empty response received"
+                                            LyricsTranslationFailure.INCOMPLETE_RESPONSE -> "Incomplete response received"
+                                            LyricsTranslationFailure.DATA_POLICY -> "Data policy violation or content rejected"
+                                            LyricsTranslationFailure.REQUEST_FAILED -> "Request failed"
+                                            null -> null
+                                        }
+                                        val errorText = if (failureLabel != null) {
+                                            "$failureLabel (${state.message})"
+                                        } else {
+                                            state.message.ifBlank { stringResource(R.string.ai_test_connection_failed) }
+                                        }
                                         Text(
-                                            stringResource(R.string.ai_test_connection_failed),
+                                            text = errorText,
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.error
                                         )
@@ -981,26 +801,31 @@ private fun ProviderPickerDialog(
     }
 }
 
+private sealed interface ModelsState {
+    data object Loading : ModelsState
+    data class Loaded(val models: List<AiModelInfo>) : ModelsState
+    data object Failed : ModelsState
+}
+
 @Composable
 private fun ModelPickerDialog(
     currentPreset: AiProviderPreset,
+    apiKey: String,
+    baseUrl: String,
     currentModel: String,
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var reload by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
     val typed = query.trim()
 
-    val models = remember(currentPreset.id) {
-        MODELS_BY_PRESET[currentPreset.id] ?: emptyList()
-    }
-
-    val filteredModels = remember(models, typed) {
-        if (typed.isEmpty()) {
-            models
-        } else {
-            models.filter { it.id.contains(typed, ignoreCase = true) || it.name.contains(typed, ignoreCase = true) }
-        }
+    val state by produceState<ModelsState>(ModelsState.Loading, currentPreset.id, apiKey, baseUrl, reload) {
+        value = ModelsState.Loading
+        value = AiModelCatalog.models(currentPreset, apiKey, baseUrl, refresh = reload > 0).fold(
+            onSuccess = { ModelsState.Loaded(it) },
+            onFailure = { ModelsState.Failed }
+        )
     }
 
     SettingsDialogSurface(onDismiss = onDismiss) {
@@ -1021,6 +846,9 @@ private fun ModelPickerDialog(
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.weight(1f)
                 )
+                TextButton(onClick = { reload++ }) {
+                    Text(stringResource(R.string.refresh))
+                }
             }
 
             OutlinedTextField(
@@ -1032,6 +860,8 @@ private fun ModelPickerDialog(
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp, vertical = 8.dp)
             )
+
+            val models = (state as? ModelsState.Loaded)?.models.orEmpty()
 
             LazyColumn(
                 modifier = Modifier
@@ -1052,23 +882,62 @@ private fun ModelPickerDialog(
                     }
                 }
 
-                if (filteredModels.isEmpty() && typed.isNotEmpty()) {
-                    item(key = "empty_models") {
-                        Text(
-                            text = stringResource(R.string.ai_model_none_found),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-                        )
+                when (val current = state) {
+                    ModelsState.Loading -> {
+                        items(5) {
+                            AiModelSkeleton()
+                        }
                     }
-                }
 
-                items(filteredModels, key = { it.id }) { modelInfo ->
-                    AiChoiceRow(
-                        selected = currentModel == modelInfo.id,
-                        onClick = { onSelect(modelInfo.id) }
-                    ) {
-                        AiModelDetails(modelInfo)
+                    ModelsState.Failed -> {
+                        item(key = "failed") {
+                            Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) {
+                                Text(
+                                    stringResource(
+                                        if (apiKey.isBlank() && !currentPreset.publicModelList) {
+                                            R.string.ai_model_api_key_needed
+                                        } else {
+                                            R.string.ai_model_load_failed
+                                        }
+                                    ),
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                TextButton(onClick = { reload++ }) {
+                                    Text(stringResource(R.string.refresh))
+                                }
+                            }
+                        }
+                    }
+
+                    is ModelsState.Loaded -> {
+                        val filteredModels = if (typed.isEmpty()) {
+                            current.models
+                        } else {
+                            current.models.filter {
+                                it.id.contains(typed, ignoreCase = true) || it.name.contains(typed, ignoreCase = true)
+                            }
+                        }
+
+                        if (filteredModels.isEmpty() && typed.isNotEmpty()) {
+                            item(key = "empty_models") {
+                                Text(
+                                    text = stringResource(R.string.ai_model_none_found),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                                )
+                            }
+                        }
+
+                        items(filteredModels, key = { it.id }) { modelInfo ->
+                            AiChoiceRow(
+                                selected = currentModel == modelInfo.id,
+                                onClick = { onSelect(modelInfo.id) }
+                            ) {
+                                AiModelDetails(modelInfo, currentPreset)
+                            }
+                        }
                     }
                 }
             }
@@ -1088,9 +957,36 @@ private fun ModelPickerDialog(
 }
 
 @Composable
+private fun AiModelSkeleton() {
+    Column(
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.6f)
+                .height(16.dp)
+                .clip(MaterialTheme.shapes.small)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.4f)
+                .height(12.dp)
+                .clip(MaterialTheme.shapes.small)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+        )
+    }
+}
+
+@Composable
 private fun AiModelDetails(
     info: AiModelInfo,
+    preset: AiProviderPreset,
 ) {
+    val speed by produceState<Double?>(null, info.id) {
+        if (preset.id == "OpenRouter") value = AiModelCatalog.throughput(info.id)
+    }
     Column {
         val displayName = info.name.substringAfterLast('/')
         Text(displayName, style = MaterialTheme.typography.bodyLarge)
@@ -1108,7 +1004,7 @@ private fun AiModelDetails(
             }
             else -> null
         }
-        val tps = info.tokensPerSecond?.let { stringResource(R.string.ai_model_speed, it.roundToInt().toString()) }
+        val tps = (speed ?: info.tokensPerSecond)?.let { stringResource(R.string.ai_model_speed, it.roundToInt().toString()) }
         listOfNotNull(price, tps).takeIf { it.isNotEmpty() }?.let {
             Text(
                 text = it.joinToString("  ·  "),
@@ -1428,7 +1324,7 @@ private fun AiTranslationSetupDialog(
 ) {
     var step by rememberSaveable { mutableIntStateOf(0) }
     var apiKey by rememberSaveable { mutableStateOf(currentApiKey) }
-    var model by rememberSaveable { mutableStateOf(currentModel.ifBlank { "google/gemma-4-26b-a4b-it:free" }) }
+    var model by rememberSaveable { mutableStateOf(currentModel.ifBlank { AiProviderPresets.FREE_LYRICS_AI_MODEL }) }
     var language by rememberSaveable { mutableStateOf(currentLanguage) }
     val uriHandler = LocalUriHandler.current
 

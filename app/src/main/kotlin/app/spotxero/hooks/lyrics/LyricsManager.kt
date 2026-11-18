@@ -88,7 +88,7 @@ object LyricsManager {
 
     private fun buildCacheKey(title: String, artist: String): String {
         val transKey = if (PreferencesManager.isAiLyricsTranslationEnabled) {
-            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}"
+            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}"
         } else {
             "orig"
         }
@@ -97,7 +97,7 @@ object LyricsManager {
 
     private fun buildTrackKey(trackId: String): String {
         val transKey = if (PreferencesManager.isAiLyricsTranslationEnabled) {
-            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}"
+            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}"
         } else {
             "orig"
         }
@@ -136,8 +136,17 @@ object LyricsManager {
     }
 
     fun getLyricsProto(trackId: String? = null): ByteArray? {
+        val trackKey = trackId?.let { buildTrackKey(it) }
+        if (trackKey != null) {
+            val persistent = PersistentLyricsCache.getProtobuf(trackKey)
+            if (persistent != null) return persistent
+        }
         val cached = getLyrics(trackId) ?: return null
-        return LyricsProtobuf.buildColorLyricsResponse(cached.lyrics, cached.providerDisplayName)
+        val proto = LyricsProtobuf.buildColorLyricsResponse(cached.lyrics, cached.providerDisplayName)
+        if (trackKey != null) {
+            PersistentLyricsCache.putProtobuf(trackKey, proto)
+        }
+        return proto
     }
 
     fun getLyricsJson(trackId: String? = null): String? {
@@ -196,8 +205,11 @@ object LyricsManager {
                     val cached = CachedLyrics(finalLyrics, provider.displayName)
                     Log.i(TAG, "Fetched ${lyrics.lines.size} lines from ${provider.displayName}")
                     parsedCache[cacheKey] = cached
+                    val proto = LyricsProtobuf.buildColorLyricsResponse(finalLyrics, provider.displayName)
+                    PersistentLyricsCache.putProtobuf(cacheKey, proto)
                     if (trackKey != null) {
                         parsedCache[trackKey] = cached
+                        PersistentLyricsCache.putProtobuf(trackKey, proto)
                     }
                     return cached
                 }
