@@ -177,9 +177,35 @@
     <string name="ai_test_missing_credentials">Add credentials before testing.</string>
     <string name="ai_test_translation_result">Sample translation: %1$s</string>
     <string name="ai_keyless_no_key_needed">No API key required</string>
+    <string name="action_search">Search</string>
     <string name="cancel">Cancel</string>
     <string name="done">Done</string>
-    <string name="action_search">Search</string>
     <string name="ai_setup_model_description">This model translates your lyrics for free within OpenRouter\'s limits. A song can use more than one request. You can choose paid models and other providers in the advanced settings.</string>
+    <string name="brand_openrouter">OpenRouter</string>
+    <string name="brand_opencode_zen">OpenCode Zen</string>
+    <string name="brand_opencode_go">OpenCode Go</string>
+    <string name="brand_groq">Groq</string>
+    <string name="brand_openai">OpenAI</string>
+    <string name="brand_anthropic">Anthropic</string>
+    <string name="brand_gemini">Gemini</string>
+    <string name="brand_xai">xAI</string>
+    <string name="brand_mistral">Mistral</string>
+    <string name="brand_inception">Inception</string>
+    <string name="brand_deepseek">DeepSeek</string>
+    <string name="brand_perplexity">Perplexity</string>
+    <string name="brand_deepl">DeepL</string>
+    <string name="brand_google_translate">Google Translate</string>
+    <string name="ai_provider_compatible">%1$s compatible</string>
+    <string name="ai_provider_keyless">%1$s (keyless)</string>
+    <string name="ai_provider_default">Provider default</string>
+    <string name="ai_model_same_as_translation">Same as translation model</string>
+    <string name="ai_model_price">%1$s in / %2$s out per 1M tokens</string>
+    <string name="ai_model_speed">~%1$s tokens/s</string>
+    <string name="ai_model_load_failed">Could not load models</string>
+    <string name="ai_model_api_key_needed">Add an API key to load the model list</string>
+    <string name="ai_setup_view_limits">Check current limits</string>
+    <string name="ai_setup_verify_description">Done sends a short sample to your chosen free model. Translation turns on only after the test succeeds.</string>
+    <string name="ai_setup_verifying">Testing translation…</string>
+    <string name="ai_api_key_label">API key</string>
 </resources>
 
