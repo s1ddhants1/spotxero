@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.spotxero.ui.component.settings.CategoryHeader
 import app.spotxero.ui.theme.AppCardDefaults
@@ -123,6 +124,7 @@ private fun Material3SettingsItemRow(
         ) {
             ProvideTextStyle(
                 MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
                     color = if (!item.enabled)
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                     else

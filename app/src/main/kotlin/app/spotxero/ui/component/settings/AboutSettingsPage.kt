@@ -29,6 +29,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.spotxero.BuildConfig
 import app.spotxero.R
@@ -85,7 +86,8 @@ fun AboutSettingsPage(
 
             Text(
                 text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
 
@@ -96,6 +98,7 @@ fun AboutSettingsPage(
                 Text(
                     text = stringResource(R.string.about_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
                     style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(horizontal = AppSpacing.sm, vertical = AppSpacing.xxs)
                 )
@@ -145,7 +148,8 @@ private fun ContributorItemRow(
             Column {
                 Text(
                     text = contributor.name,
-                    style = MaterialTheme.typography.titleSmall
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
                 )
                 if (contributor.roleRes != null) {
                     Text(

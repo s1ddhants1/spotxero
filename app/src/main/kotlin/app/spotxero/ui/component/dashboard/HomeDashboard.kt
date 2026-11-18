@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.spotxero.R
 import app.spotxero.ui.component.settings.CategoryHeader
@@ -223,6 +224,7 @@ private fun MasterSwitchCard(
                 Text(
                     text = stringResource(R.string.feature_master_switch_title),
                     style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = if (checked) {
                         MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
@@ -309,7 +311,8 @@ private fun FrameworkStatusBanner(
                     } else {
                         stringResource(uiState.titleRes, *uiState.titleArgs.toTypedArray())
                     },
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.height(AppSpacing.xxs))

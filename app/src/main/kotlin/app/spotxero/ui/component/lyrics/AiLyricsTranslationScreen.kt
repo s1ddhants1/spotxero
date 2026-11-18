@@ -329,6 +329,7 @@ fun AiLyricsTranslationScreen(
                 Text(
                     text = "${stringResource(R.string.ai_translation_literal)}:",
                     style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(top = AppSpacing.xs),
                 )
@@ -342,6 +343,7 @@ fun AiLyricsTranslationScreen(
                 Text(
                     text = "${stringResource(R.string.ai_translation_transcribed)}:",
                     style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
@@ -354,6 +356,7 @@ fun AiLyricsTranslationScreen(
                 Text(
                     text = "${stringResource(R.string.ai_translation_romanized)}:",
                     style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
@@ -942,6 +945,7 @@ private fun ProviderPickerDialog(
                 Text(
                     text = stringResource(R.string.ai_provider),
                     style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
                 )
 
@@ -1045,6 +1049,7 @@ private fun ModelPickerDialog(
                 Text(
                     text = stringResource(R.string.ai_model),
                     style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
                 )
 
@@ -1192,6 +1197,7 @@ private fun LanguagePickerDialog(
                 Text(
                     text = stringResource(R.string.ai_target_language),
                     style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
                 )
 

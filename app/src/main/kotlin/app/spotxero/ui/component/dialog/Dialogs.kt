@@ -39,6 +39,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -84,7 +85,7 @@ fun DefaultDialog(
                 }
                 if (title != null) {
                     CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.titleContentColor) {
-                        ProvideTextStyle(MaterialTheme.typography.titleLarge) {
+                        ProvideTextStyle(MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) {
                             Box(
                                 Modifier.align(if (icon == null) Alignment.Start else Alignment.CenterHorizontally),
                             ) {
@@ -252,6 +253,7 @@ fun <T> EnumDialog(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier
                         .fillMaxWidth()
