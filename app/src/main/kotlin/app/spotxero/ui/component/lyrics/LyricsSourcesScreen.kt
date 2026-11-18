@@ -102,7 +102,7 @@ fun LyricsSourcesScreen(
             SwitchSettingCard(
                 title = stringResource(R.string.pref_force_external_lyrics_title),
                 subtitle = stringResource(R.string.pref_force_external_lyrics_desc),
-                icon = AppIcons.PlayCircle,
+                icon = AppIcons.Rule,
                 checked = isForceExternalLyricsEnabled,
                 enabled = enabled,
                 onCheckedChange = { if (enabled) onForceExternalLyricsToggle(it) }
