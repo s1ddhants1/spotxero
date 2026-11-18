@@ -66,6 +66,8 @@ object DexKitResolver {
     const val KEY_HOME_CHIPS_MAPPER = "home_chips_mapper"
     const val KEY_SEARCH_CHIPS_CTOR = "search_chips_ctor"
     const val KEY_SEARCH_RESPONSE_MAPPER = "search_response_mapper"
+    const val KEY_ACTIVITY_VOLUME_KEY_HANDLER = "activity_volume_key_handler"
+    const val KEY_VOLUME_KEY_HANDLER = "volume_key_handler"
 
     private const val CLIENT_BASE = "com.spotify.esperanto.esperanto.ClientBase"
     private const val COROUTINE_CLIENT_BASE = "com.spotify.esperanto.esperanto.CoroutineClientBase"
@@ -168,6 +170,7 @@ object DexKitResolver {
         resolveLyricsCapStatus(classLoader, cachedSignatures, signatures, members)
         resolveHomeChipsMapper(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveSearchChips(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveVolumeKeyHandlers(dexKit, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -1542,4 +1545,49 @@ object DexKitResolver {
     private fun isSearchChipsCtor(ctor: Constructor<*>): Boolean =
         ctor.parameterCount == 1 &&
             ctor.parameterTypes[0] == java.util.ArrayList::class.java
+
+    private fun resolveVolumeKeyHandlers(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val activityHandler = cachedMethod(cached, KEY_ACTIVITY_VOLUME_KEY_HANDLER, classLoader, ::isActivityVolumeKeyHandler)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("volume_on_key_down_main_activity"), StringMatchType.Equals)
+                    }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isActivityVolumeKeyHandler)
+        store(KEY_ACTIVITY_VOLUME_KEY_HANDLER, activityHandler, sigs, members)
+
+        val volumeHandler = cachedMethod(cached, KEY_VOLUME_KEY_HANDLER, classLoader, ::isVolumeKeyHandler)
+            ?: runCatching {
+                val record = dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("volume_on_key_down_main_activity"), StringMatchType.Equals)
+                    }
+                }.singleOrNull() ?: return@runCatching null
+                record.invokes.mapNotNull { data ->
+                    runCatching { data.getMethodInstance(classLoader) }.getOrNull()
+                }.firstOrNull(::isVolumeKeyHandler)
+            }.getOrNull()?.takeIf(::isVolumeKeyHandler)
+        store(KEY_VOLUME_KEY_HANDLER, volumeHandler, sigs, members)
+    }
+
+    private fun isActivityVolumeKeyHandler(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 2 &&
+            method.parameterTypes[0] == Int::class.javaPrimitiveType &&
+            method.parameterTypes[1].name == "android.view.KeyEvent" &&
+            method.returnType == Boolean::class.javaPrimitiveType
+
+    private fun isVolumeKeyHandler(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 3 &&
+            method.parameterTypes[0].name == "android.view.KeyEvent" &&
+            method.parameterTypes[1] == String::class.java &&
+            method.returnType == Boolean::class.javaPrimitiveType
 }
