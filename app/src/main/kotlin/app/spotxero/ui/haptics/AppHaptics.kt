@@ -1,11 +1,19 @@
 package app.spotxero.ui.haptics
 
+import android.content.Context
+import android.os.Build
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.view.HapticFeedbackConstants
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.HapticFeedbackConstantsCompat
@@ -43,7 +51,16 @@ val LocalAppHaptics = staticCompositionLocalOf<AppHaptics> {
 @Composable
 fun rememberAppHaptics(): AppHaptics {
     val view = LocalView.current
-    return remember(view) {
+    val context = LocalContext.current.applicationContext
+    return remember(view, context) {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            manager?.defaultVibrator ?: (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+
         AppHaptics(
             enabled = { PreferencesManager.enableHapticFeedback },
             platformFeedback = { event ->
@@ -59,9 +76,69 @@ fun rememberAppHaptics(): AppHaptics {
                     HapticEvent.SEGMENT_TICK -> HapticFeedbackConstantsCompat.SEGMENT_TICK
                     HapticEvent.DICE_ROLL -> HapticFeedbackConstantsCompat.CONTEXT_CLICK
                 }
-                ViewCompat.performHapticFeedback(view, feedback)
+
+                view.isHapticFeedbackEnabled = true
+                val flags = HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING or HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING
+                runCatching {
+                    ViewCompat.performHapticFeedback(view, feedback, flags)
+                }
+
+                if (vibrator != null && vibrator.hasVibrator()) {
+                    performVibratorFeedback(vibrator, event)
+                }
             }
         )
+    }
+}
+
+private fun performVibratorFeedback(vibrator: Vibrator, event: HapticEvent) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val effectId = when (event) {
+            HapticEvent.PRESS, HapticEvent.TOGGLE_ON, HapticEvent.CONFIRM, HapticEvent.DICE_ROLL ->
+                VibrationEffect.EFFECT_CLICK
+            HapticEvent.TOGGLE_OFF, HapticEvent.DRAG_SNAP, HapticEvent.SEGMENT_TICK ->
+                VibrationEffect.EFFECT_TICK
+            HapticEvent.REJECT ->
+                VibrationEffect.EFFECT_DOUBLE_CLICK
+            HapticEvent.DRAG_START ->
+                VibrationEffect.EFFECT_CLICK
+            HapticEvent.LONG_PRESS ->
+                VibrationEffect.EFFECT_HEAVY_CLICK
+        }
+        val effect = runCatching {
+            VibrationEffect.createPredefined(effectId)
+        }.getOrNull() ?: createOneShotFallback(event)
+
+        vibrateWithUsage(vibrator, effect)
+    } else {
+        val effect = createOneShotFallback(event)
+        vibrateWithUsage(vibrator, effect)
+    }
+}
+
+private fun createOneShotFallback(event: HapticEvent): VibrationEffect {
+    return when (event) {
+        HapticEvent.PRESS, HapticEvent.TOGGLE_ON, HapticEvent.CONFIRM, HapticEvent.DRAG_START, HapticEvent.DICE_ROLL ->
+            VibrationEffect.createOneShot(15, 160)
+        HapticEvent.TOGGLE_OFF, HapticEvent.DRAG_SNAP, HapticEvent.SEGMENT_TICK ->
+            VibrationEffect.createOneShot(10, 100)
+        HapticEvent.REJECT ->
+            VibrationEffect.createWaveform(longArrayOf(0, 25, 40, 25), intArrayOf(0, 180, 0, 180), -1)
+        HapticEvent.LONG_PRESS ->
+            VibrationEffect.createOneShot(40, 220)
+    }
+}
+
+private fun vibrateWithUsage(vibrator: Vibrator, effect: VibrationEffect) {
+    runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val attrs = VibrationAttributes.Builder()
+                .setUsage(VibrationAttributes.USAGE_TOUCH)
+                .build()
+            vibrator.vibrate(effect, attrs)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(effect)
+        }
     }
 }
 
