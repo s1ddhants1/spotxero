@@ -148,6 +148,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isDynamicColorEnabled = PreferencesManager.isDynamicColorEnabled,
                 isAppAmoledEnabled = PreferencesManager.isAppAmoledEnabled,
                 isLauncherIconHidden = AppUtils.isLauncherIconHidden(app),
+                isHapticFeedbackEnabled = PreferencesManager.enableHapticFeedback,
                 isCleanSharingEnabled = PreferencesManager.isCleanSharingEnabled,
                 isLyricsEnabled = PreferencesManager.isLyricsEnabled,
                 isExternalLyricsEnabled = PreferencesManager.isExternalLyricsEnabled,
@@ -259,6 +260,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         AppUtils.setLauncherIconHidden(app, enabled)
         PreferencesManager.setBoolean(app, PreferencesManager.KEY_HIDE_LAUNCHER_ICON, enabled)
         _uiState.update { it.copy(isLauncherIconHidden = enabled) }
+    }
+
+    fun setHapticFeedback(enabled: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_ENABLE_HAPTIC_FEEDBACK, enabled)
+        _uiState.update { it.copy(isHapticFeedbackEnabled = enabled) }
     }
 
     fun setCleanSharing(enabled: Boolean) {

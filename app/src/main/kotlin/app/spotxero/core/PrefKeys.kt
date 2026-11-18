@@ -21,6 +21,7 @@ object PrefKeys {
     const val KEY_AI_TRANSLATION_DEEPL_API_KEY = "pref_ai_translation_deepl_api_key"
     const val KEY_AI_TRANSLATION_DEEPL_FORMALITY = "pref_ai_translation_deepl_formality"
     const val KEY_AI_TRANSLATION_ACTIVATION_MODE = "pref_ai_translation_activation_mode"
+    const val KEY_ENABLE_HAPTIC_FEEDBACK = "pref_enable_haptic_feedback"
 
     const val OpenRouterDefaultBaseUrl = "https://openrouter.ai/api/v1/chat/completions"
     const val OpenRouterDefaultModel = "qwen/qwen3.7-flash"

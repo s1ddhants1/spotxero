@@ -21,6 +21,8 @@ fun SettingsScreen(
     onAmoledToggle: (Boolean) -> Unit,
     launcherIconHidden: Boolean,
     onLauncherIconHiddenToggle: (Boolean) -> Unit,
+    hapticFeedbackEnabled: Boolean,
+    onHapticFeedbackToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     AnimatedContent(
@@ -39,7 +41,9 @@ fun SettingsScreen(
                 amoledEnabled = amoledEnabled,
                 onAmoledToggle = onAmoledToggle,
                 launcherIconHidden = launcherIconHidden,
-                onLauncherIconHiddenToggle = onLauncherIconHiddenToggle
+                onLauncherIconHiddenToggle = onLauncherIconHiddenToggle,
+                hapticFeedbackEnabled = hapticFeedbackEnabled,
+                onHapticFeedbackToggle = onHapticFeedbackToggle
             )
             SettingsSubpage.ABOUT -> AboutSettingsPage()
         }

@@ -52,6 +52,8 @@ import app.spotxero.R
 import app.spotxero.ui.component.settings.CategoryHeader
 import app.spotxero.ui.component.settings.NavigationSettingCard
 import app.spotxero.ui.component.settings.SwitchSettingCard
+import app.spotxero.ui.haptics.HapticEvent
+import app.spotxero.ui.haptics.LocalAppHaptics
 import app.spotxero.ui.theme.AppCardDefaults
 import app.spotxero.ui.theme.AppIcons
 import app.spotxero.ui.theme.AppSpacing
@@ -209,6 +211,7 @@ fun ReorderMenu(
             modifier = Modifier.size(24.dp)
         )
 
+        val haptics = LocalAppHaptics.current
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false }
@@ -217,6 +220,7 @@ fun ReorderMenu(
                 text = { Text(stringResource(R.string.action_move_to_top)) },
                 enabled = enabled && index > 0,
                 onClick = {
+                    haptics.perform(HapticEvent.CONFIRM)
                     expanded = false
                     onMove(index, 0)
                 }
@@ -225,6 +229,7 @@ fun ReorderMenu(
                 text = { Text(stringResource(R.string.action_move_up)) },
                 enabled = enabled && index > 0,
                 onClick = {
+                    haptics.perform(HapticEvent.CONFIRM)
                     expanded = false
                     onMove(index, index - 1)
                 }
@@ -233,6 +238,7 @@ fun ReorderMenu(
                 text = { Text(stringResource(R.string.action_move_down)) },
                 enabled = enabled && index < totalCount - 1,
                 onClick = {
+                    haptics.perform(HapticEvent.CONFIRM)
                     expanded = false
                     onMove(index, index + 1)
                 }
@@ -241,6 +247,7 @@ fun ReorderMenu(
                 text = { Text(stringResource(R.string.action_move_to_bottom)) },
                 enabled = enabled && index < totalCount - 1,
                 onClick = {
+                    haptics.perform(HapticEvent.CONFIRM)
                     expanded = false
                     onMove(index, totalCount - 1)
                 }
@@ -267,6 +274,7 @@ private fun LyricsProviderOrderCard(
     var draggingIndex by remember { mutableIntStateOf(-1) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var itemHeightPx by remember { mutableFloatStateOf(0f) }
+    val haptics = LocalAppHaptics.current
 
     val onMove: (fromIndex: Int, toIndex: Int) -> Unit = { from, to ->
         if (from != to && from in currentList.indices && to in currentList.indices) {
@@ -339,6 +347,7 @@ private fun LyricsProviderOrderCard(
                             }
                         }
                         .clickable(enabled = enabled) {
+                            haptics.toggle(!isChecked)
                             onProviderToggle(providerId, !isChecked)
                         }
                         .padding(horizontal = 14.dp, vertical = AppSpacing.sm),
@@ -351,6 +360,7 @@ private fun LyricsProviderOrderCard(
                         onMove = onMove,
                         enabled = enabled,
                         onDragStart = {
+                            haptics.perform(HapticEvent.DRAG_START)
                             draggingIndex = index
                             dragOffsetY = 0f
                         },
@@ -360,6 +370,7 @@ private fun LyricsProviderOrderCard(
                             val targetIndex = (draggingIndex + (dragOffsetY / stepHeight).roundToInt())
                                 .coerceIn(0, currentList.lastIndex)
                             if (targetIndex != draggingIndex) {
+                                haptics.perform(HapticEvent.DRAG_SNAP)
                                 val mutable = currentList.toMutableList()
                                 val item = mutable.removeAt(draggingIndex)
                                 mutable.add(targetIndex, item)
@@ -369,9 +380,12 @@ private fun LyricsProviderOrderCard(
                             }
                         },
                         onDragEnd = {
-                            draggingIndex = -1
-                            dragOffsetY = 0f
-                            onReorderProviders(currentList)
+                            if (draggingIndex != -1) {
+                                haptics.perform(HapticEvent.CONFIRM)
+                                draggingIndex = -1
+                                dragOffsetY = 0f
+                                onReorderProviders(currentList)
+                            }
                         }
                     )
 
@@ -384,7 +398,12 @@ private fun LyricsProviderOrderCard(
 
                     Switch(
                         checked = isChecked,
-                        onCheckedChange = { if (enabled) onProviderToggle(providerId, it) },
+                        onCheckedChange = {
+                            if (enabled) {
+                                haptics.toggle(it)
+                                onProviderToggle(providerId, it)
+                            }
+                        },
                         enabled = enabled,
                         thumbContent = if (isChecked) {
                             {

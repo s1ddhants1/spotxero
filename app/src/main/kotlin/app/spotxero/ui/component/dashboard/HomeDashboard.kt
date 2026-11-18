@@ -40,6 +40,8 @@ import app.spotxero.R
 import app.spotxero.ui.component.settings.CategoryHeader
 import app.spotxero.ui.component.settings.NavigationSettingCard
 import app.spotxero.ui.component.settings.SwitchSettingCard
+import app.spotxero.ui.haptics.HapticEvent
+import app.spotxero.ui.haptics.LocalAppHaptics
 import app.spotxero.ui.theme.AppCardDefaults
 import app.spotxero.ui.theme.AppIcons
 import app.spotxero.ui.theme.AppSpacing
@@ -164,6 +166,11 @@ private fun MasterSwitchCard(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = LocalAppHaptics.current
+    val handleToggle: (Boolean) -> Unit = { newVal ->
+        haptics.toggle(newVal)
+        onCheckedChange(newVal)
+    }
     val interactionSource = remember { MutableInteractionSource() }
     Card(
         shape = MaterialTheme.shapes.extraLarge,
@@ -188,7 +195,7 @@ private fun MasterSwitchCard(
                 role = Role.Switch,
                 interactionSource = interactionSource,
                 indication = null,
-                onValueChange = onCheckedChange
+                onValueChange = handleToggle
             )
     ) {
         Row(
@@ -261,6 +268,7 @@ private fun FrameworkStatusBanner(
 ) {
     val isBannerActive = uiState.isFrameworkConnected && uiState.isInjectable
     val canRequestScope = uiState.canRequestScope
+    val haptics = LocalAppHaptics.current
     val statusBg = if (isBannerActive) {
         MaterialTheme.colorScheme.surfaceVariant
     } else {
@@ -273,7 +281,10 @@ private fun FrameworkStatusBanner(
         Modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.extraLarge)
-            .clickable(onClick = onRequestScope)
+            .clickable(onClick = {
+                haptics.perform(HapticEvent.PRESS)
+                onRequestScope()
+            })
     } else {
         Modifier.fillMaxWidth()
     }

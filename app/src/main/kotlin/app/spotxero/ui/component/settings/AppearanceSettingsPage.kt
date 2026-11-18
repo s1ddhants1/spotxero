@@ -27,6 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.spotxero.R
 import app.spotxero.core.PreferencesManager.ThemeMode
+import app.spotxero.ui.haptics.HapticEvent
+import app.spotxero.ui.haptics.LocalAppHaptics
 import app.spotxero.ui.theme.AppCardDefaults
 import app.spotxero.ui.theme.AppIcons
 import app.spotxero.ui.theme.AppSpacing
@@ -53,8 +55,11 @@ fun AppearanceSettingsPage(
     amoledEnabled: Boolean,
     onAmoledToggle: (Boolean) -> Unit,
     launcherIconHidden: Boolean,
-    onLauncherIconHiddenToggle: (Boolean) -> Unit
+    onLauncherIconHiddenToggle: (Boolean) -> Unit,
+    hapticFeedbackEnabled: Boolean,
+    onHapticFeedbackToggle: (Boolean) -> Unit
 ) {
+    val haptics = LocalAppHaptics.current
     val isDynamicColorSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     Column(
         modifier = Modifier
@@ -88,7 +93,10 @@ fun AppearanceSettingsPage(
                     THEME_OPTIONS.forEachIndexed { index, option ->
                         SegmentedButton(
                             selected = themeMode == option.mode,
-                            onClick = { onThemeModeChange(option.mode) },
+                            onClick = {
+                                haptics.perform(HapticEvent.SEGMENT_TICK)
+                                onThemeModeChange(option.mode)
+                            },
                             shape = SegmentedButtonDefaults.itemShape(
                                 index = index,
                                 count = THEME_OPTIONS.size
@@ -139,6 +147,14 @@ fun AppearanceSettingsPage(
             icon = if (launcherIconHidden) AppIcons.VisibilityOff else AppIcons.Visibility,
             checked = launcherIconHidden,
             onCheckedChange = onLauncherIconHiddenToggle
+        )
+
+        SwitchSettingCard(
+            title = stringResource(R.string.appearance_enable_haptic_feedback),
+            subtitle = stringResource(R.string.appearance_enable_haptic_feedback_desc),
+            icon = AppIcons.Vibration,
+            checked = hapticFeedbackEnabled,
+            onCheckedChange = onHapticFeedbackToggle
         )
 
         Spacer(Modifier.height(AppSpacing.md))

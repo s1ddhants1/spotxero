@@ -101,6 +101,8 @@ fun MetrolistSettingsGroup(
             }
         }
 
+        val haptics = app.spotxero.ui.haptics.rememberAppHaptics()
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -136,10 +138,13 @@ fun MetrolistSettingsGroup(
                             .then(
                                 if (item.isSwitch) {
                                     Modifier.clickable(enabled = item.enabled && item.onCheckedChange != null) {
-                                        item.onCheckedChange?.invoke(!item.checked)
+                                        val next = !item.checked
+                                        haptics.toggle(next)
+                                        item.onCheckedChange?.invoke(next)
                                     }
                                 } else {
                                     Modifier.clickable(enabled = item.enabled && item.onClick != null) {
+                                        haptics.perform(app.spotxero.ui.haptics.HapticEvent.PRESS)
                                         item.onClick?.invoke()
                                     }
                                 }
@@ -170,7 +175,12 @@ fun MetrolistSettingsGroup(
                         if (item.isSwitch) {
                             Switch(
                                 checked = item.checked,
-                                onCheckedChange = item.onCheckedChange,
+                                onCheckedChange = item.onCheckedChange?.let { onChange ->
+                                    { value ->
+                                        haptics.toggle(value)
+                                        onChange(value)
+                                    }
+                                },
                                 enabled = item.enabled,
                                 thumbContent = {
                                     if (item.checked) {

@@ -163,7 +163,9 @@ fun SpotXeroApp(
                         amoledEnabled = uiState.isAppAmoledEnabled,
                         onAmoledToggle = { viewModel.setAppAmoled(it) },
                         launcherIconHidden = uiState.isLauncherIconHidden,
-                        onLauncherIconHiddenToggle = { viewModel.setLauncherIconHidden(it) }
+                        onLauncherIconHiddenToggle = { viewModel.setLauncherIconHidden(it) },
+                        hapticFeedbackEnabled = uiState.isHapticFeedbackEnabled,
+                        onHapticFeedbackToggle = { viewModel.setHapticFeedback(it) }
                     )
                 }
                 Screen.DASHBOARD -> {

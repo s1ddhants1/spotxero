@@ -34,6 +34,7 @@ data class DashboardUiState(
     val isDynamicColorEnabled: Boolean = false,
     val isAppAmoledEnabled: Boolean = false,
     val isLauncherIconHidden: Boolean = false,
+    val isHapticFeedbackEnabled: Boolean = true,
     val isCleanSharingEnabled: Boolean = true,
     val isLyricsEnabled: Boolean = true,
     val showLyricsSources: Boolean = false,

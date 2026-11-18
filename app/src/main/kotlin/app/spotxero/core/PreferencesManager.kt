@@ -51,6 +51,7 @@ object PreferencesManager {
     var isGeniusEnabled: Boolean = true
     var isForceLocalPlaybackEnabled: Boolean = true
     var isCleanSharingEnabled: Boolean = true
+    var enableHapticFeedback: Boolean = true
     var isSpotifyAmoledEnabled: Boolean = false
     var isSpotifyMonetEnabled: Boolean = false
     var isSpotifyRoundyUiEnabled: Boolean = false
@@ -298,6 +299,8 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_FORCE_LOCAL_PLAYBACK] = isForceLocalPlaybackEnabled
         isCleanSharingEnabled = prefs.getBoolean(PrefKeys.KEY_CLEAN_SHARING, true)
         inMemoryBooleans[PrefKeys.KEY_CLEAN_SHARING] = isCleanSharingEnabled
+        enableHapticFeedback = prefs.getBoolean(PrefKeys.KEY_ENABLE_HAPTIC_FEEDBACK, true)
+        inMemoryBooleans[PrefKeys.KEY_ENABLE_HAPTIC_FEEDBACK] = enableHapticFeedback
         isSpotifyAmoledEnabled = prefs.getBoolean(PrefKeys.KEY_SPOTIFY_AMOLED, false)
         inMemoryBooleans[PrefKeys.KEY_SPOTIFY_AMOLED] = isSpotifyAmoledEnabled
         isSpotifyMonetEnabled = prefs.getBoolean(PrefKeys.KEY_SPOTIFY_MONET, false)
@@ -458,6 +461,7 @@ object PreferencesManager {
             PrefKeys.KEY_LYRICS_PROVIDER_GENIUS -> isGeniusEnabled = value
             PrefKeys.KEY_FORCE_LOCAL_PLAYBACK -> isForceLocalPlaybackEnabled = value
             PrefKeys.KEY_CLEAN_SHARING -> isCleanSharingEnabled = value
+            PrefKeys.KEY_ENABLE_HAPTIC_FEEDBACK -> enableHapticFeedback = value
             PrefKeys.KEY_SPOTIFY_AMOLED -> isSpotifyAmoledEnabled = value
             PrefKeys.KEY_SPOTIFY_MONET -> isSpotifyMonetEnabled = value
             PrefKeys.KEY_SPOTIFY_ROUNDY_UI -> isSpotifyRoundyUiEnabled = value

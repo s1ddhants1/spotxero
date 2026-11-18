@@ -31,10 +31,12 @@ class MainActivity : ComponentActivity() {
                 dynamicColor = uiState.isDynamicColorEnabled,
                 amoled = uiState.isAppAmoledEnabled
             ) {
-                SpotXeroApp(
-                    viewModel = viewModel,
-                    uiState = uiState
-                )
+                app.spotxero.ui.haptics.AppHapticsProvider {
+                    SpotXeroApp(
+                        viewModel = viewModel,
+                        uiState = uiState
+                    )
+                }
             }
         }
     }

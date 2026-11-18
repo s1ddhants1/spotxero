@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.spotxero.ui.haptics.HapticEvent
+import app.spotxero.ui.haptics.LocalAppHaptics
 import app.spotxero.ui.theme.AppCardDefaults
 import app.spotxero.ui.theme.AppIcons
 import app.spotxero.ui.theme.AppSpacing
@@ -80,6 +82,7 @@ fun SettingsCategoryCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = LocalAppHaptics.current
     Card(
         shape = MaterialTheme.shapes.extraLarge,
         colors = AppCardDefaults.cardColors(),
@@ -87,7 +90,10 @@ fun SettingsCategoryCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.extraLarge)
-            .clickable(onClick = onClick)
+            .clickable(onClick = {
+                haptics.perform(HapticEvent.PRESS)
+                onClick()
+            })
     ) {
         Row(
             modifier = Modifier
@@ -149,6 +155,11 @@ fun SwitchSettingCard(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
+    val haptics = LocalAppHaptics.current
+    val handleCheckedChange: (Boolean) -> Unit = { newVal ->
+        haptics.toggle(newVal)
+        onCheckedChange(newVal)
+    }
     val interactionSource = remember { MutableInteractionSource() }
     Card(
         shape = MaterialTheme.shapes.extraLarge,
@@ -164,7 +175,7 @@ fun SwitchSettingCard(
                 role = Role.Switch,
                 interactionSource = interactionSource,
                 indication = null,
-                onValueChange = onCheckedChange
+                onValueChange = handleCheckedChange
             )
     ) {
         Row(
@@ -220,7 +231,7 @@ fun SwitchSettingCard(
             Switch(
                 checked = checked,
                 enabled = enabled,
-                onCheckedChange = onCheckedChange,
+                onCheckedChange = handleCheckedChange,
                 thumbContent = if (checked && enabled) {
                     {
                         Icon(
@@ -245,6 +256,7 @@ fun NavigationSettingCard(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
+    val haptics = LocalAppHaptics.current
     Card(
         shape = MaterialTheme.shapes.extraLarge,
         colors = AppCardDefaults.cardColors(),
@@ -253,7 +265,10 @@ fun NavigationSettingCard(
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.extraLarge)
             .alpha(if (enabled) 1f else 0.45f)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled, onClick = {
+                haptics.perform(HapticEvent.PRESS)
+                onClick()
+            })
     ) {
         Row(
             modifier = Modifier

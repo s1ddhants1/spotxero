@@ -56,6 +56,8 @@ import app.spotxero.R
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
 import app.spotxero.hooks.lyrics.AiLyricsTranslator
+import app.spotxero.ui.haptics.HapticEvent
+import app.spotxero.ui.haptics.LocalAppHaptics
 import app.spotxero.ui.theme.AppIcons
 import app.spotxero.ui.theme.AppSpacing
 import kotlinx.coroutines.Dispatchers
@@ -604,8 +606,10 @@ fun AiLyricsTranslationScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
 
+                                val haptics = LocalAppHaptics.current
                                 TextButton(
                                     onClick = {
+                                        haptics.perform(HapticEvent.PRESS)
                                         val canRun = when (aiProvider) {
                                             DEEPL_PROVIDER -> deeplApiKey.isNotBlank()
                                             DEEPL_KEYLESS_PROVIDER, GOOGLE_TRANSLATE_PROVIDER -> true
@@ -614,6 +618,7 @@ fun AiLyricsTranslationScreen(
                                         }
 
                                         if (!canRun) {
+                                            haptics.perform(HapticEvent.REJECT)
                                             testState = ConnectionTestState.MissingCredentials
                                             return@TextButton
                                         }
@@ -637,10 +642,12 @@ fun AiLyricsTranslationScreen(
 
                                             result.fold(
                                                 onSuccess = { translatedLines ->
+                                                    haptics.perform(HapticEvent.CONFIRM)
                                                     val sample = translatedLines.firstOrNull().orEmpty().trim()
                                                     testState = ConnectionTestState.Success(sample)
                                                 },
                                                 onFailure = { error ->
+                                                    haptics.perform(HapticEvent.REJECT)
                                                     testState = ConnectionTestState.Failed(error.message ?: "Unknown error")
                                                 }
                                             )
@@ -736,13 +743,17 @@ private fun AiChoiceRow(
     onClick: () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    val haptics = LocalAppHaptics.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .selectable(
                 selected = selected,
                 role = Role.RadioButton,
-                onClick = onClick,
+                onClick = {
+                    haptics.perform(HapticEvent.CONFIRM)
+                    onClick()
+                },
             )
             .padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1232,10 +1243,14 @@ private fun TextSettingDialog(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
+                val haptics = LocalAppHaptics.current
                 TextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.cancel))
                 }
-                TextButton(onClick = { onDone(textValue.trim()) }) {
+                TextButton(onClick = {
+                    haptics.perform(HapticEvent.CONFIRM)
+                    onDone(textValue.trim())
+                }) {
                     Text(stringResource(R.string.done))
                 }
             }
@@ -1372,8 +1387,10 @@ private fun AiTranslationSetupDialog(
                             Text(stringResource(R.string.btn_back))
                         }
                         Spacer(Modifier.width(8.dp))
+                        val haptics = LocalAppHaptics.current
                         Button(
                             onClick = {
+                                haptics.perform(HapticEvent.CONFIRM)
                                 onComplete(apiKey, model, language)
                                 onDismiss()
                             }
