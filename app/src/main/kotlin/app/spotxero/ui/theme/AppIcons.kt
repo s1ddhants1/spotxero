@@ -30,6 +30,26 @@ object AppIcons {
         }.build()
     }
 
+    private fun materialSymbol(
+        name: String,
+        pathData: String,
+    ): ImageVector {
+        return ImageVector.Builder(
+            name = name,
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 960f,
+            viewportHeight = 960f
+        ).apply {
+            addGroup(translationY = 960f)
+            addPath(
+                pathData = addPathNodes(pathData),
+                fill = SolidColor(Color.Black)
+            )
+            clearGroup()
+        }.build()
+    }
+
     private fun icon(name: String, block: PathBuilder.() -> Unit): ImageVector {
         return ImageVector.Builder(
             name = name,
@@ -247,26 +267,20 @@ object AppIcons {
         close()
     }
 
-    val ChevronRight: ImageVector = iconFromPathData(
+    val Check: ImageVector = materialSymbol(
+        name = "Check",
+        pathData = "M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"
+    )
+
+    val ChevronRight: ImageVector = materialSymbol(
         name = "ChevronRight",
         pathData = "M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z"
     )
 
-    val Close: ImageVector = icon("Close") {
-        moveTo(19f, 6.41f)
-        lineTo(17.59f, 5f)
-        lineTo(12f, 10.59f)
-        lineTo(6.41f, 5f)
-        lineTo(5f, 6.41f)
-        lineTo(10.59f, 12f)
-        lineTo(5f, 17.59f)
-        lineTo(6.41f, 19f)
-        lineTo(12f, 13.41f)
-        lineTo(17.59f, 19f)
-        lineTo(19f, 17.59f)
-        lineTo(13.41f, 12f)
-        close()
-    }
+    val Close: ImageVector = materialSymbol(
+        name = "Close",
+        pathData = "m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"
+    )
 
     val Visibility: ImageVector = icon("Visibility") {
         moveTo(12f, 4.5f)

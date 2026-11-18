@@ -58,7 +58,16 @@ internal fun rememberPlatformHaptics(): (HapticEvent) -> Unit {
                     HapticEvent.SEGMENT_TICK -> HapticFeedbackConstantsCompat.SEGMENT_TICK
                     HapticEvent.DICE_ROLL -> HapticFeedbackConstantsCompat.CONTEXT_CLICK
                 }
-            ViewCompat.performHapticFeedback(view, feedback)
+            if (!view.isHapticFeedbackEnabled) {
+                view.isHapticFeedbackEnabled = true
+            }
+            if (!ViewCompat.performHapticFeedback(view, feedback)) {
+                ViewCompat.performHapticFeedback(
+                    view,
+                    feedback,
+                    HapticFeedbackConstantsCompat.FLAG_IGNORE_VIEW_SETTING,
+                )
+            }
         }
     }
 }
