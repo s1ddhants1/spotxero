@@ -1,12 +1,10 @@
 package app.spotxero.ui.component.lyrics
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -24,23 +23,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,26 +43,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.LinkAnnotation
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import app.spotxero.R
 import app.spotxero.core.PrefKeys
+import app.spotxero.core.PreferencesManager
 import app.spotxero.hooks.lyrics.AiLyricsTranslator
-import app.spotxero.ui.component.dialog.DefaultDialog
-import app.spotxero.ui.component.dialog.EnumDialog
-import app.spotxero.ui.component.dialog.TextFieldDialog
-import app.spotxero.ui.theme.AppCardDefaults
 import app.spotxero.ui.theme.AppIcons
 import app.spotxero.ui.theme.AppSpacing
 import kotlinx.coroutines.Dispatchers
@@ -80,7 +68,6 @@ private const val DEEPL_KEYLESS_PROVIDER = "DeepL (keyless)"
 private const val GOOGLE_TRANSLATE_PROVIDER = "Google Translate"
 private const val LITERAL_MODE = "Literal"
 private const val TRANSCRIBED_MODE = "Transcribed"
-private const val ROMANIZED_MODE = "Romanized"
 
 enum class ProviderCategory(val titleRes: Int) {
     GATEWAYS(R.string.ai_provider_group_gateways),
@@ -95,7 +82,8 @@ data class ProviderOption(
     val category: ProviderCategory,
     val defaultEndpoint: String,
     val defaultModel: String,
-    val isAi: Boolean = true
+    val isAi: Boolean = true,
+    val isKeyless: Boolean = false
 )
 
 private val ALL_PROVIDERS = listOf(
@@ -118,8 +106,8 @@ private val ALL_PROVIDERS = listOf(
 
     // Services
     ProviderOption(DEEPL_PROVIDER, "DeepL", ProviderCategory.SERVICES, "https://api.deepl.com/v2/translate", "", isAi = false),
-    ProviderOption(DEEPL_KEYLESS_PROVIDER, "DeepL (keyless)", ProviderCategory.SERVICES, "https://oneshot-free.www.deepl.com/v1/translate", "", isAi = false),
-    ProviderOption(GOOGLE_TRANSLATE_PROVIDER, "Google Translate", ProviderCategory.SERVICES, "https://translate.googleapis.com/translate_a/single", "", isAi = false),
+    ProviderOption(DEEPL_KEYLESS_PROVIDER, "DeepL (keyless)", ProviderCategory.SERVICES, "https://oneshot-free.www.deepl.com/v1/translate", "", isAi = false, isKeyless = true),
+    ProviderOption(GOOGLE_TRANSLATE_PROVIDER, "Google Translate", ProviderCategory.SERVICES, "https://translate.googleapis.com/translate_a/single", "", isAi = false, isKeyless = true),
 )
 
 private val MODELS_BY_PROVIDER = mapOf(
@@ -218,6 +206,10 @@ fun AiLyricsTranslationScreen(
     val coroutineScope = rememberCoroutineScope()
     var testState by remember { mutableStateOf<ConnectionTestState>(ConnectionTestState.Idle) }
 
+    var activationMode by rememberSaveable {
+        mutableStateOf(PreferencesManager.aiTranslationActivationMode)
+    }
+
     val currentPreset = remember(aiProvider) {
         ALL_PROVIDERS.firstOrNull { it.id.equals(aiProvider, ignoreCase = true) }
             ?: ALL_PROVIDERS.first()
@@ -228,10 +220,10 @@ fun AiLyricsTranslationScreen(
         MODELS_BY_PROVIDER[aiProvider] ?: emptyList()
     }
 
+    var showSetupWizardDialog by rememberSaveable { mutableStateOf(false) }
     var showProviderDialog by rememberSaveable { mutableStateOf(false) }
-    var showProviderHelpDialog by rememberSaveable { mutableStateOf(false) }
+    var showTriggerDialog by rememberSaveable { mutableStateOf(false) }
     var showTranslateModeDialog by rememberSaveable { mutableStateOf(false) }
-    var showTranslateModeHelpDialog by rememberSaveable { mutableStateOf(false) }
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var showApiKeyDialog by rememberSaveable { mutableStateOf(false) }
     var showDeeplApiKeyDialog by rememberSaveable { mutableStateOf(false) }
@@ -240,135 +232,26 @@ fun AiLyricsTranslationScreen(
     var showModelDialog by rememberSaveable { mutableStateOf(false) }
     var showSystemPromptDialog by rememberSaveable { mutableStateOf(false) }
 
-    val providerHelpText = mapOf(
-        "OpenRouter" to stringResource(R.string.ai_provider_openrouter_help),
-        "OpenAI" to stringResource(R.string.ai_provider_openai_help),
-        "Claude" to stringResource(R.string.ai_provider_claude_help),
-        "Gemini" to stringResource(R.string.ai_provider_gemini_help),
-        "Perplexity" to stringResource(R.string.ai_provider_perplexity_help),
-        "XAi" to stringResource(R.string.ai_provider_xai_help),
-        "Mistral" to stringResource(R.string.ai_provider_mistral_help),
-        "Inception" to stringResource(R.string.ai_provider_inception_help),
-        DEEPL_PROVIDER to stringResource(R.string.ai_provider_deepl_help),
-    )
+    val currentKey = if (aiProvider == DEEPL_PROVIDER) deeplApiKey else openRouterApiKey
 
-    // Help Dialog
-    if (showProviderHelpDialog) {
-        DefaultDialog(
-            onDismiss = { showProviderHelpDialog = false },
-            icon = { Icon(AppIcons.Info, null) },
-            title = { Text(text = stringResource(R.string.ai_provider_help)) },
-            buttons = {
-                TextButton(onClick = { showProviderHelpDialog = false }) {
-                    Text(stringResource(android.R.string.ok))
-                }
-            }
-        ) {
-            Column {
-                providerHelpText.forEach { (provider, help) ->
-                    if (help.isNotEmpty()) {
-                        val primaryColor = MaterialTheme.colorScheme.primary
-                        val annotatedString = buildAnnotatedString {
-                            append("$provider: ")
-                            val urlRegex = "https?://[^\\s]+".toRegex()
-                            val match = urlRegex.find(help)
-                            if (match != null) {
-                                val url = match.value
-                                val beforeUrl = help.substring(0, match.range.first)
-                                val afterUrl = help.substring(match.range.last + 1)
-
-                                append(beforeUrl)
-                                val linkStart = length
-                                append(url)
-                                val linkEnd = length
-                                append(afterUrl)
-
-                                addLink(
-                                    LinkAnnotation.Url(
-                                        url = url,
-                                        styles = TextLinkStyles(
-                                            style = SpanStyle(
-                                                color = primaryColor,
-                                                textDecoration = TextDecoration.Underline,
-                                            ),
-                                        ),
-                                    ),
-                                    start = linkStart,
-                                    end = linkEnd,
-                                )
-                            } else {
-                                append(help)
-                            }
-                        }
-
-                        Text(
-                            text = annotatedString,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                            modifier = Modifier.padding(vertical = AppSpacing.xxs),
-                        )
-                    }
-                }
-            }
-        }
+    // Quick Setup Dialog
+    if (showSetupWizardDialog) {
+        AiTranslationSetupDialog(
+            currentApiKey = openRouterApiKey,
+            currentModel = openRouterModel,
+            currentLanguage = translateLanguage,
+            onComplete = { newKey, newModel, newLang ->
+                onAiProviderChange("OpenRouter")
+                onOpenRouterApiKeyChange(newKey)
+                onOpenRouterModelChange(newModel)
+                onTranslateLanguageChange(newLang)
+                onAiTranslationEnabledChange(true)
+            },
+            onDismiss = { showSetupWizardDialog = false }
+        )
     }
 
-    if (showTranslateModeHelpDialog) {
-        DefaultDialog(
-            onDismiss = { showTranslateModeHelpDialog = false },
-            icon = { Icon(AppIcons.Info, null) },
-            title = { Text(text = stringResource(R.string.ai_translation_mode)) },
-            buttons = {
-                TextButton(onClick = { showTranslateModeHelpDialog = false }) {
-                    Text(text = stringResource(android.R.string.ok))
-                }
-            }
-        ) {
-            Column {
-                Text(
-                    text = "${stringResource(R.string.ai_translation_literal)}:",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(top = AppSpacing.xs),
-                )
-                Text(
-                    text = stringResource(R.string.ai_translation_literal_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = AppSpacing.sm),
-                )
-
-                Text(
-                    text = "${stringResource(R.string.ai_translation_transcribed)}:",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = stringResource(R.string.ai_translation_transcribed_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = AppSpacing.sm),
-                )
-
-                Text(
-                    text = "${stringResource(R.string.ai_translation_romanized)}:",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = stringResource(R.string.ai_translation_romanized_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-
-    // Categorized Provider Dialog
+    // Provider Picker Dialog
     if (showProviderDialog) {
         ProviderPickerDialog(
             currentProvider = aiProvider,
@@ -376,8 +259,6 @@ fun AiLyricsTranslationScreen(
                 onAiProviderChange(option.id)
                 if (option.defaultEndpoint.isNotBlank()) {
                     onOpenRouterBaseUrlChange(option.defaultEndpoint)
-                } else if (option.id == CUSTOM_PROVIDER) {
-                    onOpenRouterBaseUrlChange("")
                 }
                 if (option.defaultModel.isNotBlank()) {
                     onOpenRouterModelChange(option.defaultModel)
@@ -391,25 +272,28 @@ fun AiLyricsTranslationScreen(
         )
     }
 
-    // Translation Mode Dialog
+    // Translation Trigger Dialog (Automatic vs Manual)
+    if (showTriggerDialog) {
+        TriggerPickerDialog(
+            currentMode = activationMode,
+            onSelect = { mode ->
+                activationMode = mode
+                PreferencesManager.aiTranslationActivationMode = mode
+                showTriggerDialog = false
+            },
+            onDismiss = { showTriggerDialog = false }
+        )
+    }
+
+    // Translation Mode Dialog (Translation vs Transcription)
     if (showTranslateModeDialog) {
-        EnumDialog(
-            onDismiss = { showTranslateModeDialog = false },
+        TranslateModePickerDialog(
+            currentMode = translateMode,
             onSelect = {
                 onTranslateModeChange(it)
                 showTranslateModeDialog = false
             },
-            title = stringResource(R.string.ai_translation_mode),
-            current = translateMode,
-            values = listOf(LITERAL_MODE, TRANSCRIBED_MODE, ROMANIZED_MODE),
-            valueText = {
-                when (it) {
-                    LITERAL_MODE -> stringResource(R.string.ai_translation_literal)
-                    TRANSCRIBED_MODE -> stringResource(R.string.ai_translation_transcribed)
-                    ROMANIZED_MODE -> stringResource(R.string.ai_translation_romanized)
-                    else -> it
-                }
-            },
+            onDismiss = { showTranslateModeDialog = false }
         )
     }
 
@@ -427,69 +311,50 @@ fun AiLyricsTranslationScreen(
 
     // API Key Dialog
     if (showApiKeyDialog) {
-        TextFieldDialog(
-            title = { Text(stringResource(R.string.ai_api_key)) },
-            icon = { Icon(AppIcons.Key, null) },
-            initialTextFieldValue = TextFieldValue(text = openRouterApiKey),
+        TextSettingDialog(
+            title = stringResource(if (aiProvider == DEEPL_PROVIDER) R.string.ai_deepl_api_key else R.string.ai_api_key),
+            initialValue = currentKey,
+            isSecret = true,
+            placeholder = stringResource(R.string.required),
             onDone = {
-                onOpenRouterApiKeyChange(it)
+                if (aiProvider == DEEPL_PROVIDER) {
+                    onDeeplApiKeyChange(it)
+                } else {
+                    onOpenRouterApiKeyChange(it)
+                }
                 showApiKeyDialog = false
             },
-            onDismiss = { showApiKeyDialog = false },
-        )
-    }
-
-    // DeepL API Key Dialog
-    if (showDeeplApiKeyDialog) {
-        TextFieldDialog(
-            title = { Text(stringResource(R.string.ai_deepl_api_key)) },
-            icon = { Icon(AppIcons.Key, null) },
-            initialTextFieldValue = TextFieldValue(text = deeplApiKey),
-            onDone = {
-                onDeeplApiKeyChange(it)
-                showDeeplApiKeyDialog = false
-            },
-            onDismiss = { showDeeplApiKeyDialog = false },
-        )
-    }
-
-    // DeepL Formality Dialog
-    if (showDeeplFormalityDialog) {
-        EnumDialog(
-            onDismiss = { showDeeplFormalityDialog = false },
-            onSelect = {
-                onDeeplFormalityChange(it)
-                showDeeplFormalityDialog = false
-            },
-            title = stringResource(R.string.ai_deepl_formality),
-            current = deeplFormality,
-            values = listOf("default", "more", "less"),
-            valueText = {
-                when (it) {
-                    "default" -> stringResource(R.string.ai_deepl_formality_default)
-                    "more" -> stringResource(R.string.ai_deepl_formality_more)
-                    "less" -> stringResource(R.string.ai_deepl_formality_less)
-                    else -> it
-                }
-            },
+            onDismiss = { showApiKeyDialog = false }
         )
     }
 
     // Base URL Dialog
     if (showBaseUrlDialog) {
-        TextFieldDialog(
-            title = { Text(stringResource(R.string.ai_base_url)) },
-            icon = { Icon(AppIcons.Link, null) },
-            initialTextFieldValue = TextFieldValue(text = openRouterBaseUrl),
+        TextSettingDialog(
+            title = stringResource(R.string.ai_base_url),
+            initialValue = openRouterBaseUrl,
+            placeholder = currentPreset.defaultEndpoint,
             onDone = {
                 onOpenRouterBaseUrlChange(it)
                 showBaseUrlDialog = false
             },
-            onDismiss = { showBaseUrlDialog = false },
+            onDismiss = { showBaseUrlDialog = false }
         )
     }
 
-    // Searchable Model Dialog matching Metrolist
+    // DeepL Formality Dialog
+    if (showDeeplFormalityDialog) {
+        FormalityPickerDialog(
+            currentFormality = deeplFormality,
+            onSelect = {
+                onDeeplFormalityChange(it)
+                showDeeplFormalityDialog = false
+            },
+            onDismiss = { showDeeplFormalityDialog = false }
+        )
+    }
+
+    // Searchable Model Dialog
     if (showModelDialog) {
         ModelPickerDialog(
             currentModel = openRouterModel,
@@ -502,39 +367,17 @@ fun AiLyricsTranslationScreen(
         )
     }
 
-    // Multiline System Prompt Dialog
+    // System Prompt Dialog
     if (showSystemPromptDialog) {
-        TextFieldDialog(
-            title = { Text(stringResource(R.string.ai_system_prompt)) },
-            icon = { Icon(AppIcons.Edit, null) },
-            initialTextFieldValue = TextFieldValue(text = aiSystemPrompt.ifBlank { PrefKeys.DEFAULT_AI_SYSTEM_PROMPT }),
-            singleLine = false,
-            maxLines = 12,
-            isInputValid = { true },
+        TextSettingDialog(
+            title = stringResource(R.string.ai_system_prompt_label),
+            initialValue = aiSystemPrompt.ifBlank { PrefKeys.DEFAULT_AI_SYSTEM_PROMPT },
+            isMultiline = true,
             onDone = {
                 onAiSystemPromptChange(if (it.isBlank() || it == PrefKeys.DEFAULT_AI_SYSTEM_PROMPT) "" else it)
                 showSystemPromptDialog = false
             },
-            onDismiss = { showSystemPromptDialog = false },
-            extraContent = {
-                if (aiSystemPrompt.isNotBlank()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = AppSpacing.xs),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        TextButton(
-                            onClick = {
-                                onAiSystemPromptChange("")
-                                showSystemPromptDialog = false
-                            },
-                        ) {
-                            Text(stringResource(R.string.ai_system_prompt_reset))
-                        }
-                    }
-                }
-            },
+            onDismiss = { showSystemPromptDialog = false }
         )
     }
 
@@ -542,383 +385,373 @@ fun AiLyricsTranslationScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = AppSpacing.md, vertical = AppSpacing.xs),
+            .padding(bottom = 32.dp),
     ) {
-        // Group 1: Runtime
-        Material3SettingsGroup(
+        // Group 1: Setup
+        MetrolistSettingsGroup(
+            title = stringResource(R.string.ai_setup_title),
+            topPadding = 8.dp,
+            items = listOf(
+                MetrolistSettingsItem(
+                    title = stringResource(R.string.ai_setup_title),
+                    description = stringResource(R.string.ai_setup_description),
+                    showChevron = true,
+                    onClick = { showSetupWizardDialog = true }
+                )
+            )
+        )
+
+        // Group 2: Runtime
+        MetrolistSettingsGroup(
             title = stringResource(R.string.ai_runtime),
             items = listOf(
-                Material3SettingsItem(
-                    icon = AppIcons.PowerSettingsNew,
-                    title = { Text(stringResource(R.string.ai_translation_enable)) },
-                    description = { Text(stringResource(R.string.ai_translation_enable_description)) },
-                    trailingContent = {
-                        Switch(
-                            checked = isAiTranslationEnabled,
-                            onCheckedChange = onAiTranslationEnabledChange,
-                            thumbContent = if (isAiTranslationEnabled) {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Filled.Check,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                                    )
-                                }
-                            } else null
-                        )
-                    },
-                    onClick = { onAiTranslationEnabledChange(!isAiTranslationEnabled) }
+                MetrolistSettingsItem(
+                    title = stringResource(R.string.ai_translation_enable),
+                    description = stringResource(R.string.ai_translation_enable_description),
+                    isSwitch = true,
+                    checked = isAiTranslationEnabled,
+                    onCheckedChange = onAiTranslationEnabledChange
                 ),
-                Material3SettingsItem(
-                    icon = AppIcons.Lyrics,
-                    title = { Text(stringResource(R.string.ai_translation_dual_line)) },
-                    description = { Text(stringResource(R.string.ai_translation_dual_line_description)) },
-                    trailingContent = {
-                        Switch(
-                            checked = isAiTranslationDualLine,
-                            onCheckedChange = onAiTranslationDualLineChange,
-                            thumbContent = if (isAiTranslationDualLine) {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Filled.Check,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                                    )
-                                }
-                            } else null
-                        )
-                    },
-                    onClick = { onAiTranslationDualLineChange(!isAiTranslationDualLine) }
+                MetrolistSettingsItem(
+                    title = stringResource(R.string.ai_translation_trigger),
+                    description = stringResource(
+                        if (activationMode == "Manual") R.string.ai_translation_trigger_manual_description
+                        else R.string.ai_translation_trigger_automatic_description
+                    ),
+                    valueLabel = stringResource(
+                        if (activationMode == "Manual") R.string.ai_trigger_manual
+                        else R.string.ai_trigger_automatic
+                    ),
+                    onClick = { showTriggerDialog = true }
                 ),
-                Material3SettingsItem(
-                    icon = AppIcons.Translate,
-                    title = { Text(stringResource(R.string.ai_translation_mode)) },
-                    description = {
-                        Text(
-                            if (isDirectService) {
-                                stringResource(R.string.ai_translation_literal)
-                            } else {
-                                when (translateMode) {
-                                    LITERAL_MODE -> stringResource(R.string.ai_translation_literal)
-                                    TRANSCRIBED_MODE -> stringResource(R.string.ai_translation_transcribed)
-                                    ROMANIZED_MODE -> stringResource(R.string.ai_translation_romanized)
-                                    else -> translateMode
-                                }
-                            }
-                        )
+                MetrolistSettingsItem(
+                    title = stringResource(R.string.mode),
+                    description = stringResource(R.string.settings_translation_mode_summary),
+                    valueLabel = when (translateMode) {
+                        LITERAL_MODE -> stringResource(R.string.ai_translation_literal)
+                        TRANSCRIBED_MODE -> stringResource(R.string.ai_translation_transcribed)
+                        else -> translateMode
                     },
                     enabled = !isDirectService,
-                    onClick = { showTranslateModeDialog = true },
-                    trailingContent = {
-                        IconButton(onClick = { showTranslateModeHelpDialog = true }) {
-                            Icon(
-                                AppIcons.Info,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
+                    onClick = { showTranslateModeDialog = true }
                 ),
-                Material3SettingsItem(
-                    icon = AppIcons.Language,
-                    title = { Text(stringResource(R.string.ai_target_language)) },
-                    description = { Text(PrefKeys.LanguageCodeToName[translateLanguage] ?: translateLanguage) },
+                MetrolistSettingsItem(
+                    title = stringResource(R.string.ai_target_language),
+                    valueLabel = PrefKeys.LanguageCodeToName[translateLanguage] ?: translateLanguage,
                     onClick = { showLanguageDialog = true }
                 )
             )
         )
 
-        Spacer(modifier = Modifier.height(AppSpacing.md))
-
-        // Group 2: Provider
-        Material3SettingsGroup(
+        // Group 3: Provider
+        MetrolistSettingsGroup(
             title = stringResource(R.string.ai_provider),
-            items = listOfNotNull(
-                Material3SettingsItem(
-                    icon = AppIcons.Explore,
-                    title = { Text(stringResource(R.string.ai_provider)) },
-                    description = { Text(currentPreset.name) },
-                    onClick = { showProviderDialog = true },
-                    trailingContent = {
-                        IconButton(onClick = { showProviderHelpDialog = true }) {
-                            Icon(
-                                AppIcons.Info,
-                                contentDescription = stringResource(R.string.ai_provider_help),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-                ),
-                if (aiProvider == CUSTOM_PROVIDER) {
-                    Material3SettingsItem(
-                        icon = AppIcons.Link,
-                        title = { Text(stringResource(R.string.ai_base_url)) },
-                        description = { Text(openRouterBaseUrl.ifBlank { stringResource(R.string.not_set) }) },
-                        onClick = { showBaseUrlDialog = true }
-                    )
-                } else null
+            items = listOf(
+                MetrolistSettingsItem(
+                    title = stringResource(R.string.ai_provider),
+                    description = stringResource(R.string.settings_translation_provider_summary),
+                    valueLabel = currentPreset.name,
+                    onClick = { showProviderDialog = true }
+                )
             )
         )
 
-        Spacer(modifier = Modifier.height(AppSpacing.md))
-
-        // Group 3: Connection
-        Material3SettingsGroup(
-            title = stringResource(R.string.ai_connection),
-            items = buildList {
-                when (aiProvider) {
-                    DEEPL_PROVIDER -> {
+        // Group 4: Connection (when not a keyless direct service)
+        if (!isDirectService) {
+            MetrolistSettingsGroup(
+                title = stringResource(R.string.ai_connection),
+                items = buildList {
+                    if (aiProvider == "OpenRouter") {
                         add(
-                            Material3SettingsItem(
-                                icon = AppIcons.Key,
-                                title = { Text(stringResource(R.string.ai_deepl_api_key)) },
-                                description = {
-                                    Text(
-                                        if (deeplApiKey.isNotBlank()) {
-                                            "•".repeat(minOf(deeplApiKey.length, 8))
-                                        } else {
-                                            stringResource(R.string.required)
+                            MetrolistSettingsItem(
+                                title = stringResource(R.string.openrouter_sign_in_title),
+                                customContent = {
+                                    val uriHandler = LocalUriHandler.current
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                if (openRouterApiKey.isNotBlank()) {
+                                                    onOpenRouterApiKeyChange("")
+                                                } else {
+                                                    runCatching { uriHandler.openUri("https://openrouter.ai/settings/keys") }
+                                                }
+                                            }
+                                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            Text(
+                                                text = stringResource(R.string.openrouter_sign_in_title),
+                                                style = MaterialTheme.typography.bodyLarge,
+                                            )
+                                            Text(
+                                                text = stringResource(
+                                                    if (openRouterApiKey.isNotBlank()) R.string.openrouter_signed_in_description
+                                                    else R.string.openrouter_sign_in_description
+                                                ),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
                                         }
-                                    )
-                                },
-                                onClick = { showDeeplApiKeyDialog = true }
+                                        Text(
+                                            text = stringResource(
+                                                if (openRouterApiKey.isNotBlank()) R.string.disconnect_cast else R.string.sign_in
+                                            ),
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 12.dp),
+                                        )
+                                    }
+                                }
                             )
                         )
+                    }
+
+                    add(
+                        MetrolistSettingsItem(
+                            title = stringResource(if (aiProvider == DEEPL_PROVIDER) R.string.ai_deepl_api_key else R.string.ai_api_key),
+                            description = stringResource(if (currentKey.isBlank()) R.string.required else R.string.configured),
+                            valueLabel = if (currentKey.isNotBlank()) "••••••••" else "",
+                            onClick = { showApiKeyDialog = true }
+                        )
+                    )
+
+                    if (aiProvider == CUSTOM_PROVIDER || currentPreset.defaultEndpoint.isNotBlank()) {
                         add(
-                            Material3SettingsItem(
-                                icon = AppIcons.Tune,
-                                title = { Text(stringResource(R.string.ai_deepl_formality)) },
-                                description = {
-                                    Text(
-                                        when (deeplFormality) {
-                                            "default" -> stringResource(R.string.ai_deepl_formality_default)
-                                            "more" -> stringResource(R.string.ai_deepl_formality_more)
-                                            "less" -> stringResource(R.string.ai_deepl_formality_less)
-                                            else -> deeplFormality
-                                        }
-                                    )
+                            MetrolistSettingsItem(
+                                title = stringResource(R.string.ai_base_url),
+                                description = openRouterBaseUrl.ifBlank { currentPreset.defaultEndpoint.ifBlank { stringResource(R.string.not_set) } },
+                                valueLabel = openRouterBaseUrl.ifBlank { currentPreset.defaultEndpoint.ifBlank { stringResource(R.string.not_set) } },
+                                onClick = { showBaseUrlDialog = true }
+                            )
+                        )
+                    }
+
+                    if (aiProvider == DEEPL_PROVIDER) {
+                        add(
+                            MetrolistSettingsItem(
+                                title = stringResource(R.string.ai_deepl_formality),
+                                description = stringResource(R.string.settings_translation_formality_summary),
+                                valueLabel = when (deeplFormality) {
+                                    "default" -> stringResource(R.string.ai_deepl_formality_default)
+                                    "more" -> stringResource(R.string.ai_deepl_formality_more)
+                                    "less" -> stringResource(R.string.ai_deepl_formality_less)
+                                    else -> deeplFormality
                                 },
                                 onClick = { showDeeplFormalityDialog = true }
                             )
                         )
                     }
-                    DEEPL_KEYLESS_PROVIDER, GOOGLE_TRANSLATE_PROVIDER -> {
-                        add(
-                            Material3SettingsItem(
-                                icon = AppIcons.Key,
-                                title = { Text(stringResource(R.string.ai_keyless_no_key_needed)) },
-                                description = { Text(currentPreset.name) },
-                                enabled = false,
-                                onClick = null
-                            )
-                        )
-                    }
-                    else -> {
-                        add(
-                            Material3SettingsItem(
-                                icon = AppIcons.Key,
-                                title = { Text(stringResource(R.string.ai_api_key)) },
-                                description = {
-                                    Text(
-                                        if (openRouterApiKey.isNotBlank()) {
-                                            "•".repeat(minOf(openRouterApiKey.length, 8))
-                                        } else {
-                                            if (aiProvider == CUSTOM_PROVIDER) stringResource(R.string.not_set) else stringResource(R.string.required)
-                                        }
-                                    )
-                                },
-                                onClick = { showApiKeyDialog = true }
-                            )
-                        )
-                        if (aiProvider != CUSTOM_PROVIDER && currentPreset.defaultEndpoint.isNotBlank()) {
-                            add(
-                                Material3SettingsItem(
-                                    icon = AppIcons.Link,
-                                    title = { Text(stringResource(R.string.ai_base_url)) },
-                                    description = { Text(openRouterBaseUrl.ifBlank { currentPreset.defaultEndpoint }) },
-                                    onClick = { showBaseUrlDialog = true }
-                                )
-                            )
-                        }
-                    }
                 }
-            }
-        )
+            )
+        }
 
-        // Group 4: Models (Only for AI providers)
+        // Group 5: Models (Only for AI providers)
         if (currentPreset.isAi) {
-            Spacer(modifier = Modifier.height(AppSpacing.md))
-            Material3SettingsGroup(
+            val modelsReady = openRouterApiKey.isNotBlank() || currentPreset.isKeyless
+            MetrolistSettingsGroup(
                 title = stringResource(R.string.ai_models),
                 items = listOf(
-                    Material3SettingsItem(
-                        icon = AppIcons.DiscoverTune,
-                        title = { Text(stringResource(R.string.ai_model)) },
-                        description = { Text(openRouterModel.ifBlank { stringResource(R.string.not_set) }) },
+                    MetrolistSettingsItem(
+                        title = stringResource(R.string.ai_translation_model),
+                        description = stringResource(R.string.settings_translation_model_summary),
+                        valueLabel = openRouterModel.ifBlank { stringResource(R.string.not_set) },
+                        enabled = modelsReady,
                         onClick = { showModelDialog = true }
                     )
                 )
             )
 
-            Spacer(modifier = Modifier.height(AppSpacing.md))
-
-            // Group 5: Prompt
-            Material3SettingsGroup(
+            // Group 6: Prompt
+            MetrolistSettingsGroup(
                 title = stringResource(R.string.ai_prompt),
+                description = stringResource(R.string.ai_prompt_line_count_description),
                 items = listOf(
-                    Material3SettingsItem(
-                        icon = AppIcons.Edit,
-                        title = { Text(stringResource(R.string.ai_system_prompt)) },
-                        description = {
-                            Text(
-                                if (aiSystemPrompt.isNotBlank()) {
-                                    aiSystemPrompt.take(65).let { if (aiSystemPrompt.length > 65) "$it…" else it }
-                                } else {
-                                    stringResource(R.string.ai_system_prompt_default)
-                                }
-                            )
-                        },
+                    MetrolistSettingsItem(
+                        title = stringResource(R.string.ai_system_prompt_label),
+                        description = stringResource(
+                            if (aiSystemPrompt.isBlank()) R.string.ai_default_json_array_prompt else R.string.configured
+                        ),
+                        valueLabel = if (aiSystemPrompt.isNotBlank()) stringResource(R.string.configured) else "",
+                        enabled = modelsReady,
                         onClick = { showSystemPromptDialog = true }
                     )
                 )
             )
         }
 
-        Spacer(modifier = Modifier.height(AppSpacing.md))
+        // Group 7: Connection Test (Matches Metrolist AiLyricsConnectionTestSetting)
+        if (!isDirectService) {
+            MetrolistSettingsGroup(
+                title = stringResource(R.string.ai_test_connection),
+                items = listOf(
+                    MetrolistSettingsItem(
+                        title = stringResource(R.string.ai_test_connection),
+                        customContent = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.ai_test_connection_description),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
 
-        // Group 6: Connection Test (Matches Metrolist AiLyricsConnectionTestSetting)
-        Material3SettingsGroup(
-            title = stringResource(R.string.ai_test_connection),
-            items = listOf(
-                Material3SettingsItem(
-                    icon = AppIcons.PlayCircle,
-                    title = { Text(stringResource(R.string.ai_test_connection)) },
-                    description = {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(stringResource(R.string.ai_test_connection_description))
+                                TextButton(
+                                    onClick = {
+                                        val canRun = when (aiProvider) {
+                                            DEEPL_PROVIDER -> deeplApiKey.isNotBlank()
+                                            DEEPL_KEYLESS_PROVIDER, GOOGLE_TRANSLATE_PROVIDER -> true
+                                            CUSTOM_PROVIDER -> true
+                                            else -> openRouterApiKey.isNotBlank()
+                                        }
 
-                            when (val state = testState) {
-                                ConnectionTestState.Idle -> {}
-                                ConnectionTestState.Testing -> {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        modifier = Modifier.padding(top = 4.dp)
-                                    ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MaterialTheme.colorScheme.primary
+                                        if (!canRun) {
+                                            testState = ConnectionTestState.MissingCredentials
+                                            return@TextButton
+                                        }
+
+                                        testState = ConnectionTestState.Testing
+                                        coroutineScope.launch {
+                                            val result = withContext(Dispatchers.IO) {
+                                                AiLyricsTranslator.translate(
+                                                    lines = listOf("Hello"),
+                                                    targetLanguage = translateLanguage,
+                                                    apiKey = if (aiProvider == DEEPL_PROVIDER) deeplApiKey else openRouterApiKey,
+                                                    baseUrl = openRouterBaseUrl.ifBlank { currentPreset.defaultEndpoint },
+                                                    model = openRouterModel,
+                                                    mode = translateMode,
+                                                    provider = aiProvider,
+                                                    deeplFormality = deeplFormality,
+                                                    customSystemPrompt = aiSystemPrompt,
+                                                    maxRetries = 1
+                                                )
+                                            }
+
+                                            result.fold(
+                                                onSuccess = { translatedLines ->
+                                                    val sample = translatedLines.firstOrNull().orEmpty().trim()
+                                                    testState = ConnectionTestState.Success(sample)
+                                                },
+                                                onFailure = { error ->
+                                                    testState = ConnectionTestState.Failed(error.message ?: "Unknown error")
+                                                }
+                                            )
+                                        }
+                                    },
+                                    enabled = testState != ConnectionTestState.Testing
+                                ) {
+                                    Text(
+                                        stringResource(
+                                            if (testState == ConnectionTestState.Testing) R.string.ai_test_connection_running
+                                            else R.string.ai_test_connection
                                         )
+                                    )
+                                }
+
+                                when (val state = testState) {
+                                    ConnectionTestState.Idle -> {}
+                                    ConnectionTestState.Testing -> {
                                         Text(
                                             stringResource(R.string.ai_test_connection_running),
-                                            style = MaterialTheme.typography.bodySmall,
+                                            style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                }
-                                is ConnectionTestState.Success -> {
-                                    Text(
-                                        stringResource(R.string.ai_test_connection_success),
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(top = 4.dp)
-                                    )
-                                    if (state.sample.isNotBlank()) {
+                                    is ConnectionTestState.Success -> {
+                                        if (state.sample.isNotBlank()) {
+                                            Text(
+                                                stringResource(R.string.ai_test_translation_result, state.sample),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        } else {
+                                            Text(
+                                                stringResource(R.string.ai_test_connection_success),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                    is ConnectionTestState.Failed -> {
                                         Text(
-                                            stringResource(R.string.ai_test_translation_result, state.sample),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface
+                                            stringResource(R.string.ai_test_connection_failed),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                        if (state.message.isNotBlank()) {
+                                            Text(
+                                                state.message,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                    ConnectionTestState.MissingCredentials -> {
+                                        Text(
+                                            stringResource(R.string.ai_test_missing_credentials),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.error
                                         )
                                     }
-                                }
-                                is ConnectionTestState.Failed -> {
-                                    Text(
-                                        stringResource(R.string.ai_test_connection_failed),
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                        color = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.padding(top = 4.dp)
-                                    )
-                                    if (state.message.isNotBlank()) {
-                                        Text(
-                                            state.message,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                                        )
-                                    }
-                                }
-                                ConnectionTestState.MissingCredentials -> {
-                                    Text(
-                                        stringResource(R.string.ai_test_missing_credentials),
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                        color = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.padding(top = 4.dp)
-                                    )
                                 }
                             }
                         }
-                    },
-                    trailingContent = {
-                        FilledTonalButton(
-                            onClick = {
-                                val canRun = when (aiProvider) {
-                                    DEEPL_PROVIDER -> deeplApiKey.isNotBlank()
-                                    DEEPL_KEYLESS_PROVIDER, GOOGLE_TRANSLATE_PROVIDER -> true
-                                    CUSTOM_PROVIDER -> true
-                                    else -> openRouterApiKey.isNotBlank()
-                                }
-
-                                if (!canRun) {
-                                    testState = ConnectionTestState.MissingCredentials
-                                    return@FilledTonalButton
-                                }
-
-                                testState = ConnectionTestState.Testing
-                                coroutineScope.launch {
-                                    val result = withContext(Dispatchers.IO) {
-                                        AiLyricsTranslator.translate(
-                                            lines = listOf("Hello"),
-                                            targetLanguage = translateLanguage,
-                                            apiKey = if (aiProvider == DEEPL_PROVIDER) deeplApiKey else openRouterApiKey,
-                                            baseUrl = openRouterBaseUrl.ifBlank { currentPreset.defaultEndpoint },
-                                            model = openRouterModel,
-                                            mode = translateMode,
-                                            provider = aiProvider,
-                                            deeplFormality = deeplFormality,
-                                            customSystemPrompt = aiSystemPrompt,
-                                            maxRetries = 1
-                                        )
-                                    }
-
-                                    result.fold(
-                                        onSuccess = { translatedLines ->
-                                            val sample = translatedLines.firstOrNull().orEmpty().trim()
-                                            testState = ConnectionTestState.Success(sample)
-                                        },
-                                        onFailure = { error ->
-                                            testState = ConnectionTestState.Failed(error.message ?: "Unknown error")
-                                        }
-                                    )
-                                }
-                            },
-                            enabled = testState != ConnectionTestState.Testing,
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                stringResource(
-                                    if (testState == ConnectionTestState.Testing)
-                                        R.string.ai_test_connection_running
-                                    else
-                                        R.string.ai_test_connection
-                                )
-                            )
-                        }
-                    }
+                    )
                 )
             )
-        )
+        }
+    }
+}
 
-        Spacer(modifier = Modifier.height(AppSpacing.xl))
+@Composable
+private fun AiDialogSurface(
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .widthIn(min = 280.dp, max = 560.dp)
+                .fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp,
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun AiChoiceRow(
+    selected: Boolean,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(
+                selected = selected,
+                role = Role.RadioButton,
+                onClick = onClick,
+            )
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.weight(1f)) { content() }
+        if (selected) {
+            Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary)
+        }
     }
 }
 
@@ -928,86 +761,65 @@ private fun ProviderPickerDialog(
     onSelect: (ProviderOption) -> Unit,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 6.dp,
+    AiDialogSurface(onDismiss = onDismiss) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 24.dp)
+                .padding(vertical = 20.dp)
         ) {
-            Column(
+            Text(
+                text = stringResource(R.string.ai_provider),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+            )
+
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 20.dp)
+                    .heightIn(max = 440.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.ai_provider),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-                )
-
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 480.dp)
-                ) {
-                    ProviderCategory.entries.forEach { category ->
-                        val options = ALL_PROVIDERS.filter { it.category == category }
-                        if (options.isNotEmpty()) {
-                            item(key = "cat_${category.name}") {
-                                Text(
-                                    text = stringResource(category.titleRes),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp)
-                                )
-                            }
-                            items(options, key = { it.id }) { option ->
-                                val selected = option.id.equals(currentProvider, ignoreCase = true)
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .selectable(
-                                            selected = selected,
-                                            role = Role.RadioButton,
-                                            onClick = { onSelect(option) }
+                ProviderCategory.entries.forEach { category ->
+                    val options = ALL_PROVIDERS.filter { it.category == category }
+                    if (options.isNotEmpty()) {
+                        item(key = "cat_${category.name}") {
+                            Text(
+                                text = stringResource(category.titleRes),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp)
+                            )
+                        }
+                        items(options, key = { it.id }) { option ->
+                            val selected = option.id.equals(currentProvider, ignoreCase = true)
+                            AiChoiceRow(
+                                selected = selected,
+                                onClick = { onSelect(option) }
+                            ) {
+                                Column {
+                                    Text(option.name, style = MaterialTheme.typography.bodyLarge)
+                                    if (option.defaultModel.isNotBlank()) {
+                                        Text(
+                                            option.defaultModel,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
-                                        .padding(horizontal = 24.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    RadioButton(
-                                        selected = selected,
-                                        onClick = null
-                                    )
-                                    Column(Modifier.weight(1f)) {
-                                        Text(option.name, style = MaterialTheme.typography.bodyLarge)
-                                        if (option.defaultModel.isNotBlank()) {
-                                            Text(
-                                                option.defaultModel,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
+            }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(android.R.string.cancel))
-                    }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
                 }
             }
         }
@@ -1032,125 +844,270 @@ private fun ModelPickerDialog(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 6.dp,
+    AiDialogSurface(onDismiss = onDismiss) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 24.dp)
+                .padding(vertical = 20.dp)
         ) {
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 20.dp)
+                    .padding(horizontal = 24.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stringResource(R.string.ai_model),
+                    text = stringResource(R.string.ai_translation_model),
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
                 )
+            }
 
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    label = { Text(stringResource(R.string.ai_model_search)) },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 12.dp)
-                )
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text(stringResource(R.string.ai_model_search)) },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
+            )
 
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 400.dp)
-                ) {
-                    // Custom model ID option if user typed something not in list
-                    if (typed.isNotEmpty() && recommendedModels.none { it.equals(typed, ignoreCase = true) }) {
-                        item(key = "custom_typed_entry") {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .selectable(
-                                        selected = currentModel == typed,
-                                        role = Role.RadioButton,
-                                        onClick = { onSelect(typed) }
-                                    )
-                                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                RadioButton(
-                                    selected = currentModel == typed,
-                                    onClick = null
-                                )
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        stringResource(R.string.ai_model_custom_id),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        typed,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (filteredModels.isEmpty() && typed.isNotEmpty() && recommendedModels.none { it.equals(typed, ignoreCase = true) }) {
-                        // User can still select the typed model above
-                    } else if (filteredModels.isEmpty() && typed.isNotEmpty()) {
-                        item(key = "empty") {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+            ) {
+                if (typed.isNotEmpty() && recommendedModels.none { it.equals(typed, ignoreCase = true) }) {
+                    item(key = "custom_typed_entry") {
+                        AiChoiceRow(
+                            selected = currentModel == typed,
+                            onClick = { onSelect(typed) }
+                        ) {
                             Text(
-                                stringResource(R.string.ai_model_none_found),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                                "${stringResource(R.string.ai_model_custom_id)}: $typed",
+                                style = MaterialTheme.typography.bodyLarge
                             )
                         }
-                    } else {
-                        items(filteredModels, key = { it }) { modelId ->
-                            val selected = modelId == currentModel
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .selectable(
-                                        selected = selected,
-                                        role = Role.RadioButton,
-                                        onClick = { onSelect(modelId) }
-                                    )
-                                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                RadioButton(
-                                    selected = selected,
-                                    onClick = null
-                                )
+                    }
+                }
+
+                if (filteredModels.isEmpty() && typed.isNotEmpty()) {
+                    item(key = "empty_models") {
+                        Text(
+                            text = stringResource(R.string.ai_model_none_found),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                        )
+                    }
+                }
+
+                items(filteredModels, key = { it }) { modelId ->
+                    val isFree = modelId.endsWith(":free")
+                    val displayName = modelId.substringAfterLast('/')
+                    AiChoiceRow(
+                        selected = currentModel == modelId,
+                        onClick = { onSelect(modelId) }
+                    ) {
+                        Column {
+                            Text(displayName, style = MaterialTheme.typography.bodyLarge)
+                            if (displayName != modelId) {
                                 Text(
-                                    text = modelId,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.weight(1f)
+                                    modelId,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (isFree) {
+                                Text(
+                                    stringResource(R.string.ai_model_free),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
                     }
                 }
+            }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.End
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TriggerPickerDialog(
+    currentMode: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AiDialogSurface(onDismiss = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 20.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.ai_translation_trigger),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+            )
+
+            AiChoiceRow(
+                selected = currentMode != "Manual",
+                onClick = { onSelect("Automatic") }
+            ) {
+                Column {
+                    Text(stringResource(R.string.ai_trigger_automatic), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(R.string.ai_translation_trigger_automatic_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            AiChoiceRow(
+                selected = currentMode == "Manual",
+                onClick = { onSelect("Manual") }
+            ) {
+                Column {
+                    Text(stringResource(R.string.ai_trigger_manual), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(R.string.ai_translation_trigger_manual_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TranslateModePickerDialog(
+    currentMode: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AiDialogSurface(onDismiss = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 20.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.mode),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+            )
+
+            AiChoiceRow(
+                selected = currentMode == LITERAL_MODE,
+                onClick = { onSelect(LITERAL_MODE) }
+            ) {
+                Column {
+                    Text(stringResource(R.string.ai_translation_literal), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(R.string.ai_translation_literal_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            AiChoiceRow(
+                selected = currentMode == TRANSCRIBED_MODE,
+                onClick = { onSelect(TRANSCRIBED_MODE) }
+            ) {
+                Column {
+                    Text(stringResource(R.string.ai_translation_transcribed), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(R.string.ai_translation_transcribed_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FormalityPickerDialog(
+    currentFormality: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AiDialogSurface(onDismiss = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 20.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.ai_deepl_formality),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+            )
+
+            listOf(
+                "default" to stringResource(R.string.ai_deepl_formality_default),
+                "more" to stringResource(R.string.ai_deepl_formality_more),
+                "less" to stringResource(R.string.ai_deepl_formality_less)
+            ).forEach { (code, label) ->
+                AiChoiceRow(
+                    selected = currentFormality == code,
+                    onClick = { onSelect(code) }
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(android.R.string.cancel))
-                    }
+                    Text(label, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
                 }
             }
         }
@@ -1163,97 +1120,266 @@ private fun LanguagePickerDialog(
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var query by remember { mutableStateOf("") }
-    val typed = query.trim()
+    var searchQuery by remember { mutableStateOf("") }
+    val trimmed = searchQuery.trim()
 
-    val sortedLanguages = remember {
-        PrefKeys.LanguageCodeToName.toList().sortedBy { it.second }
-    }
-
-    val filtered = remember(typed, sortedLanguages) {
-        if (typed.isEmpty()) {
-            sortedLanguages
+    val filteredLanguages = remember(trimmed) {
+        if (trimmed.isEmpty()) {
+            PrefKeys.LanguageCodeToName.toList()
         } else {
-            sortedLanguages.filter { (code, name) ->
-                name.contains(typed, ignoreCase = true) || code.contains(typed, ignoreCase = true)
-            }
+            PrefKeys.LanguageCodeToName.filter { (code, name) ->
+                code.contains(trimmed, ignoreCase = true) || name.contains(trimmed, ignoreCase = true)
+            }.toList()
         }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 6.dp,
+    AiDialogSurface(onDismiss = onDismiss) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 24.dp)
+                .padding(vertical = 20.dp)
         ) {
-            Column(
+            Text(
+                text = stringResource(R.string.ai_target_language),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+            )
+
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text(stringResource(R.string.action_search)) },
+                singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 20.dp)
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
+            )
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.ai_target_language),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-                )
+                items(filteredLanguages, key = { it.first }) { (code, name) ->
+                    AiChoiceRow(
+                        selected = currentCode.equals(code, ignoreCase = true),
+                        onClick = { onSelect(code) }
+                    ) {
+                        Text(name, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
 
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    label = { Text("Search language") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 12.dp)
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        }
+    }
+}
 
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 400.dp)
-                ) {
-                    items(filtered, key = { it.first }) { (code, name) ->
-                        val selected = code == currentCode
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .selectable(
-                                    selected = selected,
-                                    role = Role.RadioButton,
-                                    onClick = { onSelect(code) }
-                                )
-                                .padding(horizontal = 24.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            RadioButton(
-                                selected = selected,
-                                onClick = null
+@Composable
+private fun TextSettingDialog(
+    title: String,
+    initialValue: String,
+    placeholder: String? = null,
+    isSecret: Boolean = false,
+    isMultiline: Boolean = false,
+    onDone: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var textValue by remember { mutableStateOf(initialValue) }
+    var secretVisible by remember { mutableStateOf(false) }
+
+    AiDialogSurface(onDismiss = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Medium)
+
+            OutlinedTextField(
+                value = textValue,
+                onValueChange = { textValue = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = placeholder?.let { { Text(it) } },
+                visualTransformation = if (isSecret && !secretVisible) PasswordVisualTransformation() else VisualTransformation.None,
+                singleLine = !isMultiline,
+                minLines = if (isMultiline) 4 else 1,
+                maxLines = if (isMultiline) 12 else 1,
+                trailingIcon = if (isSecret) {
+                    {
+                        IconButton(onClick = { secretVisible = !secretVisible }) {
+                            Icon(
+                                imageVector = if (secretVisible) AppIcons.VisibilityOff else AppIcons.Visibility,
+                                contentDescription = null
                             )
-                            Column(Modifier.weight(1f)) {
-                                Text(name, style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    code,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                        }
+                    }
+                } else null
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+                TextButton(onClick = { onDone(textValue.trim()) }) {
+                    Text(stringResource(R.string.done))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiTranslationSetupDialog(
+    currentApiKey: String,
+    currentModel: String,
+    currentLanguage: String,
+    onComplete: (apiKey: String, model: String, language: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var step by rememberSaveable { mutableIntStateOf(0) }
+    var apiKey by rememberSaveable { mutableStateOf(currentApiKey) }
+    var model by rememberSaveable { mutableStateOf(currentModel.ifBlank { "google/gemma-4-26b-a4b-it:free" }) }
+    var language by rememberSaveable { mutableStateOf(currentLanguage) }
+    val uriHandler = LocalUriHandler.current
+
+    AiDialogSurface(onDismiss = onDismiss) {
+        Column(
+            modifier = Modifier
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.ai_setup_step, step + 1, 3),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            when (step) {
+                0 -> {
+                    Text(
+                        text = stringResource(R.string.ai_setup_account),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = stringResource(R.string.ai_setup_account_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = stringResource(R.string.ai_setup_limits, 20, 50, 10, 1000),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = {
+                            runCatching { uriHandler.openUri("https://openrouter.ai/sign-up") }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.ai_setup_create_account))
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Button(onClick = { step = 1 }) {
+                            Text(stringResource(android.R.string.ok))
                         }
                     }
                 }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(android.R.string.cancel))
+                1 -> {
+                    Text(
+                        text = stringResource(R.string.ai_setup_sign_in),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = stringResource(R.string.openrouter_sign_in_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = apiKey,
+                        onValueChange = { apiKey = it },
+                        label = { Text(stringResource(R.string.ai_api_key)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { step = 0 }) {
+                            Text(stringResource(R.string.btn_back))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = { step = 2 },
+                            enabled = apiKey.isNotBlank()
+                        ) {
+                            Text(stringResource(android.R.string.ok))
+                        }
+                    }
+                }
+                2 -> {
+                    Text(
+                        text = stringResource(R.string.ai_setup_configure),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = stringResource(R.string.ai_setup_model_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = model,
+                        onValueChange = { model = it },
+                        label = { Text(stringResource(R.string.ai_translation_model)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "${stringResource(R.string.ai_target_language)}: ${PrefKeys.LanguageCodeToName[language] ?: language}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { step = 1 }) {
+                            Text(stringResource(R.string.btn_back))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                onComplete(apiKey, model, language)
+                                onDismiss()
+                            }
+                        ) {
+                            Text(stringResource(R.string.done))
+                        }
                     }
                 }
             }

@@ -247,6 +247,16 @@ object AppIcons {
         close()
     }
 
+    val ChevronRight: ImageVector = iconFromPathData(
+        name = "ChevronRight",
+        pathData = "M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z"
+    )
+
+    val Close: ImageVector = iconFromPathData(
+        name = "Close",
+        pathData = "m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"
+    )
+
     val Visibility: ImageVector = icon("Visibility") {
         moveTo(12f, 4.5f)
         curveTo(7f, 4.5f, 2.73f, 7.61f, 1f, 12f)

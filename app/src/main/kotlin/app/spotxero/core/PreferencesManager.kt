@@ -41,6 +41,7 @@ object PreferencesManager {
     var aiTranslationTranslateMode: String = "Literal"
     var aiTranslationDeeplApiKey: String = ""
     var aiTranslationDeeplFormality: String = "default"
+    var aiTranslationActivationMode: String = "Automatic"
     var lyricsProvidersOrder: String = "betterlyrics,lrcred,lrclib,kugou,netease,genius"
     var isBetterlyricsEnabled: Boolean = true
     var isLrcredEnabled: Boolean = true
@@ -277,6 +278,8 @@ object PreferencesManager {
         inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_DEEPL_API_KEY] = aiTranslationDeeplApiKey
         aiTranslationDeeplFormality = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY, "default") ?: "default"
         inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY] = aiTranslationDeeplFormality
+        aiTranslationActivationMode = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_ACTIVATION_MODE, "Automatic") ?: "Automatic"
+        inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_ACTIVATION_MODE] = aiTranslationActivationMode
         lyricsProvidersOrder = prefs.getString(PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, "betterlyrics,lrcred,lrclib,kugou,netease,genius") ?: "betterlyrics,lrcred,lrclib,kugou,netease,genius"
         inMemoryStrings[PrefKeys.KEY_LYRICS_PROVIDERS_ORDER] = lyricsProvidersOrder
         isBetterlyricsEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS, true)
