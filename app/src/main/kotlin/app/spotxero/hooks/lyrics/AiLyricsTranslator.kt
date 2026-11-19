@@ -32,11 +32,27 @@ object AiLyricsTranslator {
     }
 
     private val freeModelSessions = ConcurrentHashMap<String, FreeModelSession>()
+    private val manualTranslationTrackKeys = ConcurrentHashMap.newKeySet<String>()
 
-    fun translateLyrics(lyrics: ParsedLyrics, trackKey: String? = null): ParsedLyrics {
+    fun requestManualTranslation(trackKey: String) {
+        manualTranslationTrackKeys.add(trackKey.lowercase())
+    }
+
+    fun isManualTranslationRequested(trackKey: String): Boolean {
+        return manualTranslationTrackKeys.contains(trackKey.lowercase())
+    }
+
+    fun translateLyrics(lyrics: ParsedLyrics, trackKey: String? = null, isManualTrigger: Boolean = false): ParsedLyrics {
         Log.i(TAG, "translateLyrics called: enabled=${PreferencesManager.isAiLyricsTranslationEnabled}, lines=${lyrics.lines.size}, trackKey=$trackKey")
         if (!PreferencesManager.isAiLyricsTranslationEnabled) return lyrics
         if (lyrics.lines.isEmpty()) return lyrics
+
+        val activationMode = PreferencesManager.aiTranslationActivationMode
+        val isManual = isManualTrigger || (trackKey != null && manualTranslationTrackKeys.contains(trackKey.lowercase()))
+        if (activationMode.equals("Manual", ignoreCase = true) && !isManual) {
+            Log.d(TAG, "Manual trigger mode active and track $trackKey has not been requested for manual translation; skipping")
+            return lyrics
+        }
 
         val provider = PreferencesManager.aiTranslationProvider.ifBlank { "OpenRouter" }
         val apiKey = when (provider) {
@@ -55,7 +71,14 @@ object AiLyricsTranslator {
         val mode = PreferencesManager.aiTranslationTranslateMode.ifBlank { "Literal" }
         val dualLine = PreferencesManager.isAiTranslationDualLine
         val model = PreferencesManager.aiTranslationModel
-        val cacheKey = if (!trackKey.isNullOrBlank()) "$trackKey::$targetLang::$mode::$provider::$model" else null
+        val prompt = PreferencesManager.aiTranslationCustomPrompt.trim()
+        val baseUrl = PreferencesManager.aiTranslationBaseUrl.trim()
+        val promptHash = if (prompt.isNotEmpty() || baseUrl.isNotEmpty()) {
+            "$baseUrl|$prompt".hashCode().toString()
+        } else {
+            "default"
+        }
+        val cacheKey = if (!trackKey.isNullOrBlank()) "$trackKey::$targetLang::$mode::$provider::$model::$promptHash" else null
 
         if (cacheKey != null) {
             PersistentLyricsCache.getLines(cacheKey)?.let { cachedLines ->

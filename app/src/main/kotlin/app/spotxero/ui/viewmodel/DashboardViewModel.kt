@@ -9,6 +9,7 @@ import app.spotxero.SpotXeroApplication
 import app.spotxero.core.ModuleStatus
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
+import app.spotxero.hooks.lyrics.PersistentLyricsCache
 import app.spotxero.utils.AppUtils
 import app.spotxero.utils.core.CommonUtils
 import io.github.libxposed.service.XposedService
@@ -164,6 +165,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 aiTranslationTranslateMode = PreferencesManager.aiTranslationTranslateMode,
                 aiTranslationDeeplApiKey = PreferencesManager.aiTranslationDeeplApiKey,
                 aiTranslationDeeplFormality = PreferencesManager.aiTranslationDeeplFormality,
+                aiTranslationActivationMode = PreferencesManager.aiTranslationActivationMode,
                 lyricsProvidersOrder = parseLyricsProviders(PreferencesManager.lyricsProvidersOrder),
                 isBetterlyricsEnabled = PreferencesManager.isBetterlyricsEnabled,
                 isLrcredEnabled = PreferencesManager.isLrcredEnabled,
@@ -342,6 +344,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun setAiTranslationBaseUrl(url: String) {
         val app = getApplication<Application>()
         PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_BASE_URL, url)
+        PersistentLyricsCache.clear()
         _uiState.update { it.copy(aiTranslationBaseUrl = url) }
     }
 
@@ -360,6 +363,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun setAiTranslationCustomPrompt(prompt: String) {
         val app = getApplication<Application>()
         PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_CUSTOM_PROMPT, prompt)
+        PersistentLyricsCache.clear()
         _uiState.update { it.copy(aiTranslationCustomPrompt = prompt) }
     }
 
@@ -391,6 +395,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val app = getApplication<Application>()
         PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY, formality)
         _uiState.update { it.copy(aiTranslationDeeplFormality = formality) }
+    }
+
+    fun setAiTranslationActivationMode(mode: String) {
+        val app = getApplication<Application>()
+        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_ACTIVATION_MODE, mode)
+        _uiState.update { it.copy(aiTranslationActivationMode = mode) }
     }
 
     fun setExternalLyrics(enabled: Boolean) {

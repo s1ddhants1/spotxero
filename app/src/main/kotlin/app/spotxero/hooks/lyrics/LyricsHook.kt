@@ -27,7 +27,14 @@ object LyricsHook {
     )
 
     private fun getStockCacheKey(trackId: String): String {
-        return "$trackId:${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}".lowercase()
+        val prompt = PreferencesManager.aiTranslationCustomPrompt.trim()
+        val baseUrl = PreferencesManager.aiTranslationBaseUrl.trim()
+        val promptHash = if (prompt.isNotEmpty() || baseUrl.isNotEmpty()) {
+            "$baseUrl|$prompt".hashCode().toString()
+        } else {
+            "default"
+        }
+        return "$trackId:${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}:$promptHash".lowercase()
     }
 
     fun install(module: XposedModule) {
@@ -301,15 +308,19 @@ object LyricsHook {
                     val externalEnabled = PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false)
                     val force = PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_EXTERNAL_LYRICS, false)
                     val aiTranslationEnabled = PreferencesManager.isAiLyricsTranslationEnabled
+                    val isManualMode = PreferencesManager.aiTranslationActivationMode.equals("Manual", ignoreCase = true)
 
                     val trackId = if (url.contains("/track/")) {
                         url.substringAfter("/track/").substringBefore("?").substringBefore("/")
                     } else null
 
-                    Log.i(TAG, "Color-lyrics requested: trackId=$trackId, externalEnabled=$externalEnabled, force=$force, aiTranslationEnabled=$aiTranslationEnabled")
+                    val isManualRequested = trackId != null && AiLyricsTranslator.isManualTranslationRequested(trackId)
+                    val canTranslate = aiTranslationEnabled && (!isManualMode || isManualRequested)
+
+                    Log.i(TAG, "Color-lyrics requested: trackId=$trackId, externalEnabled=$externalEnabled, force=$force, aiTranslationEnabled=$aiTranslationEnabled, canTranslate=$canTranslate")
 
                     // 1. Check cached translated stock response
-                    if (aiTranslationEnabled && trackId != null) {
+                    if (canTranslate && trackId != null) {
                         val stockCacheKey = getStockCacheKey(trackId)
                         val cachedStock = PersistentLyricsCache.getProtobuf(stockCacheKey) ?: stockTranslatedCache[stockCacheKey]
                         if (cachedStock != null) {
@@ -326,7 +337,7 @@ object LyricsHook {
                     }
 
                     // 2. Try third-party lyrics if external is enabled and force or ai translation is active
-                    if (externalEnabled && (force || aiTranslationEnabled)) {
+                    if (externalEnabled && (force || canTranslate)) {
                         val protoBytes = LyricsManager.getLyricsProto(trackId)
                         Log.i(TAG, "LyricsManager proto returned: ${if (protoBytes != null) "${protoBytes.size} bytes" else "null"}")
                         if (protoBytes != null) {
@@ -363,7 +374,7 @@ object LyricsHook {
                     Log.d(TAG, "Original color-lyrics response code: $statusCode for $trackId")
 
                     // 3. If Spotify returned 200 and AI translation is enabled, translate stock lyrics!
-                    if (statusCode == 200 && aiTranslationEnabled && trackId != null) {
+                    if (statusCode == 200 && canTranslate && trackId != null) {
                         val rawBytes = extractBodyBytes(originalResponse)
                         if (rawBytes != null && rawBytes.isNotEmpty()) {
                             val parsed = runCatching { LyricsProtobuf.parseColorLyricsResponse(rawBytes) }.getOrNull()

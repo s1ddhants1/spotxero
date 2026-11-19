@@ -132,7 +132,8 @@ fun SpotXeroApp(
                         onTranslateModeChange = { viewModel.setAiTranslationTranslateMode(it) },
                         onDeeplApiKeyChange = { viewModel.setAiTranslationDeeplApiKey(it) },
                         onDeeplFormalityChange = { viewModel.setAiTranslationDeeplFormality(it) },
-                        onAiSystemPromptChange = { viewModel.setAiTranslationCustomPrompt(it) }
+                        onAiSystemPromptChange = { viewModel.setAiTranslationCustomPrompt(it) },
+                        onActivationModeChange = { viewModel.setAiTranslationActivationMode(it) }
                     )
                 }
                 Screen.LYRICS_SOURCES -> {

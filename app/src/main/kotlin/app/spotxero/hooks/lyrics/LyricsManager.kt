@@ -88,7 +88,14 @@ object LyricsManager {
 
     private fun buildCacheKey(title: String, artist: String): String {
         val transKey = if (PreferencesManager.isAiLyricsTranslationEnabled) {
-            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}"
+            val prompt = PreferencesManager.aiTranslationCustomPrompt.trim()
+            val baseUrl = PreferencesManager.aiTranslationBaseUrl.trim()
+            val promptHash = if (prompt.isNotEmpty() || baseUrl.isNotEmpty()) {
+                "$baseUrl|$prompt".hashCode().toString()
+            } else {
+                "default"
+            }
+            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}:$promptHash"
         } else {
             "orig"
         }
@@ -97,7 +104,14 @@ object LyricsManager {
 
     private fun buildTrackKey(trackId: String): String {
         val transKey = if (PreferencesManager.isAiLyricsTranslationEnabled) {
-            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}"
+            val prompt = PreferencesManager.aiTranslationCustomPrompt.trim()
+            val baseUrl = PreferencesManager.aiTranslationBaseUrl.trim()
+            val promptHash = if (prompt.isNotEmpty() || baseUrl.isNotEmpty()) {
+                "$baseUrl|$prompt".hashCode().toString()
+            } else {
+                "default"
+            }
+            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}:$promptHash"
         } else {
             "orig"
         }

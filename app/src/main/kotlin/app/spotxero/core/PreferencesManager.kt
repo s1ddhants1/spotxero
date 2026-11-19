@@ -546,6 +546,7 @@ object PreferencesManager {
             PrefKeys.KEY_AI_TRANSLATION_TRANSLATE_MODE -> aiTranslationTranslateMode = value
             PrefKeys.KEY_AI_TRANSLATION_DEEPL_API_KEY -> aiTranslationDeeplApiKey = value
             PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY -> aiTranslationDeeplFormality = value
+            PrefKeys.KEY_AI_TRANSLATION_ACTIVATION_MODE -> aiTranslationActivationMode = value
         }
     }
 

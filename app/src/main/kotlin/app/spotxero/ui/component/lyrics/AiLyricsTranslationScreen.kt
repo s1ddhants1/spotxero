@@ -144,6 +144,7 @@ fun AiLyricsTranslationScreen(
     onDeeplApiKeyChange: (String) -> Unit,
     onDeeplFormalityChange: (String) -> Unit,
     onAiSystemPromptChange: (String) -> Unit,
+    onActivationModeChange: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -220,7 +221,7 @@ fun AiLyricsTranslationScreen(
             currentMode = activationMode,
             onSelect = {
                 activationMode = it
-                PreferencesManager.aiTranslationActivationMode = it
+                onActivationModeChange(it)
                 showTriggerDialog = false
             },
             onDismiss = { showTriggerDialog = false }

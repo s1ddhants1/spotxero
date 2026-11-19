@@ -131,6 +131,16 @@ object PersistentLyricsCache {
         }
     }
 
+    fun clear() {
+        protoMemoryCache.clear()
+        linesMemoryCache.clear()
+        val dir = getCacheDir() ?: return
+        runCatching {
+            dir.listFiles()?.forEach { it.delete() }
+        }
+        Log.d(TAG, "PersistentLyricsCache cleared")
+    }
+
     private fun pruneDiskCacheIfNeeded(dir: File) {
         val files = dir.listFiles() ?: return
         if (files.size > MAX_DISK_ENTRIES) {
