@@ -35,10 +35,37 @@ import app.spotxero.core.PreferencesManager
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
 import java.lang.ref.WeakReference
+import java.util.Collections
+import java.util.WeakHashMap
 
 object ArtworkSeekHook {
 
     private const val TAG_SEEK_OVERLAY = "spotxero_artwork_seek_overlay"
+
+    private val candidateContainers = Collections.synchronizedSet(
+        Collections.newSetFromMap(WeakHashMap<ViewGroup, Boolean>())
+    )
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    init {
+        PreferencesManager.addOnPreferenceChangedListener {
+            mainHandler.post {
+                val enabled = PreferencesManager.isEnabled(PrefKeys.KEY_DOUBLE_TAP_TO_SEEK, true)
+                val containers = synchronized(candidateContainers) { candidateContainers.toList() }
+                containers.forEach { container ->
+                    if (container.isAttachedToWindow) {
+                        if (enabled) {
+                            attachOverlay(container)
+                        } else {
+                            container.findViewWithTag<View>(TAG_SEEK_OVERLAY)?.let { overlay ->
+                                container.removeView(overlay)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     @Volatile
     private var activeMediaSession: WeakReference<MediaSession>? = null
@@ -205,11 +232,16 @@ object ArtworkSeekHook {
     }
 
     private fun attachOverlayIfTarget(view: View) {
+        val targetContainer = findArtworkContainer(view) ?: return
+        candidateContainers.add(targetContainer)
+        attachOverlay(targetContainer)
+    }
+
+    private fun attachOverlay(targetContainer: ViewGroup) {
         if (!PreferencesManager.isEnabled(PrefKeys.KEY_DOUBLE_TAP_TO_SEEK, true)) {
             return
         }
 
-        val targetContainer = findArtworkContainer(view) ?: return
         if (targetContainer.findViewWithTag<View>(TAG_SEEK_OVERLAY) != null) {
             return
         }
