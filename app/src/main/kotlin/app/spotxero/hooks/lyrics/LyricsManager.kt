@@ -12,7 +12,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Collections
 import java.util.LinkedHashMap
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 object LyricsManager {
 
@@ -58,7 +61,7 @@ object LyricsManager {
         }
     )
 
-    private val pendingFetches: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
+    private val inFlightFetches = ConcurrentHashMap<String, CompletableFuture<CachedLyrics?>>()
 
     fun updateCurrentTrack(metadata: MediaMetadata) {
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
@@ -80,12 +83,18 @@ object LyricsManager {
             val cacheKey = buildCacheKey(title, artist ?: "", album)
             val trackKey = currentTrackId?.let { buildTrackKey(it) }
             if (PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false) && parsedCache[cacheKey] == null && (trackKey == null || parsedCache[trackKey] == null)) {
-                if (pendingFetches.add(cacheKey)) {
+                val future = CompletableFuture<CachedLyrics?>()
+                val existing = inFlightFetches.putIfAbsent(cacheKey, future)
+                if (existing == null) {
                     prefetchExecutor.execute {
                         try {
-                            fetchAndCache(title, artist ?: "", album, durationSec, cacheKey, trackKey)
+                            val result = fetchAndCache(title, artist ?: "", album, durationSec, cacheKey, trackKey)
+                            future.complete(result)
+                        } catch (t: Throwable) {
+                            Log.w(TAG, "Prefetch failed: ${t.message}", t)
+                            future.complete(null)
                         } finally {
-                            pendingFetches.remove(cacheKey)
+                            inFlightFetches.remove(cacheKey, future)
                         }
                     }
                 }
@@ -161,7 +170,35 @@ object LyricsManager {
             return it
         }
 
-        return fetchAndCache(title, artist, album, durationSec, cacheKey, trackKey)
+        // Reuse an in-flight fetch (from prefetch or concurrent caller) if one is running
+        var inFlight = inFlightFetches[cacheKey]
+        if (inFlight == null) {
+            val newFuture = CompletableFuture<CachedLyrics?>()
+            val existing = inFlightFetches.putIfAbsent(cacheKey, newFuture)
+            if (existing == null) {
+                return try {
+                    val result = fetchAndCache(title, artist, album, durationSec, cacheKey, trackKey)
+                    newFuture.complete(result)
+                    result
+                } catch (t: Throwable) {
+                    newFuture.complete(null)
+                    throw t
+                } finally {
+                    inFlightFetches.remove(cacheKey, newFuture)
+                }
+            } else {
+                inFlight = existing
+            }
+        }
+
+        val result = runCatching { inFlight.get(15, TimeUnit.SECONDS) }.getOrNull()
+        if (result != null) {
+            if (trackKey != null) parsedCache[trackKey] = result
+            return result
+        }
+        return parsedCache[cacheKey]?.also {
+            if (trackKey != null) parsedCache[trackKey] = it
+        }
     }
 
     fun getLyricsProto(trackId: String? = null): ByteArray? {
