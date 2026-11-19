@@ -2,6 +2,7 @@ package app.spotxero.hooks.lyrics
 
 import android.media.MediaMetadata
 import android.util.Log
+import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
 import org.json.JSONArray
 import org.json.JSONObject
@@ -67,21 +68,22 @@ object LyricsManager {
         val mediaId = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
 
         if (!title.isNullOrBlank()) {
+            val durationSec = if (durationMs > 0) durationMs / 1000 else null
             currentTrackTitle = title
             currentTrackArtist = artist
             currentTrackAlbum = album
-            currentTrackDurationSec = if (durationMs > 0) durationMs / 1000 else null
+            currentTrackDurationSec = durationSec
             currentTrackId = mediaId?.substringAfterLast(":")?.takeIf { it.isNotBlank() }
 
-            Log.d(TAG, "Current track updated: $title by $artist (id=$currentTrackId, $currentTrackDurationSec s)")
+            Log.d(TAG, "Current track updated: $title by $artist (id=$currentTrackId, $durationSec s)")
 
             val cacheKey = buildCacheKey(title, artist ?: "")
             val trackKey = currentTrackId?.let { buildTrackKey(it) }
-            if (PreferencesManager.isExternalLyricsEnabled && parsedCache[cacheKey] == null && (trackKey == null || parsedCache[trackKey] == null)) {
+            if (PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false) && parsedCache[cacheKey] == null && (trackKey == null || parsedCache[trackKey] == null)) {
                 if (pendingFetches.add(cacheKey)) {
                     prefetchExecutor.execute {
                         try {
-                            fetchAndCache(title, artist ?: "", album, currentTrackDurationSec, cacheKey, trackKey)
+                            fetchAndCache(title, artist ?: "", album, durationSec, cacheKey, trackKey)
                         } finally {
                             pendingFetches.remove(cacheKey)
                         }
@@ -126,7 +128,7 @@ object LyricsManager {
     }
 
     fun getLyrics(trackId: String? = null): CachedLyrics? {
-        if (!PreferencesManager.isExternalLyricsEnabled) return null
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false)) return null
         val trackKey = trackId?.let { buildTrackKey(it) }
         if (trackKey != null) {
             parsedCache[trackKey]?.let { return it }
@@ -158,7 +160,7 @@ object LyricsManager {
     }
 
     fun getLyricsProto(trackId: String? = null): ByteArray? {
-        if (!PreferencesManager.isExternalLyricsEnabled) return null
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false)) return null
         val trackKey = trackId?.let { buildTrackKey(it) }
         if (trackKey != null) {
             val persistent = PersistentLyricsCache.getProtobuf(trackKey)
