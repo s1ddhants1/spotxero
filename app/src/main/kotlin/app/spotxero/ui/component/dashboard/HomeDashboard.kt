@@ -262,8 +262,8 @@ private fun MasterSwitchCard(
 
             Text(
                 text = stringResource(R.string.feature_master_switch_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
                 color = if (checked) {
                     MaterialTheme.colorScheme.onPrimaryContainer
                 } else {

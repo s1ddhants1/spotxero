@@ -216,8 +216,8 @@ fun SwitchSettingCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
                 )
                 if (subtitle != null) {
                     Spacer(Modifier.height(AppSpacing.xxs))
@@ -286,8 +286,8 @@ fun NavigationSettingCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
                 )
                 if (subtitle != null) {
                     Spacer(Modifier.height(AppSpacing.xxs))
@@ -382,8 +382,8 @@ fun SliderSettingCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(AppSpacing.xxs))
                     Text(

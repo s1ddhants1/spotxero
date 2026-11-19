@@ -428,14 +428,15 @@ fun AiLyricsTranslationScreen(
                                         ) {
                                             Text(
                                                 text = stringResource(R.string.openrouter_sign_in_title),
-                                                style = MaterialTheme.typography.bodyLarge,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
                                             )
                                             Text(
                                                 text = stringResource(
                                                     if (openRouterApiKey.isNotBlank()) R.string.openrouter_signed_in_description
                                                     else R.string.openrouter_sign_in_description
                                                 ),
-                                                style = MaterialTheme.typography.bodyMedium,
+                                                style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
@@ -551,7 +552,7 @@ fun AiLyricsTranslationScreen(
                             ) {
                                 Text(
                                     text = stringResource(R.string.ai_test_connection_description),
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
 
@@ -613,7 +614,7 @@ fun AiLyricsTranslationScreen(
                                     ConnectionTestState.Testing -> {
                                         Text(
                                             stringResource(R.string.ai_test_connection_running),
-                                            style = MaterialTheme.typography.bodyMedium,
+                                            style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
@@ -621,12 +622,12 @@ fun AiLyricsTranslationScreen(
                                         if (state.sample.isNotBlank()) {
                                             Text(
                                                 stringResource(R.string.ai_test_translation_result, state.sample),
-                                                style = MaterialTheme.typography.bodyMedium
+                                                style = MaterialTheme.typography.bodySmall
                                             )
                                         } else {
                                             Text(
                                                 stringResource(R.string.ai_test_connection_success),
-                                                style = MaterialTheme.typography.bodyMedium,
+                                                style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.primary
                                             )
                                         }
@@ -656,14 +657,14 @@ fun AiLyricsTranslationScreen(
                                         }
                                         Text(
                                             text = errorText,
-                                            style = MaterialTheme.typography.bodyMedium,
+                                            style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.error
                                         )
                                     }
                                     ConnectionTestState.MissingCredentials -> {
                                         Text(
                                             stringResource(R.string.ai_test_missing_credentials),
-                                            style = MaterialTheme.typography.bodyMedium,
+                                            style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.error
                                         )
                                     }
@@ -901,7 +902,7 @@ private fun ModelPickerDialog(
                                         }
                                     ),
                                     color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodySmall
                                 )
                                 TextButton(onClick = { reload++ }) {
                                     Text(stringResource(R.string.refresh))
@@ -923,7 +924,7 @@ private fun ModelPickerDialog(
                             item(key = "empty_models") {
                                 Text(
                                     text = stringResource(R.string.ai_model_none_found),
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
                                 )
@@ -1349,7 +1350,7 @@ private fun AiTranslationSetupDialog(
                     )
                     Text(
                         text = stringResource(R.string.ai_setup_account_description),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
@@ -1394,7 +1395,7 @@ private fun AiTranslationSetupDialog(
                     )
                     Text(
                         text = stringResource(R.string.openrouter_sign_in_description),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
@@ -1428,7 +1429,7 @@ private fun AiTranslationSetupDialog(
                     )
                     Text(
                         text = stringResource(R.string.ai_setup_model_description),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
@@ -1440,7 +1441,7 @@ private fun AiTranslationSetupDialog(
                     )
                     Text(
                         text = "${stringResource(R.string.ai_target_language)}: ${PrefKeys.LanguageCodeToName[language] ?: language}",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
