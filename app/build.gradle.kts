@@ -26,6 +26,7 @@ val appVersionName = (project.findProperty("appVersionName") as? String)
 android {
     namespace = "app.spotxero"
     compileSdk = 37
+    compileSdkMinor = 1
     defaultConfig {
         applicationId = "app.spotxero"
         minSdk = 26
