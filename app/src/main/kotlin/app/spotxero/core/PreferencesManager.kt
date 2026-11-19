@@ -61,6 +61,15 @@ object PreferencesManager {
     var isSeekProgressive: Boolean = false
 
     var onPreferenceChangedListener: (() -> Unit)? = null
+    private val preferenceChangeCallbacks = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+
+    fun addOnPreferenceChangedListener(listener: () -> Unit) {
+        preferenceChangeCallbacks.add(listener)
+    }
+
+    fun removeOnPreferenceChangedListener(listener: () -> Unit) {
+        preferenceChangeCallbacks.remove(listener)
+    }
 
     @Volatile
     private var remotePrefs: SharedPreferences? = null
@@ -167,6 +176,9 @@ object PreferencesManager {
                 }
             }
             onPreferenceChangedListener?.invoke()
+            for (listener in preferenceChangeCallbacks) {
+                runCatching { listener.invoke() }
+            }
         }
     }
 
@@ -211,6 +223,7 @@ object PreferencesManager {
         cachedUserLoggedIn = null
         lastUserLoggedInCheckMs = 0L
         onPreferenceChangedListener = null
+        preferenceChangeCallbacks.clear()
         inMemoryBooleans.clear()
         inMemoryStrings.clear()
         Log.i(TAG, "Cleaned up PreferencesManager resources")

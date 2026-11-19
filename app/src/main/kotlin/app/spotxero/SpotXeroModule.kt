@@ -130,6 +130,7 @@ class SpotXeroModule : XposedModule() {
             activeActivities.clear()
             activeServices.clear()
             PreferencesManager.cleanup()
+            HookRegistry.reset()
         }
         return true
     }

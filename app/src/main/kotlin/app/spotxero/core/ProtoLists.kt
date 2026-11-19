@@ -5,8 +5,8 @@ object ProtoLists {
     fun filter(items: List<*>?, keep: (Any) -> Boolean): List<*>? {
         if (items.isNullOrEmpty()) return items
         val kept = items.filterNotNull().filter(keep)
-        if (kept.size == items.size || kept.isEmpty()) return items
-        return copyOfType(items, kept) ?: items
+        if (kept.size == items.size) return items
+        return copyOfType(items, kept) ?: kept
     }
 
     private fun copyOfType(original: List<*>, kept: List<*>): List<*>? = runCatching {
