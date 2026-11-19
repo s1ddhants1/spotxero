@@ -52,7 +52,6 @@ data class DashboardUiState(
     val aiTranslationTranslateMode: String = "Literal",
     val aiTranslationDeeplApiKey: String = "",
     val aiTranslationDeeplFormality: String = "default",
-    val aiTranslationActivationMode: String = "Automatic",
     val lyricsProvidersOrder: List<String> = listOf("betterlyrics", "lrcred", "lrclib", "kugou", "netease", "genius"),
     val isBetterlyricsEnabled: Boolean = true,
     val isLrcredEnabled: Boolean = true,

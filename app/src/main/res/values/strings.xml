@@ -144,11 +144,6 @@
     <string name="ai_runtime">Runtime</string>
     <string name="ai_translation_enable">Translate lyrics</string>
     <string name="ai_translation_enable_description">Show lyrics in your language below the original words</string>
-    <string name="ai_translation_trigger">Trigger</string>
-    <string name="ai_translation_trigger_automatic_description">Detect language, then translate only when needed</string>
-    <string name="ai_translation_trigger_manual_description">Use the lyrics menu switch per track</string>
-    <string name="ai_trigger_automatic">Automatic</string>
-    <string name="ai_trigger_manual">Manual</string>
     <string name="mode">Mode</string>
     <string name="settings_translation_mode_summary">Translate words or transcribe pronunciation into the target script</string>
     <string name="ai_translation_dual_line">Show translation with original</string>

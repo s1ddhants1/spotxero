@@ -402,15 +402,6 @@ internal class DoubleTapSeekOverlayView(context: Context) : View(context) {
             return false
         }
 
-        if (isFeedbackVisible && event.action == MotionEvent.ACTION_DOWN) {
-            val isForward = event.x >= width / 2f
-            if (isForward == feedbackIsForward && (SystemClock.elapsedRealtime() - lastTapTime) < 1000L) {
-                parent?.requestDisallowInterceptTouchEvent(true)
-                triggerSeek(isForward)
-                return true
-            }
-        }
-
         val handled = gestureDetector.onTouchEvent(event)
         return handled || super.onTouchEvent(event)
     }

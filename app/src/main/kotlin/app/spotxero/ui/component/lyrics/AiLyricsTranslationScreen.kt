@@ -144,15 +144,10 @@ fun AiLyricsTranslationScreen(
     onDeeplApiKeyChange: (String) -> Unit,
     onDeeplFormalityChange: (String) -> Unit,
     onAiSystemPromptChange: (String) -> Unit,
-    onActivationModeChange: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
     var testState by remember { mutableStateOf<ConnectionTestState>(ConnectionTestState.Idle) }
-
-    var activationMode by rememberSaveable {
-        mutableStateOf(PreferencesManager.aiTranslationActivationMode)
-    }
 
     val currentPreset = remember(aiProvider) {
         ALL_PRESETS.firstOrNull { it.id.equals(aiProvider, ignoreCase = true) }
@@ -165,7 +160,6 @@ fun AiLyricsTranslationScreen(
 
     var showSetupWizardDialog by rememberSaveable { mutableStateOf(false) }
     var showProviderDialog by rememberSaveable { mutableStateOf(false) }
-    var showTriggerDialog by rememberSaveable { mutableStateOf(false) }
     var showTranslateModeDialog by rememberSaveable { mutableStateOf(false) }
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var showApiKeyDialog by rememberSaveable { mutableStateOf(false) }
@@ -216,17 +210,6 @@ fun AiLyricsTranslationScreen(
         )
     }
 
-    if (showTriggerDialog) {
-        TriggerPickerDialog(
-            currentMode = activationMode,
-            onSelect = {
-                activationMode = it
-                onActivationModeChange(it)
-                showTriggerDialog = false
-            },
-            onDismiss = { showTriggerDialog = false }
-        )
-    }
 
     if (showTranslateModeDialog) {
         TranslateModePickerDialog(
@@ -350,19 +333,6 @@ fun AiLyricsTranslationScreen(
                     isSwitch = true,
                     checked = isAiTranslationEnabled,
                     onCheckedChange = onAiTranslationEnabledChange
-                ),
-                MetrolistSettingsItem(
-                    title = stringResource(R.string.ai_translation_trigger),
-                    description = stringResource(
-                        if (activationMode == "Manual") R.string.ai_translation_trigger_manual_description
-                        else R.string.ai_translation_trigger_automatic_description
-                    ),
-                    valueLabel = stringResource(
-                        if (activationMode == "Manual") R.string.ai_trigger_manual
-                        else R.string.ai_trigger_automatic
-                    ),
-                    showChevron = true,
-                    onClick = { showTriggerDialog = true }
                 ),
                 MetrolistSettingsItem(
                     title = stringResource(R.string.mode),
@@ -1017,66 +987,6 @@ private fun AiModelDetails(
     }
 }
 
-@Composable
-private fun TriggerPickerDialog(
-    currentMode: String,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    SettingsDialogSurface(onDismiss = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 20.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.ai_translation_trigger),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
-            AiChoiceRow(
-                selected = currentMode != "Manual",
-                onClick = { onSelect("Automatic") }
-            ) {
-                Column {
-                    Text(stringResource(R.string.ai_trigger_automatic), style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        stringResource(R.string.ai_translation_trigger_automatic_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            AiChoiceRow(
-                selected = currentMode == "Manual",
-                onClick = { onSelect("Manual") }
-            ) {
-                Column {
-                    Text(stringResource(R.string.ai_trigger_manual), style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        stringResource(R.string.ai_translation_trigger_manual_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun TranslateModePickerDialog(

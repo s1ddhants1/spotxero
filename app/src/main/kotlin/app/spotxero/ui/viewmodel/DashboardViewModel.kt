@@ -165,7 +165,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 aiTranslationTranslateMode = PreferencesManager.aiTranslationTranslateMode,
                 aiTranslationDeeplApiKey = PreferencesManager.aiTranslationDeeplApiKey,
                 aiTranslationDeeplFormality = PreferencesManager.aiTranslationDeeplFormality,
-                aiTranslationActivationMode = PreferencesManager.aiTranslationActivationMode,
                 lyricsProvidersOrder = parseLyricsProviders(PreferencesManager.lyricsProvidersOrder),
                 isBetterlyricsEnabled = PreferencesManager.isBetterlyricsEnabled,
                 isLrcredEnabled = PreferencesManager.isLrcredEnabled,
@@ -397,11 +396,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(aiTranslationDeeplFormality = formality) }
     }
 
-    fun setAiTranslationActivationMode(mode: String) {
-        val app = getApplication<Application>()
-        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_ACTIVATION_MODE, mode)
-        _uiState.update { it.copy(aiTranslationActivationMode = mode) }
-    }
 
     fun setExternalLyrics(enabled: Boolean) {
         PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_EXTERNAL_LYRICS, enabled)
