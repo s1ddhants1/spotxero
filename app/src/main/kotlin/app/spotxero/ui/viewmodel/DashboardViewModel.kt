@@ -393,6 +393,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun setAiTranslationDeeplFormality(formality: String) {
         val app = getApplication<Application>()
         PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY, formality)
+        PersistentLyricsCache.clear()
         _uiState.update { it.copy(aiTranslationDeeplFormality = formality) }
     }
 

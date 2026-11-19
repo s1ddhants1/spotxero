@@ -7,13 +7,29 @@ data class ParsedColorLyrics(
     val provider: String,
     val providerDisplayName: String,
     val colorDataBytes: ByteArray?,
-    val hasVocalRemoval: Boolean
+    val hasVocalRemoval: Boolean,
+    val language: String = "en",
+    val isRtl: Boolean = false
 )
 
 object LyricsProtobuf {
 
     private const val WIRE_TYPE_VARINT = 0
     private const val WIRE_TYPE_LENGTH_DELIMITED = 2
+
+    private val RTL_LANGUAGES = setOf("ar", "he", "iw", "fa", "ur", "yi", "ps", "sd", "ckb", "ug")
+
+    fun isRtlLanguage(lang: String): Boolean = RTL_LANGUAGES.contains(lang.lowercase().take(2))
+
+    fun isRtlText(text: String): Boolean {
+        for (char in text) {
+            val dir = Character.getDirectionality(char)
+            if (dir == Character.DIRECTIONALITY_RIGHT_TO_LEFT || dir == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC) {
+                return true
+            }
+        }
+        return false
+    }
 
     /**
      * Serializes lyrics into Spotify's ColorLyricsResponse protobuf wire format.
@@ -27,12 +43,14 @@ object LyricsProtobuf {
         providerName: String,
         providerDisplayName: String = "$providerName (SpotXero)",
         customColorData: ByteArray? = null,
-        hasVocalRemoval: Boolean = false
+        hasVocalRemoval: Boolean = false,
+        language: String = "en",
+        isRtl: Boolean = isRtlLanguage(language)
     ): ByteArray {
         val out = ByteArrayOutputStream()
 
         // Field 1: LyricsResponse
-        val lyricsResponseBytes = buildLyricsResponse(lyrics, providerName, providerDisplayName)
+        val lyricsResponseBytes = buildLyricsResponse(lyrics, providerName, providerDisplayName, language, isRtl)
         writeTag(out, 1, WIRE_TYPE_LENGTH_DELIMITED)
         writeVarint(out, lyricsResponseBytes.size.toLong())
         out.write(lyricsResponseBytes)
@@ -98,6 +116,8 @@ object LyricsProtobuf {
         val lines = mutableListOf<LyricLine>()
         var provider = "Spotify"
         var providerDisplayName = "Spotify"
+        var language = "en"
+        var isRtl = false
 
         while (reader.hasRemaining()) {
             val tag = reader.readTag()
@@ -130,6 +150,16 @@ object LyricsProtobuf {
                         providerDisplayName = reader.readString()
                     } else reader.skip(wireType)
                 }
+                10 -> {
+                    if (wireType == WIRE_TYPE_LENGTH_DELIMITED) {
+                        language = reader.readString()
+                    } else reader.skip(wireType)
+                }
+                11 -> {
+                    if (wireType == WIRE_TYPE_VARINT) {
+                        isRtl = reader.readVarint() != 0L
+                    } else reader.skip(wireType)
+                }
                 else -> reader.skip(wireType)
             }
         }
@@ -140,7 +170,9 @@ object LyricsProtobuf {
             provider = provider,
             providerDisplayName = providerDisplayName,
             colorDataBytes = colorDataBytes,
-            hasVocalRemoval = hasVocalRemoval
+            hasVocalRemoval = hasVocalRemoval,
+            language = language,
+            isRtl = isRtl
         )
     }
 
@@ -224,7 +256,9 @@ object LyricsProtobuf {
     private fun buildLyricsResponse(
         lyrics: ParsedLyrics,
         providerName: String,
-        providerDisplayName: String
+        providerDisplayName: String,
+        language: String = "en",
+        isRtl: Boolean = false
     ): ByteArray {
         val out = ByteArrayOutputStream()
 
@@ -258,11 +292,11 @@ object LyricsProtobuf {
         writeString(out, 7, "")
 
         // 10: language (string)
-        writeString(out, 10, "en")
+        writeString(out, 10, language)
 
         // 11: isRtlLanguage (bool)
         writeTag(out, 11, WIRE_TYPE_VARINT)
-        writeVarint(out, 0)
+        writeVarint(out, if (isRtl) 1L else 0L)
 
         // 14: capStatus (enum: 1 = UNCAPPED)
         writeTag(out, 14, WIRE_TYPE_VARINT)

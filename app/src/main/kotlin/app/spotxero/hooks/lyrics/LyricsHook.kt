@@ -29,12 +29,13 @@ object LyricsHook {
     private fun getStockCacheKey(trackId: String): String {
         val prompt = PreferencesManager.aiTranslationCustomPrompt.trim()
         val baseUrl = PreferencesManager.aiTranslationBaseUrl.trim()
+        val formality = PreferencesManager.aiTranslationDeeplFormality.ifBlank { "default" }
         val promptHash = if (prompt.isNotEmpty() || baseUrl.isNotEmpty()) {
             "$baseUrl|$prompt".hashCode().toString()
         } else {
             "default"
         }
-        return "$trackId:${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}:$promptHash".lowercase()
+        return "$trackId:${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}:$formality:$promptHash".lowercase()
     }
 
     fun install(module: XposedModule) {
@@ -385,12 +386,16 @@ object LyricsHook {
                                     translatedLyrics.lines != parsed.lyrics.lines
 
                                 if (hasTranslated) {
+                                    val targetLang = PreferencesManager.aiTranslationTargetLang.ifBlank { parsed.language }
+                                    val isRtl = LyricsProtobuf.isRtlLanguage(targetLang) || LyricsProtobuf.isRtlText(translatedLyrics.lines.joinToString(" ") { it.words })
                                     val translatedProtoBytes = LyricsProtobuf.buildColorLyricsResponse(
                                         lyrics = translatedLyrics,
                                         providerName = parsed.provider,
                                         providerDisplayName = "${parsed.providerDisplayName} (Translated)",
                                         customColorData = parsed.colorDataBytes,
-                                        hasVocalRemoval = parsed.hasVocalRemoval
+                                        hasVocalRemoval = parsed.hasVocalRemoval,
+                                        language = targetLang,
+                                        isRtl = isRtl
                                     )
 
                                     val stockCacheKey = getStockCacheKey(trackId)

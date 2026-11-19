@@ -42,7 +42,12 @@ object LyricsManager {
         Thread(runnable, "LyricsPrefetch").apply { isDaemon = true }
     }
 
-    data class CachedLyrics(val lyrics: ParsedLyrics, val providerDisplayName: String)
+    data class CachedLyrics(
+        val lyrics: ParsedLyrics,
+        val providerDisplayName: String,
+        val language: String = "en",
+        val isRtl: Boolean = false
+    )
 
     private val parsedCache: MutableMap<String, CachedLyrics> = Collections.synchronizedMap(
         object : LinkedHashMap<String, CachedLyrics>(MAX_CACHE_SIZE, 0.75f, true) {
@@ -90,12 +95,13 @@ object LyricsManager {
         val transKey = if (PreferencesManager.isAiLyricsTranslationEnabled) {
             val prompt = PreferencesManager.aiTranslationCustomPrompt.trim()
             val baseUrl = PreferencesManager.aiTranslationBaseUrl.trim()
+            val formality = PreferencesManager.aiTranslationDeeplFormality.ifBlank { "default" }
             val promptHash = if (prompt.isNotEmpty() || baseUrl.isNotEmpty()) {
                 "$baseUrl|$prompt".hashCode().toString()
             } else {
                 "default"
             }
-            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}:$promptHash"
+            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}:$formality:$promptHash"
         } else {
             "orig"
         }
@@ -106,12 +112,13 @@ object LyricsManager {
         val transKey = if (PreferencesManager.isAiLyricsTranslationEnabled) {
             val prompt = PreferencesManager.aiTranslationCustomPrompt.trim()
             val baseUrl = PreferencesManager.aiTranslationBaseUrl.trim()
+            val formality = PreferencesManager.aiTranslationDeeplFormality.ifBlank { "default" }
             val promptHash = if (prompt.isNotEmpty() || baseUrl.isNotEmpty()) {
                 "$baseUrl|$prompt".hashCode().toString()
             } else {
                 "default"
             }
-            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}:$promptHash"
+            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}:$formality:$promptHash"
         } else {
             "orig"
         }
@@ -158,7 +165,12 @@ object LyricsManager {
             if (persistent != null) return persistent
         }
         val cached = getLyrics(trackId) ?: return null
-        val proto = LyricsProtobuf.buildColorLyricsResponse(cached.lyrics, cached.providerDisplayName)
+        val proto = LyricsProtobuf.buildColorLyricsResponse(
+            cached.lyrics,
+            cached.providerDisplayName,
+            language = cached.language,
+            isRtl = cached.isRtl
+        )
         if (trackKey != null) {
             PersistentLyricsCache.putProtobuf(trackKey, proto)
         }
@@ -218,10 +230,16 @@ object LyricsManager {
                         Log.i(TAG, "AI translation is disabled.")
                         lyrics
                     }
-                    val cached = CachedLyrics(finalLyrics, provider.displayName)
+                    val lang = if (PreferencesManager.isAiLyricsTranslationEnabled) {
+                        PreferencesManager.aiTranslationTargetLang.ifBlank { "en" }
+                    } else {
+                        if (LyricsProtobuf.isRtlText(lyrics.lines.joinToString(" ") { it.words })) "ar" else "en"
+                    }
+                    val isRtl = LyricsProtobuf.isRtlLanguage(lang) || LyricsProtobuf.isRtlText(finalLyrics.lines.joinToString(" ") { it.words })
+                    val cached = CachedLyrics(finalLyrics, provider.displayName, lang, isRtl)
                     Log.i(TAG, "Fetched ${lyrics.lines.size} lines from ${provider.displayName}")
                     parsedCache[cacheKey] = cached
-                    val proto = LyricsProtobuf.buildColorLyricsResponse(finalLyrics, provider.displayName)
+                    val proto = LyricsProtobuf.buildColorLyricsResponse(finalLyrics, provider.displayName, language = lang, isRtl = isRtl)
                     PersistentLyricsCache.putProtobuf(cacheKey, proto)
                     if (trackKey != null) {
                         parsedCache[trackKey] = cached

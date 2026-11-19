@@ -55,6 +55,7 @@ object AiLyricsTranslator {
         val mode = PreferencesManager.aiTranslationTranslateMode.ifBlank { "Literal" }
         val dualLine = PreferencesManager.isAiTranslationDualLine
         val model = PreferencesManager.aiTranslationModel
+        val formality = PreferencesManager.aiTranslationDeeplFormality.ifBlank { "default" }
         val prompt = PreferencesManager.aiTranslationCustomPrompt.trim()
         val baseUrl = PreferencesManager.aiTranslationBaseUrl.trim()
         val promptHash = if (prompt.isNotEmpty() || baseUrl.isNotEmpty()) {
@@ -62,7 +63,7 @@ object AiLyricsTranslator {
         } else {
             "default"
         }
-        val cacheKey = if (!trackKey.isNullOrBlank()) "$trackKey::$targetLang::$mode::$provider::$model::$promptHash" else null
+        val cacheKey = if (!trackKey.isNullOrBlank()) "$trackKey::$targetLang::$mode::$provider::$model::$formality::$promptHash" else null
 
         if (cacheKey != null) {
             PersistentLyricsCache.getLines(cacheKey)?.let { cachedLines ->
@@ -1171,12 +1172,15 @@ object AiLyricsTranslator {
     ): ParsedLyrics {
         val newLines = lyrics.lines.mapIndexed { index, line ->
             val trans = translatedLines.getOrNull(index)?.trim().orEmpty()
-            val finalWords = if (trans.isNotBlank()) {
-                if (dualLine) "${line.words}\n$trans" else trans
+            if (trans.isNotBlank()) {
+                if (dualLine) {
+                    line.copy(words = "${line.words}\n$trans")
+                } else {
+                    line.copy(words = trans, syllables = emptyList())
+                }
             } else {
-                line.words
+                line
             }
-            line.copy(words = finalWords)
         }
         return lyrics.copy(lines = newLines)
     }
