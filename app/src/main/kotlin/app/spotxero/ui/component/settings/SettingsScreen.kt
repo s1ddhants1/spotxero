@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import app.spotxero.core.PreferencesManager.ThemeMode
 import app.spotxero.ui.viewmodel.SettingsSubpage
 
@@ -19,12 +20,16 @@ fun SettingsScreen(
     amoledEnabled: Boolean,
     onAmoledToggle: (Boolean) -> Unit,
     launcherIconHidden: Boolean,
-    onLauncherIconHiddenToggle: (Boolean) -> Unit
+    onLauncherIconHiddenToggle: (Boolean) -> Unit,
+    hapticFeedbackEnabled: Boolean,
+    onHapticFeedbackToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     AnimatedContent(
         targetState = currentSubpage,
         transitionSpec = { fadeIn() togetherWith fadeOut() },
-        label = "SettingsSubpageTransition"
+        label = "SettingsSubpageTransition",
+        modifier = modifier
     ) { subpage ->
         when (subpage) {
             null -> SettingsIndexPage(onNavigateToSubpage = onNavigateToSubpage)
@@ -36,7 +41,9 @@ fun SettingsScreen(
                 amoledEnabled = amoledEnabled,
                 onAmoledToggle = onAmoledToggle,
                 launcherIconHidden = launcherIconHidden,
-                onLauncherIconHiddenToggle = onLauncherIconHiddenToggle
+                onLauncherIconHiddenToggle = onLauncherIconHiddenToggle,
+                hapticFeedbackEnabled = hapticFeedbackEnabled,
+                onHapticFeedbackToggle = onHapticFeedbackToggle
             )
             SettingsSubpage.ABOUT -> AboutSettingsPage()
         }

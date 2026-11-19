@@ -3,7 +3,7 @@ name: Build APKs
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["main", "dev"]
     paths-ignore:
       - "README.md"
       - "art/**"
@@ -229,7 +229,7 @@ jobs:
 
   publish_nightly:
     name: Publish Nightly Release
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [build_release, build_debug]
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -10,7 +10,7 @@ import java.lang.reflect.Method
 
 object ProductStateHook {
 
-    val TYPED_SPOOFS: Map<String, Any> = mapOf(
+    private val TYPED_SPOOFS: Map<String, Any> = mapOf(
         "ads" to false,
         "shuffle" to false,
         "on-demand" to true,
@@ -23,10 +23,12 @@ object ProductStateHook {
         "unrestricted" to true,
         "shuffle-eligible" to true,
         "high-bitrate" to true,
-        "tablet-free" to false
+        "tablet-free" to false,
+        "autoplay" to true,
+        "player.autoplay" to true
     )
 
-    val PLAYER_LOCAL_SPOOFS: Map<String, Any> = mapOf(
+    private val PLAYER_LOCAL_SPOOFS: Map<String, Any> = mapOf(
         "type" to "premium",
         "catalogue" to "premium",
         "player-license" to "premium",
@@ -34,7 +36,7 @@ object ProductStateHook {
         "financial-product" to "pr:premium,tc:0"
     )
 
-    val KEYS_TO_STRIP: Set<String> = setOf(
+    private val KEYS_TO_STRIP: Set<String> = setOf(
         "payment-state",
         "last-premium-activation-date",
         "on-demand-trial",
@@ -46,7 +48,7 @@ object ProductStateHook {
         "is-eligible-for-upsell"
     )
 
-    val MFT_FLAGS_TO_REMOVE: Set<String> = setOf(
+    private val MFT_FLAGS_TO_REMOVE: Set<String> = setOf(
         "is_remove_from_queue_enabled_for_mft_plus",
         "is_reordering_for_mft_plus_allowed",
         "enable_common_capping",
@@ -79,7 +81,11 @@ object ProductStateHook {
         "core-restrictions:enable_audiobooks_common_capping" to "Disabled",
         "cpp-player-rendering-renderer:playback_timeout_action" to "Nothing",
         "core-list-player:ad_clips_per_free_tier_ad_break" to 0,
-        "core-list-player:ad_clips_per_podcast_segment" to 0
+        "core-list-player:ad_clips_per_podcast_segment" to 0,
+        "core-player:autoplay" to true,
+        "player:autoplay" to true,
+        "core-player:player.autoplay" to true,
+        "player:player.autoplay" to true
     )
 
     private val RCS_INT_BY_NAME: Map<String, Int> = mapOf(
@@ -92,7 +98,7 @@ object ProductStateHook {
         "playback_timeout_action" to "Nothing"
     )
 
-    val LEGACY_SPOOFS: Map<String, String> = TYPED_SPOOFS.mapValues { (_, value) ->
+    private val LEGACY_SPOOFS: Map<String, String> = TYPED_SPOOFS.mapValues { (_, value) ->
         (value as? Boolean)?.let { if (it) "1" else "0" } ?: value.toString()
     } + mapOf(
         "horizon" to "FULL",
@@ -101,6 +107,9 @@ object ProductStateHook {
     )
 
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
         installMapSeam(module)
         installAttributeSeam(module)
         installUcsAttributeSeam(module)
@@ -119,7 +128,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val map = result as? Map<*, *> ?: return@intercept result
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || map.isEmpty()) {
                     return@intercept result
                 }
                 @Suppress("UNCHECKED_CAST")
@@ -138,17 +147,7 @@ object ProductStateHook {
             return
         }
 
-        val attributeClass = valueField.declaringClass
-        val boolSetter = attributeClass.declaredMethods.firstOrNull {
-            it.parameterCount == 1 && it.parameterTypes[0] == java.lang.Boolean.TYPE && !java.lang.reflect.Modifier.isStatic(it.modifiers)
-        }?.apply { isAccessible = true }
-        val stringSetter = attributeClass.declaredMethods.firstOrNull {
-            it.parameterCount == 1 && it.parameterTypes[0] == String::class.java && !java.lang.reflect.Modifier.isStatic(it.modifiers)
-        }?.apply { isAccessible = true }
-        val valueCaseField = attributeClass.declaredFields.firstOrNull {
-            it.type == java.lang.Integer.TYPE && !java.lang.reflect.Modifier.isStatic(it.modifiers)
-        }?.apply { isAccessible = true }
-
+        val accessors = attributeAccessorsOf(valueField.declaringClass, valueField)
         val allSpoofs = TYPED_SPOOFS + PLAYER_LOCAL_SPOOFS
 
         module.deoptimize(accessor)
@@ -158,34 +157,21 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val map = result as? Map<*, *> ?: return@intercept result
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || map.isEmpty()) {
                     return@intercept result
                 }
                 map.forEach { (key, attribute) ->
-                    if (attributeClass.isInstance(attribute)) {
+                    if (valueField.declaringClass.isInstance(attribute)) {
                         if (KEYS_TO_STRIP.contains(key)) {
                             runCatching {
-                                valueCaseField?.set(attribute, 0)
+                                accessors.valueCaseField?.set(attribute, 0)
                                 valueField.set(attribute, null)
                             }
                         } else {
                             val spoof = allSpoofs[key as? String]
                             if (spoof != null) {
                                 runCatching {
-                                    when (spoof) {
-                                        is Boolean -> boolSetter?.invoke(attribute, spoof) ?: run {
-                                            valueCaseField?.set(attribute, 2)
-                                            valueField.set(attribute, spoof)
-                                        }
-                                        is String -> stringSetter?.invoke(attribute, spoof) ?: run {
-                                            valueCaseField?.set(attribute, 4)
-                                            valueField.set(attribute, spoof)
-                                        }
-                                        else -> stringSetter?.invoke(attribute, spoof.toString()) ?: run {
-                                            valueCaseField?.set(attribute, 4)
-                                            valueField.set(attribute, spoof.toString())
-                                        }
-                                    }
+                                    writeAttributeValue(attribute, spoof, accessors)
                                 }
                             }
                         }
@@ -204,7 +190,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val originalMap = result as? Map<*, *> ?: return@intercept result
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || originalMap.isEmpty()) {
                     return@intercept result
                 }
                 val mutableMap = originalMap.toMutableMap()
@@ -217,45 +203,62 @@ object ProductStateHook {
                     val constructor = runCatching {
                         attributeClass.getDeclaredConstructor().apply { isAccessible = true }
                     }.getOrNull()
-                    val boolSetter = attributeClass.declaredMethods.firstOrNull {
-                        it.parameterCount == 1 && it.parameterTypes[0] == java.lang.Boolean.TYPE && !java.lang.reflect.Modifier.isStatic(it.modifiers)
-                    }?.apply { isAccessible = true }
-                    val stringSetter = attributeClass.declaredMethods.firstOrNull {
-                        it.parameterCount == 1 && it.parameterTypes[0] == String::class.java && !java.lang.reflect.Modifier.isStatic(it.modifiers)
-                    }?.apply { isAccessible = true }
-                    val valueCaseField = attributeClass.declaredFields.firstOrNull {
-                        it.type == java.lang.Integer.TYPE && !java.lang.reflect.Modifier.isStatic(it.modifiers)
-                    }?.apply { isAccessible = true }
-                    val valueField = attributeClass.declaredFields.firstOrNull {
-                        it.type == Any::class.java && !java.lang.reflect.Modifier.isStatic(it.modifiers)
-                    }?.apply { isAccessible = true }
-
+                    val accessors = attributeAccessorsOf(attributeClass)
                     for ((key, value) in TYPED_SPOOFS) {
                         val existing = mutableMap[key]
                         val target = existing ?: constructor?.newInstance() ?: continue
                         runCatching {
-                            when (value) {
-                                is Boolean -> boolSetter?.invoke(target, value) ?: run {
-                                    valueCaseField?.set(target, 2)
-                                    valueField?.set(target, value)
-                                }
-                                is String -> stringSetter?.invoke(target, value) ?: run {
-                                    valueCaseField?.set(target, 4)
-                                    valueField?.set(target, value)
-                                }
-                                else -> stringSetter?.invoke(target, value.toString()) ?: run {
-                                    valueCaseField?.set(target, 4)
-                                    valueField?.set(target, value.toString())
-                                }
-                            }
+                            writeAttributeValue(target, value, accessors)
                             if (existing == null) {
                                 mutableMap[key] = target
                             }
                         }
                     }
                 }
-                mutableMap
+                java.util.Collections.unmodifiableMap(mutableMap)
             }
+    }
+
+    private data class AttributeAccessors(
+        val boolSetter: Method?,
+        val stringSetter: Method?,
+        val valueCaseField: Field?,
+        val valueField: Field?
+    )
+
+    private fun attributeAccessorsOf(clazz: Class<*>, valueField: Field? = null): AttributeAccessors {
+        val resolvedValueField = valueField ?: clazz.declaredFields.firstOrNull {
+            it.type == Any::class.java && !java.lang.reflect.Modifier.isStatic(it.modifiers)
+        }?.apply { isAccessible = true }
+        return AttributeAccessors(
+            clazz.declaredMethods.firstOrNull {
+                it.parameterCount == 1 && it.parameterTypes[0] == java.lang.Boolean.TYPE && !java.lang.reflect.Modifier.isStatic(it.modifiers)
+            }?.apply { isAccessible = true },
+            clazz.declaredMethods.firstOrNull {
+                it.parameterCount == 1 && it.parameterTypes[0] == String::class.java && !java.lang.reflect.Modifier.isStatic(it.modifiers)
+            }?.apply { isAccessible = true },
+            clazz.declaredFields.firstOrNull {
+                it.type == java.lang.Integer.TYPE && !java.lang.reflect.Modifier.isStatic(it.modifiers)
+            }?.apply { isAccessible = true },
+            resolvedValueField
+        )
+    }
+
+    private fun writeAttributeValue(target: Any?, spoof: Any, accessors: AttributeAccessors) {
+        when (spoof) {
+            is Boolean -> accessors.boolSetter?.invoke(target, spoof) ?: run {
+                accessors.valueCaseField?.set(target, 2)
+                accessors.valueField?.set(target, spoof)
+            }
+            is String -> accessors.stringSetter?.invoke(target, spoof) ?: run {
+                accessors.valueCaseField?.set(target, 4)
+                accessors.valueField?.set(target, spoof)
+            }
+            else -> accessors.stringSetter?.invoke(target, spoof.toString()) ?: run {
+                accessors.valueCaseField?.set(target, 4)
+                accessors.valueField?.set(target, spoof.toString())
+            }
+        }
     }
 
     private fun installRcsConfigurationSeam(module: XposedModule) {
@@ -267,7 +270,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val list = result as? List<*> ?: return@intercept result
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept result
                 }
                 list.filterNot { assignedValue ->
@@ -334,7 +337,7 @@ object ProductStateHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val snapshot = chain.proceed() ?: return@intercept null
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept snapshot
                 }
                 val origHeader = headerField.get(snapshot) ?: return@intercept snapshot
@@ -381,7 +384,7 @@ object ProductStateHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val result = chain.proceed()
-                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept result
                 }
                 val scope = chain.getArg(0) as? String ?: return@intercept result

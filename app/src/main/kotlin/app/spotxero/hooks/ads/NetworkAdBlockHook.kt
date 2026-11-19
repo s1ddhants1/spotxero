@@ -49,7 +49,6 @@ object NetworkAdBlockHook {
         "/ad-formats/",
         "/embeddedad/",
         "/embedded-ad/",
-        "/pendragon/com.spotify.pendragon.v1.clientmessageservice/",
         "/premium-marketing/spotify.premiummarketing.v1.premiummarketingupsellservice/",
         "/upsell/v1/",
         "/capping-api/",
@@ -63,13 +62,33 @@ object NetworkAdBlockHook {
     private const val HERMES_CAPPING_URI = "hm://common-capping/update"
 
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
         hookNativeHttpConnection(module)
         hookOkHttpRealCall(module)
+    }
+
+    private val AUTH_BYPASS_KEYWORDS = listOf(
+        "/login",
+        "/auth",
+        "/token",
+        "/oauth",
+        "/session",
+        "login5",
+        "parental-control"
+    )
+
+    private val asyncExecutor = java.util.concurrent.Executors.newCachedThreadPool { runnable ->
+        Thread(runnable, "SpotXero-HttpInterceptor").apply { isDaemon = true }
     }
 
     private fun blockedStatusCode(rawUrl: String?): Int? {
         if (rawUrl.isNullOrBlank()) return null
         val lower = rawUrl.lowercase()
+        if (AUTH_BYPASS_KEYWORDS.any { lower.contains(it) }) {
+            return null
+        }
         if (lower.startsWith(HERMES_CAPPING_URI)) {
             return 200
         }
@@ -123,9 +142,17 @@ object NetworkAdBlockHook {
                         val url = runCatching { getUrlMethod.invoke(req) as? String }.getOrNull()
                         val code = blockedStatusCode(url)
                         if (code != null && url != null) {
-                            val response = respCtor.newInstance(code, url, "SPT-Protocol: http/1.1\n")
-                            onHeadersMethod.invoke(conn, response)
-                            onCompleteMethod.invoke(conn, false)
+                            val response = respCtor.newInstance(
+                                code,
+                                url,
+                                "SPT-Protocol: http/1.1\r\nContent-Length: 0\r\n\r\n"
+                            )
+                            asyncExecutor.execute {
+                                runCatching {
+                                    onHeadersMethod.invoke(conn, response)
+                                    onCompleteMethod.invoke(conn, true)
+                                }
+                            }
                             return@intercept null
                         }
                     }
@@ -159,6 +186,10 @@ object NetworkAdBlockHook {
         }?.apply { isAccessible = true } ?: return
         val http11 = bProtoField.type.enumConstants?.firstOrNull { it.toString() == "http/1.1" } ?: return
 
+        val longFields = builderClass.declaredFields.filter { it.type == Long::class.javaPrimitiveType }.onEach { it.isAccessible = true }
+        val bSentField = longFields.firstOrNull { it.name == "l" || it.name.contains("sent", ignoreCase = true) } ?: longFields.getOrNull(0)
+        val bReceivedField = longFields.firstOrNull { it.name == "m" || it.name.contains("received", ignoreCase = true) } ?: longFields.getOrNull(1)
+
         respBuild.isAccessible = true
         module.deoptimize(realCallChain)
         module.hook(realCallChain)
@@ -176,6 +207,11 @@ object NetworkAdBlockHook {
                         bProtoField.set(builder, http11)
                         bCodeField.setInt(builder, code)
                         bMsgField.set(builder, if (code == 200) "OK" else "Blocked")
+                        val now = System.currentTimeMillis()
+                        runCatching {
+                            bSentField?.setLong(builder, now)
+                            bReceivedField?.setLong(builder, now)
+                        }
                         return@intercept respBuild.invoke(builder)
                     }
                 }

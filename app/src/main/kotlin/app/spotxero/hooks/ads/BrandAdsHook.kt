@@ -10,6 +10,9 @@ import java.lang.reflect.Method
 object BrandAdsHook {
 
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
         hookSections(module, DexKitResolver.KEY_HOME_SECTION_LIST, "hide_home_brand_ads", AdSectionFilter::filterHome)
         hookSections(module, DexKitResolver.KEY_BROWSE_SECTION_LIST, "hide_browse_brand_ads", AdSectionFilter::filterBrowse)
         hookSections(module, DexKitResolver.KEY_PLAYER_SECTION_LIST, "hide_player_ad_sections", AdSectionFilter::filterPlayer)

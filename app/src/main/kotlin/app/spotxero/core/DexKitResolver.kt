@@ -15,9 +15,9 @@ object DexKitResolver {
     const val KEY_GET_ADS_WRAPPER = "get_ads_wrapper"
     const val KEY_EMPTY_ADS_RESPONSE = "empty_ads_response"
     const val KEY_PREMIUM_TAB_FLAG = "premium_tab_flag"
-    const val KEY_IS_ADVERTISEMENT_CHECK = "is_advertisement_check"
     const val KEY_HOME_SECTION_LIST = "home_section_list_getter"
     const val KEY_BROWSE_SECTION_LIST = "browse_section_list_getter"
+    const val KEY_CONTENT_CATEGORY_ITEMS_LIST = "content_category_items_list"
     const val KEY_IMAGE_AD_PREDICATE = "scrollsita_image_ad_predicate"
     const val KEY_PROVIDED_ITEMS_LIST = "provided_items_list_getter"
     const val KEY_SMART_SHUFFLE_FLAGS = "smart_shuffle_flags"
@@ -31,10 +31,8 @@ object DexKitResolver {
     const val KEY_PLAYER_OPTIONS_SHUFFLE_GETTER = "player_options_shuffle_getter"
     const val KEY_PLAYER_OPTIONS_BUILDER_SHUFFLE = "player_options_builder_shuffle"
     const val KEY_PREPARE_PLAY_OPTIONS_BUILDER_BUILD = "prepare_play_options_builder_build"
-    const val KEY_PLAYER_OPTION_OVERRIDES_BUILDER_BUILD = "player_option_overrides_builder_build"
     const val KEY_PLAYER_OPTION_OVERRIDES_BUILDER_SHUFFLE = "player_option_overrides_builder_shuffle"
     const val KEY_ES_CONTEXT_PLAYER_OPTIONS_SHUFFLE_GETTER = "es_context_player_options_shuffle_getter"
-    const val KEY_ES_OPTION_OVERRIDES_SHUFFLE_SETTER = "es_option_overrides_shuffle_setter"
     const val KEY_PLAYER_OPTION_OVERRIDES_SHUFFLE_GETTER = "player_option_overrides_shuffle_getter"
     const val KEY_PREPARE_PLAY_OPTIONS_SUPPRESSIONS_GETTER = "prepare_play_options_suppressions_getter"
     const val KEY_SET_SHUFFLE_COMMAND_CREATE = "set_shuffle_command_create"
@@ -43,6 +41,7 @@ object DexKitResolver {
     const val KEY_SHUFFLE_STATE_PARSE = "shuffle_state_parse"
     const val KEY_SHUFFLE_ENUM_LINEAR = "shuffle_enum_linear"
     const val KEY_SHUFFLE_ENUM_SHUFFLE = "shuffle_enum_shuffle"
+    const val KEY_SHUFFLE_ENUM_SMART_SHUFFLE = "shuffle_enum_smart_shuffle"
     const val KEY_SHUFFLE_CONTEXT_MODES_GETTER = "shuffle_context_modes_getter"
     const val KEY_SHUFFLE_CONTEXT_DEFAULT_GETTER = "shuffle_context_default_getter"
     const val KEY_SHUFFLE_CONTEXT_ENABLED_GETTER = "shuffle_context_enabled_getter"
@@ -61,6 +60,14 @@ object DexKitResolver {
     const val KEY_OKHTTP_REQUEST_TO_STRING = "okhttp_request_to_string"
     const val KEY_OKHTTP_RESPONSE_BUILDER_BUILD = "okhttp_response_builder_build"
     const val KEY_OKHTTP_REAL_CALL_CHAIN = "okhttp_real_call_chain"
+    const val KEY_RETROFIT_CREATE = "retrofit_create"
+    const val KEY_CONTEXT_MENU_VIEW_MODEL_CTOR = "context_menu_view_model_ctor"
+    const val KEY_LYRICS_CAP_STATUS_GETTER = "lyrics_cap_status_getter"
+    const val KEY_HOME_CHIPS_MAPPER = "home_chips_mapper"
+    const val KEY_SEARCH_CHIPS_CTOR = "search_chips_ctor"
+    const val KEY_SEARCH_RESPONSE_MAPPER = "search_response_mapper"
+    const val KEY_ACTIVITY_VOLUME_KEY_HANDLER = "activity_volume_key_handler"
+    const val KEY_VOLUME_KEY_HANDLER = "volume_key_handler"
 
     private const val CLIENT_BASE = "com.spotify.esperanto.esperanto.ClientBase"
     private const val COROUTINE_CLIENT_BASE = "com.spotify.esperanto.esperanto.CoroutineClientBase"
@@ -71,10 +78,10 @@ object DexKitResolver {
     private val GET_ADS_CALL = listOf("spotify.ads.esperanto.proto.Ads", "GetAds")
     private const val HOME_STRUCTURE = "com.spotify.casita.v1.resolved.HomeStructure"
     private const val BROWSE_STRUCTURE = "com.spotify.browsita.v1.resolved.BrowseStructure"
+    private const val CONTENT_CATEGORY = "com.spotify.browsita.v1.resolved.ContentCategory"
     private const val PLAYER_STRUCTURE = "com.spotify.scrollsita.v1.NpvScrollStructure"
     private const val PROVIDED = "com.spotify.casita.v1.resolved.Provided"
     private const val PLAYER_SECTION = "com.spotify.scrollsita.v1.Section"
-    private const val CONTEXT_TRACK = "com.spotify.player.model.ContextTrack"
 
     private const val IMAGE_BRAND_AD_FIELD = "IMAGE_BRAND_AD_FIELD_NUMBER"
     private const val SHARE_RESPONSE_URL_COUNT = 4
@@ -99,7 +106,6 @@ object DexKitResolver {
     private const val SET_SHUFFLE_COMMAND = "com.spotify.player.model.command.SetShufflingContextCommand"
     private const val AUTO_VALUE_SET_SHUFFLE_COMMAND = "com.spotify.player.model.command.AutoValue_SetShufflingContextCommand"
     private const val ES_CONTEXT_PLAYER_OPTIONS = "com.spotify.player.esperanto.proto.EsContextPlayerOptions\$ContextPlayerOptions"
-    private const val ES_CONTEXT_PLAYER_OPTION_OVERRIDES = "com.spotify.player.esperanto.proto.EsContextPlayerOptions\$ContextPlayerOptionOverrides"
     private const val SHUFFLING_CONTEXT_FIELD = "shufflingContext_"
     private val PREMIUM_KEYS = listOf(
         "premium_tab_enabled",
@@ -123,9 +129,9 @@ object DexKitResolver {
         resolveShareResponseUrls(classLoader, cachedSignatures, signatures, members)
         resolveGetAds(dexKit, classLoader, cachedSignatures, signatures, members)
         resolvePremiumTabFlag(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolveIsAdvertisementCheck(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveSectionList(KEY_HOME_SECTION_LIST, HOME_STRUCTURE, classLoader, cachedSignatures, signatures, members)
         resolveSectionList(KEY_BROWSE_SECTION_LIST, BROWSE_STRUCTURE, classLoader, cachedSignatures, signatures, members)
+        resolveSectionList(KEY_CONTENT_CATEGORY_ITEMS_LIST, CONTENT_CATEGORY, classLoader, cachedSignatures, signatures, members)
         resolveSectionList(KEY_PLAYER_SECTION_LIST, PLAYER_STRUCTURE, classLoader, cachedSignatures, signatures, members)
         resolveSectionList(KEY_PROVIDED_ITEMS_LIST, PROVIDED, classLoader, cachedSignatures, signatures, members)
         resolveImageAdPredicate(dexKit, classLoader, cachedSignatures, signatures, members)
@@ -146,7 +152,6 @@ object DexKitResolver {
         resolvePlayerOptionsShuffle(classLoader, cachedSignatures, signatures, members)
         resolvePreparePlayOptionsBuilderBuild(classLoader, cachedSignatures, signatures, members)
         resolvePlayerOptionOverridesBuilderShuffle(classLoader, cachedSignatures, signatures, members)
-        resolvePlayerOptionOverridesBuilderBuild(classLoader, cachedSignatures, signatures, members)
         resolveEsContextPlayerOptionsShuffle(dexKit, classLoader, cachedSignatures, signatures, members)
         resolvePlayerOptionOverridesShuffleGetter(classLoader, cachedSignatures, signatures, members)
         resolvePreparePlayOptionsSuppressionsGetter(classLoader, cachedSignatures, signatures, members)
@@ -160,16 +165,15 @@ object DexKitResolver {
         resolveCoroutineClientBaseCallSingle(classLoader, cachedSignatures, signatures, members)
         resolveEsperantoCall(CLIENT_BASE, "callStream", 3, KEY_CLIENT_BASE_CALL_STREAM, classLoader, cachedSignatures, signatures, members)
         resolveEsperantoCall(COROUTINE_CLIENT_BASE, "callStream", 3, KEY_COROUTINE_CLIENT_BASE_CALL_STREAM, classLoader, cachedSignatures, signatures, members)
+        resolveRetrofitCreate(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveContextMenuViewModelCtor(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveLyricsCapStatus(classLoader, cachedSignatures, signatures, members)
+        resolveHomeChipsMapper(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveSearchChips(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveVolumeKeyHandlers(dexKit, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
-    }
-
-    val isResolved: Boolean
-        get() = resolved.isNotEmpty()
-
-    fun clear() {
-        resolved = emptyMap()
     }
 
     fun <T> get(key: String): T? {
@@ -256,26 +260,6 @@ object DexKitResolver {
         val method = cachedMethod(cached, KEY_PREMIUM_TAB_FLAG, classLoader, ::isPremiumTabFlag)
             ?: runCatching { findPremiumTabFlag(dexKit, classLoader) }.getOrNull()?.takeIf(::isPremiumTabFlag)
         store(KEY_PREMIUM_TAB_FLAG, method, sigs, members)
-    }
-
-    private fun resolveIsAdvertisementCheck(
-        dexKit: DexKitBridge,
-        classLoader: ClassLoader,
-        cached: Map<String, String>?,
-        sigs: MutableMap<String, String>,
-        members: MutableMap<String, Any>
-    ) {
-        val method = cachedMethod(cached, KEY_IS_ADVERTISEMENT_CHECK, classLoader, ::isAdvertisementCheck)
-            ?: runCatching {
-                dexKit.findMethod {
-                    matcher {
-                        usingStrings(listOf("is_advertisement"), StringMatchType.Equals)
-                        paramTypes(CONTEXT_TRACK)
-                        returnType("boolean")
-                    }
-                }.singleOrNull()?.getMethodInstance(classLoader)
-            }.getOrNull()?.takeIf(::isAdvertisementCheck)
-        store(KEY_IS_ADVERTISEMENT_CHECK, method, sigs, members)
     }
 
     private fun resolveSectionList(
@@ -710,27 +694,6 @@ object DexKitResolver {
         store(KEY_PLAYER_OPTION_OVERRIDES_BUILDER_SHUFFLE, method, sigs, members)
     }
 
-    private fun resolvePlayerOptionOverridesBuilderBuild(
-        classLoader: ClassLoader,
-        cached: Map<String, String>?,
-        sigs: MutableMap<String, String>,
-        members: MutableMap<String, Any>
-    ) {
-        val method = cachedMethod(cached, KEY_PLAYER_OPTION_OVERRIDES_BUILDER_BUILD, classLoader, ::isPlayerOptionOverridesBuilderBuild)
-            ?: runCatching {
-                Class.forName(AUTO_VALUE_PLAYER_OPTION_OVERRIDES_BUILDER, false, classLoader)
-                    .declaredMethods
-                    .firstOrNull { isPlayerOptionOverridesBuilderBuild(it) }
-            }.getOrNull()?.takeIf(::isPlayerOptionOverridesBuilderBuild)
-        store(KEY_PLAYER_OPTION_OVERRIDES_BUILDER_BUILD, method, sigs, members)
-    }
-
-    private fun isPlayerOptionOverridesBuilderBuild(method: Method): Boolean =
-        method.declaringClass.name == AUTO_VALUE_PLAYER_OPTION_OVERRIDES_BUILDER &&
-            method.name == "build" &&
-            method.parameterCount == 0 &&
-            !java.lang.reflect.Modifier.isStatic(method.modifiers)
-
     private fun isPlayerOptionOverridesBuilderShuffle(method: Method): Boolean =
         method.declaringClass.name == AUTO_VALUE_PLAYER_OPTION_OVERRIDES_BUILDER &&
             method.name == "shufflingContext" &&
@@ -759,34 +722,12 @@ object DexKitResolver {
                     .firstOrNull { isEsContextPlayerOptionsShuffleGetter(it) }
             }.getOrNull()
         store(KEY_ES_CONTEXT_PLAYER_OPTIONS_SHUFFLE_GETTER, getter, sigs, members)
-
-        val setter = cachedMethod(cached, KEY_ES_OPTION_OVERRIDES_SHUFFLE_SETTER, classLoader, ::isEsOptionOverridesShuffleSetter)
-            ?: runCatching {
-                val clazz = Class.forName(ES_CONTEXT_PLAYER_OPTION_OVERRIDES, false, classLoader)
-                val field = clazz.getDeclaredField(SHUFFLING_CONTEXT_FIELD)
-                dexKit.findMethod {
-                    matcher {
-                        declaredClass(ES_CONTEXT_PLAYER_OPTION_OVERRIDES)
-                        paramCount(1)
-                        returnType("void")
-                        addUsingField(org.luckypray.dexkit.query.matchers.UsingFieldMatcher(field))
-                    }
-                }.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
-                    .firstOrNull { isEsOptionOverridesShuffleSetter(it) }
-            }.getOrNull()
-        store(KEY_ES_OPTION_OVERRIDES_SHUFFLE_SETTER, setter, sigs, members)
     }
 
     private fun isEsContextPlayerOptionsShuffleGetter(method: Method): Boolean =
         method.declaringClass.name == ES_CONTEXT_PLAYER_OPTIONS &&
             method.parameterCount == 0 &&
             method.returnType == Boolean::class.javaPrimitiveType &&
-            !java.lang.reflect.Modifier.isStatic(method.modifiers)
-
-    private fun isEsOptionOverridesShuffleSetter(method: Method): Boolean =
-        method.declaringClass.name == ES_CONTEXT_PLAYER_OPTION_OVERRIDES &&
-            method.parameterCount == 1 &&
-            method.returnType == Void.TYPE &&
             !java.lang.reflect.Modifier.isStatic(method.modifiers)
 
     private fun resolvePlayerOptionOverridesShuffleGetter(
@@ -936,11 +877,6 @@ object DexKitResolver {
         }
     }
 
-    private fun isAdvertisementCheck(method: Method): Boolean =
-        method.parameterCount == 1 &&
-            method.parameterTypes[0].name == CONTEXT_TRACK &&
-            method.returnType == Boolean::class.javaPrimitiveType
-
     private fun isImageAdPredicate(method: Method): Boolean =
         method.declaringClass.name == PLAYER_SECTION && isBooleanGetter(method)
 
@@ -1061,6 +997,7 @@ object DexKitResolver {
             if (enumConstants != null && enumConstants.size >= 3) {
                 members[KEY_SHUFFLE_ENUM_LINEAR] = enumConstants[0]
                 members[KEY_SHUFFLE_ENUM_SHUFFLE] = enumConstants[1]
+                members[KEY_SHUFFLE_ENUM_SMART_SHUFFLE] = enumConstants[2]
             }
             store(KEY_SHUFFLE_CONTEXT_MODES_GETTER, modesMethod, sigs, members)
             store(KEY_SHUFFLE_CONTEXT_DEFAULT_GETTER, defaultMethod, sigs, members)
@@ -1114,8 +1051,10 @@ object DexKitResolver {
         if (resolved != null) {
             val linear = resolved.enums[0]
             val shuffle = resolved.enums[1]
+            val smartShuffle = if (resolved.enums.size >= 3) resolved.enums[2] else null
             if (linear != null) members[KEY_SHUFFLE_ENUM_LINEAR] = linear
             if (shuffle != null) members[KEY_SHUFFLE_ENUM_SHUFFLE] = shuffle
+            if (smartShuffle != null) members[KEY_SHUFFLE_ENUM_SMART_SHUFFLE] = smartShuffle
             store(KEY_SHUFFLE_CONTEXT_MODES_GETTER, resolved.modes, sigs, members)
             store(KEY_SHUFFLE_CONTEXT_DEFAULT_GETTER, resolved.defaultMode, sigs, members)
             store(KEY_SHUFFLE_CONTEXT_ENABLED_GETTER, resolved.enabled, sigs, members)
@@ -1451,4 +1390,204 @@ object DexKitResolver {
             method.parameterCount == 0 &&
             method.returnType == responseClass &&
             method.declaringClass.declaredFields.any { it.type == requestClass }
+
+    private fun resolveRetrofitCreate(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_RETROFIT_CREATE, classLoader, ::isRetrofitCreate)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("API declarations must be interfaces"), StringMatchType.Contains)
+                        paramCount(1)
+                        paramTypes(listOf("java.lang.Class"))
+                    }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isRetrofitCreate)
+        store(KEY_RETROFIT_CREATE, method, sigs, members)
+    }
+
+    private fun isRetrofitCreate(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0] == Class::class.java &&
+            method.returnType == Any::class.java
+
+    private fun resolveContextMenuViewModelCtor(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val ctor = cachedConstructor(cached, KEY_CONTEXT_MENU_VIEW_MODEL_CTOR, classLoader, ::isContextMenuViewModelCtor)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("ContextMenuViewModel cannot contain items with duplicate itemResId"), StringMatchType.Contains)
+                        name("<init>")
+                    }
+                }.mapNotNull {
+                    val clazz = runCatching { Class.forName(it.className, false, classLoader) }.getOrNull()
+                    clazz?.declaredConstructors?.firstOrNull { c -> isContextMenuViewModelCtor(c) }
+                }.firstOrNull()
+            }.getOrNull()
+
+        if (ctor != null) {
+            members[KEY_CONTEXT_MENU_VIEW_MODEL_CTOR] = ctor
+            sigs[KEY_CONTEXT_MENU_VIEW_MODEL_CTOR] = signatureOf(ctor)
+        }
+    }
+
+    private fun isContextMenuViewModelCtor(ctor: java.lang.reflect.Constructor<*>): Boolean =
+        ctor.parameterCount >= 2 &&
+            List::class.java.isAssignableFrom(ctor.parameterTypes[1])
+
+    private fun resolveLyricsCapStatus(
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_LYRICS_CAP_STATUS_GETTER, classLoader, ::isLyricsCapStatusGetter)
+            ?: runCatching {
+                val clazz = Class.forName("com.spotify.lyrics.serviceretrofit.proto.v3.LyricsV3Response", false, classLoader)
+                clazz.declaredMethods.firstOrNull { isLyricsCapStatusGetter(it) }
+            }.getOrNull()
+        store(KEY_LYRICS_CAP_STATUS_GETTER, method, sigs, members)
+    }
+
+    private fun isLyricsCapStatusGetter(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 0 &&
+            method.returnType.isEnum &&
+            method.returnType.enumConstants?.any { (it as? Enum<*>)?.name == "UNCAPPED" } == true
+
+    private fun resolveHomeChipsMapper(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_HOME_CHIPS_MAPPER, classLoader, ::isHomeChipsMapper)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("podcasts-chip", "music-chip"), StringMatchType.Equals)
+                        paramTypes("java.util.List")
+                        returnType("java.util.ArrayList")
+                    }
+                }.firstOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isHomeChipsMapper)
+        store(KEY_HOME_CHIPS_MAPPER, method, sigs, members)
+    }
+
+    private fun isHomeChipsMapper(method: Method): Boolean =
+        java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0] == List::class.java &&
+            method.returnType == java.util.ArrayList::class.java
+
+    private fun resolveSearchChips(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val mapper = cachedMethod(cached, KEY_SEARCH_RESPONSE_MAPPER, classLoader, ::isSearchResponseMapper)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        paramTypes("com.spotify.searchview.proto.MainViewResponse")
+                    }
+                }.firstOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isSearchResponseMapper)
+        store(KEY_SEARCH_RESPONSE_MAPPER, mapper, sigs, members)
+
+        val ctor = cachedConstructor(cached, KEY_SEARCH_CHIPS_CTOR, classLoader, ::isSearchChipsCtor)
+            ?: runCatching {
+                if (mapper == null) return@runCatching null
+                val responseClass = mapper.returnType
+                for (c in responseClass.declaredConstructors) {
+                    if (c.parameterCount >= 5) {
+                        val paramType = c.parameterTypes[4]
+                        val match = paramType.declaredConstructors.firstOrNull { isSearchChipsCtor(it) }
+                        if (match != null) return@runCatching match
+                    }
+                }
+                for (field in responseClass.declaredFields) {
+                    val type = field.type
+                    if (android.os.Parcelable::class.java.isAssignableFrom(type)) {
+                        val match = type.declaredConstructors.firstOrNull { isSearchChipsCtor(it) }
+                        if (match != null && type.declaredFields.any { it.type == java.util.ArrayList::class.java }) {
+                            return@runCatching match
+                        }
+                    }
+                }
+                null
+            }.getOrNull()?.takeIf(::isSearchChipsCtor)
+        if (ctor != null) {
+            members[KEY_SEARCH_CHIPS_CTOR] = ctor
+            sigs[KEY_SEARCH_CHIPS_CTOR] = signatureOf(ctor)
+        }
+    }
+
+    private fun isSearchResponseMapper(method: Method): Boolean =
+        method.parameterCount == 1 &&
+            method.parameterTypes[0].name == "com.spotify.searchview.proto.MainViewResponse"
+
+    private fun isSearchChipsCtor(ctor: Constructor<*>): Boolean =
+        ctor.parameterCount == 1 &&
+            ctor.parameterTypes[0] == java.util.ArrayList::class.java
+
+    private fun resolveVolumeKeyHandlers(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val activityHandler = cachedMethod(cached, KEY_ACTIVITY_VOLUME_KEY_HANDLER, classLoader, ::isActivityVolumeKeyHandler)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("volume_on_key_down_main_activity"), StringMatchType.Equals)
+                    }
+                }.singleOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isActivityVolumeKeyHandler)
+        store(KEY_ACTIVITY_VOLUME_KEY_HANDLER, activityHandler, sigs, members)
+
+        val volumeHandler = cachedMethod(cached, KEY_VOLUME_KEY_HANDLER, classLoader, ::isVolumeKeyHandler)
+            ?: runCatching {
+                val record = dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("volume_on_key_down_main_activity"), StringMatchType.Equals)
+                    }
+                }.singleOrNull() ?: return@runCatching null
+                record.invokes.mapNotNull { data ->
+                    runCatching { data.getMethodInstance(classLoader) }.getOrNull()
+                }.firstOrNull(::isVolumeKeyHandler)
+            }.getOrNull()?.takeIf(::isVolumeKeyHandler)
+        store(KEY_VOLUME_KEY_HANDLER, volumeHandler, sigs, members)
+    }
+
+    private fun isActivityVolumeKeyHandler(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 2 &&
+            method.parameterTypes[0] == Int::class.javaPrimitiveType &&
+            method.parameterTypes[1].name == "android.view.KeyEvent" &&
+            method.returnType == Boolean::class.javaPrimitiveType
+
+    private fun isVolumeKeyHandler(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 3 &&
+            method.parameterTypes[0].name == "android.view.KeyEvent" &&
+            method.parameterTypes[1] == String::class.java &&
+            method.returnType == Boolean::class.javaPrimitiveType
 }

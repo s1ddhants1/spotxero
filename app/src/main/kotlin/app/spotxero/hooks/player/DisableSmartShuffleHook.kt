@@ -10,6 +10,10 @@ import java.lang.reflect.Method
 object DisableSmartShuffleHook {
 
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
+
         val methods = DexKitResolver.get<List<Method>>(DexKitResolver.KEY_SMART_SHUFFLE_FLAGS)
         if (methods.isNullOrEmpty()) {
             return

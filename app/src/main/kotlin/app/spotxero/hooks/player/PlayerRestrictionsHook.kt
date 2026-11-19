@@ -12,6 +12,9 @@ object PlayerRestrictionsHook {
     private const val RESTRICTIONS_CLASS = "com.spotify.player.model.Restrictions"
 
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
         installConverterHook(module)
         installRestrictionMethodsHook(module)
         installMftDisallowHandlerHook(module)

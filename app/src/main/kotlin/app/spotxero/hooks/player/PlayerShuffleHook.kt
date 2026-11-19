@@ -11,10 +11,7 @@ import java.lang.reflect.Method
 
 object PlayerShuffleHook {
 
-    private const val STATION_PREFIX = "spotify:station:"
-    private const val BASE_PREFIX = "spotify:"
-
-    private val BASE_SUPPRESSIONS = setOf("ad", "podcast_ad", "mft/apply_restrictions")
+    private val BASE_SUPPRESSIONS = setOf("ad", "podcast_ad")
     private val SHUFFLE_OFF_SUPPRESSIONS = setOf("mft/force_shuffle")
 
     private fun suppressionProviders(shuffleEnabled: Boolean): Set<String> =
@@ -22,6 +19,9 @@ object PlayerShuffleHook {
 
     @Volatile
     private var userShuffleState: Boolean? = null
+
+    @Volatile
+    private var userSmartShuffleInModes: Boolean? = null
 
     private fun isShuffleEnabled(): Boolean {
         val cached = userShuffleState
@@ -31,7 +31,18 @@ object PlayerShuffleHook {
         return stored
     }
 
+    private fun isSmartShuffleInModesEnabled(): Boolean {
+        val cached = userSmartShuffleInModes
+        if (cached != null) return cached
+        val stored = PreferencesManager.isEnabled(PrefKeys.KEY_SMART_SHUFFLE_IN_MODES, true)
+        userSmartShuffleInModes = stored
+        return stored
+    }
+
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
         hookCommandValue(module)
         hookPlayerOptions(module)
         hookPreparePlayOptions(module)
@@ -172,10 +183,10 @@ object PlayerShuffleHook {
                     if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                         return@intercept chain.proceed()
                     }
-                    if (!isShuffleEnabled()) {
-                        chain.proceed(arrayOf(java.lang.Boolean.FALSE))
-                    } else {
+                    if (isShuffleEnabled()) {
                         chain.proceed()
+                    } else {
+                        chain.proceed(arrayOf(java.lang.Boolean.FALSE))
                     }
                 }
         }
@@ -191,27 +202,15 @@ object PlayerShuffleHook {
                     if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                         return@intercept result
                     }
-                    val thisObj = chain.getThisObject() ?: return@intercept result
-                    val cl = thisObj.javaClass.classLoader
-                    buildBooleanOptional(cl, result, isShuffleEnabled()) ?: result
+                    if (isShuffleEnabled()) {
+                        val thisObj = chain.getThisObject() ?: return@intercept result
+                        val cl = thisObj.javaClass.classLoader
+                        buildBooleanOptional(cl, result, true) ?: result
+                    } else {
+                        result
+                    }
                 }
         }
-
-        val buildMethod = DexKitResolver.get<Method>(DexKitResolver.KEY_PLAYER_OPTION_OVERRIDES_BUILDER_BUILD)
-        if (builderSetter == null || buildMethod == null) {
-            return
-        }
-
-        module.deoptimize(buildMethod)
-        module.hook(buildMethod)
-            .setId("player_option_overrides_builder_build")
-            .setExceptionMode(ExceptionMode.PROTECTIVE)
-            .intercept { chain ->
-                if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) && !isShuffleEnabled()) {
-                    chain.getThisObject()?.let { builder -> builderSetter.invoke(builder, java.lang.Boolean.FALSE) }
-                }
-                chain.proceed()
-            }
     }
 
     private fun hookProtoOptions(module: XposedModule) {
@@ -228,106 +227,74 @@ object PlayerShuffleHook {
                     isShuffleEnabled()
                 }
         }
-
-        val protoSetter = DexKitResolver.get<Method>(DexKitResolver.KEY_ES_OPTION_OVERRIDES_SHUFFLE_SETTER)
-        if (protoSetter != null) {
-            module.deoptimize(protoSetter)
-            module.hook(protoSetter)
-                .setId("es_option_overrides_shuffle_setter")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept chain.proceed()
-                    }
-                    if (isShuffleEnabled()) {
-                        return@intercept chain.proceed()
-                    }
-                    val optBool = chain.getArg(0)
-                    if (optBool != null) {
-                        val modified = runCatching {
-                            val builder = optBool.javaClass.getMethod("toBuilder").apply { isAccessible = true }.invoke(optBool)
-                            val setter = builder.javaClass.declaredMethods.firstOrNull {
-                                it.parameterCount == 1 && it.parameterTypes[0] == Boolean::class.javaPrimitiveType
-                            }?.apply { isAccessible = true }
-                            setter?.invoke(builder, false)
-                            builder.javaClass.getMethod("build").apply { isAccessible = true }.invoke(builder)
-                        }.getOrNull()
-                        if (modified != null) {
-                            return@intercept chain.proceed(arrayOf(modified))
-                        }
-                    }
-                    chain.proceed()
-                }
-        }
     }
 
     private fun applyPreparePlayOverrides(builderObj: Any, cl: ClassLoader, shuffleEnabled: Boolean) {
         val overridesClass = Class.forName("com.spotify.player.model.command.options.PlayerOptionOverrides", false, cl)
         val suppressionsClass = Class.forName("com.spotify.player.model.Suppressions", false, cl)
 
-        val currentOpt = getFieldValue(builderObj, "playerOptionsOverride")
-        val currentOverride = if (currentOpt != null) {
-            val hasValueMethod = currentOpt.javaClass.methods.firstOrNull {
-                it.parameterCount == 0 && it.returnType == Boolean::class.javaPrimitiveType
-            }?.apply { isAccessible = true }
-            if (hasValueMethod?.invoke(currentOpt) == true) {
-                val getMethod = currentOpt.javaClass.methods.firstOrNull {
-                    it.parameterCount == 0 && it.returnType != Boolean::class.javaPrimitiveType && it.returnType != Void.TYPE
+        if (shuffleEnabled) {
+            val currentOpt = getFieldValue(builderObj, "playerOptionsOverride")
+            val currentOverride = if (currentOpt != null) {
+                val hasValueMethod = currentOpt.javaClass.methods.firstOrNull {
+                    it.parameterCount == 0 && it.returnType == Boolean::class.javaPrimitiveType
                 }?.apply { isAccessible = true }
-                getMethod?.invoke(currentOpt)
+                if (hasValueMethod?.invoke(currentOpt) == true) {
+                    val getMethod = currentOpt.javaClass.methods.firstOrNull {
+                        it.parameterCount == 0 && it.returnType != Boolean::class.javaPrimitiveType && it.returnType != Void.TYPE
+                    }?.apply { isAccessible = true }
+                    getMethod?.invoke(currentOpt)
+                } else null
             } else null
-        } else null
 
-        val newOverrides = if (currentOverride != null) {
-            val toBuilderMethod = currentOverride.javaClass.methods.firstOrNull {
-                it.parameterCount == 0 && it.name == "toBuilder"
-            }?.apply { isAccessible = true } ?: currentOverride.javaClass.getMethod("toBuilder").apply { isAccessible = true }
-            val toBuilder = toBuilderMethod.invoke(currentOverride)
-            val shuffleMethod = toBuilder.javaClass.methods.firstOrNull {
-                it.name == "shufflingContext" && it.parameterCount == 1
-            }?.apply { isAccessible = true }
-            shuffleMethod?.invoke(toBuilder, shuffleEnabled)
-            val buildMethod = toBuilder.javaClass.methods.firstOrNull {
-                it.name == "build" && it.parameterCount == 0
-            }?.apply { isAccessible = true }
-            buildMethod?.invoke(toBuilder)
+            val newOverrides = if (currentOverride != null) {
+                val toBuilderMethod = currentOverride.javaClass.methods.firstOrNull {
+                    it.parameterCount == 0 && it.name == "toBuilder"
+                }?.apply { isAccessible = true } ?: currentOverride.javaClass.getMethod("toBuilder").apply { isAccessible = true }
+                val toBuilder = toBuilderMethod.invoke(currentOverride)
+                val shuffleMethod = toBuilder.javaClass.methods.firstOrNull {
+                    it.name == "shufflingContext" && it.parameterCount == 1
+                }?.apply { isAccessible = true }
+                shuffleMethod?.invoke(toBuilder, true)
+                val buildMethod = toBuilder.javaClass.methods.firstOrNull {
+                    it.name == "build" && it.parameterCount == 0
+                }?.apply { isAccessible = true }
+                buildMethod?.invoke(toBuilder)
+            } else {
+                val builderMethod = overridesClass.getMethod("builder").apply { isAccessible = true }
+                val builder = builderMethod.invoke(null)
+                val modesMethod = builder.javaClass.methods.firstOrNull {
+                    it.name == "modes" && it.parameterCount == 1
+                }?.apply { isAccessible = true }
+                modesMethod?.invoke(builder, emptyMap<String, String>())
+                val shuffleMethod = builder.javaClass.methods.firstOrNull {
+                    it.name == "shufflingContext" && it.parameterCount == 1
+                }?.apply { isAccessible = true }
+                shuffleMethod?.invoke(builder, true)
+                val buildMethod = builder.javaClass.methods.firstOrNull {
+                    it.name == "build" && it.parameterCount == 0
+                }?.apply { isAccessible = true }
+                buildMethod?.invoke(builder)
+            }
+            if (newOverrides != null) {
+                val setOverrideMethod = builderObj.javaClass.methods.firstOrNull {
+                    it.name == "playerOptionsOverride" && it.parameterCount == 1 && it.parameterTypes[0].isAssignableFrom(newOverrides.javaClass)
+                }?.apply { isAccessible = true }
+                setOverrideMethod?.invoke(builderObj, newOverrides)
+            }
         } else {
-            val builderMethod = overridesClass.getMethod("builder").apply { isAccessible = true }
-            val builder = builderMethod.invoke(null)
-            val modesMethod = builder.javaClass.methods.firstOrNull {
-                it.name == "modes" && it.parameterCount == 1
-            }?.apply { isAccessible = true }
-            modesMethod?.invoke(builder, emptyMap<String, String>())
-            val shuffleMethod = builder.javaClass.methods.firstOrNull {
-                it.name == "shufflingContext" && it.parameterCount == 1
-            }?.apply { isAccessible = true }
-            shuffleMethod?.invoke(builder, shuffleEnabled)
-            val buildMethod = builder.javaClass.methods.firstOrNull {
-                it.name == "build" && it.parameterCount == 0
-            }?.apply { isAccessible = true }
-            buildMethod?.invoke(builder)
-        }
-        if (newOverrides != null) {
-            val setOverrideMethod = builderObj.javaClass.methods.firstOrNull {
-                it.name == "playerOptionsOverride" && it.parameterCount == 1 && it.parameterTypes[0].isAssignableFrom(newOverrides.javaClass)
-            }?.apply { isAccessible = true }
-            setOverrideMethod?.invoke(builderObj, newOverrides)
+            val overrideField = runCatching { builderObj.javaClass.getDeclaredField("playerOptionsOverride").apply { isAccessible = true } }.getOrNull()
+            if (overrideField != null) {
+                val absent = runCatching {
+                    Class.forName("p.j5", false, cl).getDeclaredField("a").apply { isAccessible = true }.get(null)
+                }.getOrNull()
+                if (absent != null) {
+                    overrideField.set(builderObj, absent)
+                }
+            }
         }
 
-        val licenseMethod = builderObj.javaClass.methods.firstOrNull {
-            it.name == "license" && it.parameterCount == 1 && it.parameterTypes[0] == String::class.java
-        }?.apply { isAccessible = true }
-        licenseMethod?.invoke(builderObj, "premium")
 
-        val initPausedMethod = builderObj.javaClass.methods.firstOrNull {
-            it.name == "initiallyPaused" && it.parameterCount == 1 && it.parameterTypes[0] == Boolean::class.javaPrimitiveType
-        }?.apply { isAccessible = true }
-        initPausedMethod?.invoke(builderObj, false)
-
-        val alwaysPlayMethod = builderObj.javaClass.methods.firstOrNull {
-            it.name == "alwaysPlaySomething" && it.parameterCount == 1 && it.parameterTypes[0] == Boolean::class.javaPrimitiveType
-        }?.apply { isAccessible = true }
-        alwaysPlayMethod?.invoke(builderObj, true)
 
         val suppOpt = getFieldValue(builderObj, "suppressions")
         val currentSuppressions = if (suppOpt != null) {
@@ -435,7 +402,12 @@ object PlayerShuffleHook {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        chain.proceed(arrayOf(chain.getArg(0), isShuffleEnabled(), java.lang.Boolean.FALSE, chain.getArg(3)))
+                        val smartShuffle = chain.getArg(2) as? Boolean
+                        if (smartShuffle != null) {
+                            userSmartShuffleInModes = smartShuffle
+                            PreferencesManager.setBoolean(null, PrefKeys.KEY_SMART_SHUFFLE_IN_MODES, smartShuffle)
+                        }
+                        chain.proceed(arrayOf(chain.getArg(0), isShuffleEnabled(), smartShuffle ?: isSmartShuffleInModesEnabled(), chain.getArg(3)))
                     } else {
                         chain.proceed()
                     }
@@ -452,9 +424,10 @@ object PlayerShuffleHook {
                     if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                         return@intercept chain.proceed()
                     }
+                    val smartShuffle = isSmartShuffleInModesEnabled()
                     val payload = byteArrayOf(
                         0x08, (if (isShuffleEnabled()) 1 else 0).toByte(),
-                        0x10, 0x00
+                        0x10, (if (smartShuffle) 1 else 0).toByte()
                     )
                     chain.proceed(arrayOf(payload))
                 }
@@ -475,7 +448,16 @@ object PlayerShuffleHook {
                     }
                     val linear = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_LINEAR)
                     val shuffle = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_SHUFFLE)
-                    if (linear != null && shuffle != null) setOf(linear, shuffle) else original
+                    val smartShuffle = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_SMART_SHUFFLE)
+                    if (linear != null && shuffle != null) {
+                        if (isSmartShuffleInModesEnabled() && smartShuffle != null) {
+                            setOf(linear, shuffle, smartShuffle)
+                        } else {
+                            setOf(linear, shuffle)
+                        }
+                    } else {
+                        original
+                    }
                 }
         }
 
@@ -541,55 +523,8 @@ object PlayerShuffleHook {
         }
     }
 
-    @Volatile
-    private var nativeTransport: Any? = null
-
-    private fun hookNativeTransportCtors(module: XposedModule, cl: ClassLoader) {
-        runCatching {
-            val nativeCls = Class.forName("com.spotify.esperanto.esperantoimpl.NativeTransport", false, cl)
-            val ctor = nativeCls.declaredConstructors.firstOrNull()
-            if (ctor != null) {
-                module.deoptimize(ctor)
-                module.hook(ctor)
-                    .setId("native_transport_init")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        chain.proceed()
-                        val thisObj = chain.getThisObject()
-                        if (thisObj != null) {
-                            nativeTransport = thisObj
-                        }
-                        null
-                    }
-            }
-        }
-
-        runCatching {
-            val schedCls = Class.forName("com.spotify.esperanto.esperantoimpl.SchedulingTransport", false, cl)
-            val ctor = schedCls.declaredConstructors.firstOrNull()
-            if (ctor != null) {
-                module.deoptimize(ctor)
-                module.hook(ctor)
-                    .setId("scheduling_transport_init")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        chain.proceed()
-                        val thisObj = chain.getThisObject()
-                        if (thisObj != null) {
-                            nativeTransport = thisObj
-                        }
-                        null
-                    }
-            }
-        }
-    }
-
     private fun hookClientBase(module: XposedModule) {
         val method = DexKitResolver.get<Method>(DexKitResolver.KEY_CLIENT_BASE_CALL_SINGLE) ?: return
-        val cl = method.declaringClass.classLoader
-        if (cl != null) {
-            hookNativeTransportCtors(module, cl)
-        }
         module.deoptimize(method)
         module.hook(method)
             .setId("client_base_call_single")
@@ -598,18 +533,15 @@ object PlayerShuffleHook {
                 val service = chain.getArg(0) as? String
                 val methodName = chain.getArg(1) as? String
                 val payload = chain.getArg(2)
-                val client = chain.getThisObject()
-                if (client != null) {
-                    val t = getTransport(client)
-                    if (t != null && !t.javaClass.name.contains("Cosmos")) {
-                        nativeTransport = t
-                    }
-                }
 
                 if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     if (service == "spotify.playback_settings.esperanto.proto.PlaybackSettings" && methodName == "GetShuffleState") {
                         val shuffleOn = isShuffleEnabled()
-                        val stateBytes = if (shuffleOn) byteArrayOf(0x08, 0x01, 0x10, 0x00) else byteArrayOf(0x08, 0x00, 0x10, 0x00)
+                        val smartShuffle = isSmartShuffleInModesEnabled()
+                        val stateBytes = byteArrayOf(
+                            0x08, (if (shuffleOn) 1 else 0).toByte(),
+                            0x10, (if (smartShuffle) 1 else 0).toByte()
+                        )
                         val singleClass = method.declaringClass.classLoader?.loadClass("io.reactivex.rxjava3.core.Single")
                         val justMethod = singleClass?.getMethod("just", Any::class.java)
                         val singleObj = justMethod?.invoke(null, stateBytes)
@@ -634,18 +566,15 @@ object PlayerShuffleHook {
                 val service = chain.getArg(0) as? String
                 val methodName = chain.getArg(1) as? String
                 val payload = chain.getArg(2)
-                val client = chain.getThisObject()
-                if (client != null) {
-                    val t = getTransport(client)
-                    if (t != null && !t.javaClass.name.contains("Cosmos")) {
-                        nativeTransport = t
-                    }
-                }
 
                 if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     if (service == "spotify.playback_settings.esperanto.proto.PlaybackSettings" && methodName == "GetShuffleState") {
                         val shuffleOn = isShuffleEnabled()
-                        val stateBytes = if (shuffleOn) byteArrayOf(0x08, 0x01, 0x10, 0x00) else byteArrayOf(0x08, 0x00, 0x10, 0x00)
+                        val smartShuffle = isSmartShuffleInModesEnabled()
+                        val stateBytes = byteArrayOf(
+                            0x08, (if (shuffleOn) 1 else 0).toByte(),
+                            0x10, (if (smartShuffle) 1 else 0).toByte()
+                        )
                         return@intercept stateBytes
                     }
                     handleEsperantoPayload(chain, service, methodName, payload)
@@ -670,11 +599,10 @@ object PlayerShuffleHook {
                     runCatching {
                         applyPlayOverrides(payload)
                     }
-                    dispatchSetShufflingContext(chain.getThisObject(), isShuffleEnabled())
                 }
                 "SetOptions" -> {
                     runCatching {
-                        applySetOptionsOverrides(chain, payload)
+                        applySetOptionsOverrides(payload)
                     }
                 }
                 "SetShufflingContext" -> {
@@ -698,56 +626,20 @@ object PlayerShuffleHook {
                 runCatching {
                     applyPlayOverrides(payload)
                 }
-                dispatchSetShufflingContext(chain.getThisObject(), isShuffleEnabled())
             }
         } else if (service == "spotify.playback_settings.esperanto.proto.PlaybackSettings") {
             if (methodName == "SetShuffleState") {
                 runCatching {
-                    handlePlaybackSettingsSetShuffle(chain, payload)
+                    handlePlaybackSettingsSetShuffle(payload)
                 }
             }
-        }
-    }
-
-    private fun deStationContext(payload: Any) {
-        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) return
-        val (container, context) = locateContext(payload) ?: return
-        var changed = false
-        for (fieldName in listOf("uri_", "url_")) {
-            runCatching {
-                val field = context.javaClass.getDeclaredField(fieldName).apply { isAccessible = true }
-                val current = field.get(context) as? String ?: return@runCatching
-                deStation(current)?.let { destationed ->
-                    field.set(context, destationed)
-                    changed = true
-                }
-            }
-        }
-        if (changed) {
-            resetMemoizedSize(context)
-            if (container !== payload) {
-                resetMemoizedSize(container)
-            }
-            resetMemoizedSize(payload)
         }
     }
 
     private fun sanitizeContext(payload: Any) {
         if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) return
         val (container, context) = locateContext(payload) ?: return
-        var changed = cleanMetadata(context)
-
-        runCatching {
-            val pagesField = context.javaClass.getDeclaredField("pages_").apply { isAccessible = true }
-            val pages = pagesField.get(context) as? List<*>
-            if (!pages.isNullOrEmpty()) {
-                for (page in pages) {
-                    if (page != null && cleanMetadata(page)) {
-                        changed = true
-                    }
-                }
-            }
-        }
+        var changed = false
 
         runCatching {
             val restrField = context.javaClass.getDeclaredField("restrictions_").apply { isAccessible = true }
@@ -768,33 +660,6 @@ object PlayerShuffleHook {
         }
     }
 
-    @Suppress("UNCHECKED_CAST")
-    private fun cleanMetadata(obj: Any): Boolean {
-        val metaField = runCatching { obj.javaClass.getDeclaredField("metadata_").apply { isAccessible = true } }.getOrNull() ?: return false
-        val map = metaField.get(obj) as? MutableMap<Any?, Any?> ?: return false
-
-        for (field in map.javaClass.declaredFields) {
-            if (field.type == java.lang.Boolean.TYPE) {
-                field.isAccessible = true
-                field.setBoolean(map, true)
-            }
-        }
-
-        var modified = false
-        if (map["autoplay_candidate"] != "true") {
-            map["autoplay_candidate"] = "true"
-            modified = true
-        }
-        if (map["end_of_context_action"] != "autoplay") {
-            map["end_of_context_action"] = "autoplay"
-            modified = true
-        }
-        if (modified) {
-            resetMemoizedSize(obj)
-        }
-        return modified
-    }
-
     private fun locateContext(payload: Any): Pair<Any, Any>? {
         runCatching {
             val field = payload.javaClass.getDeclaredField("context_").apply { isAccessible = true }
@@ -811,19 +676,7 @@ object PlayerShuffleHook {
         }.getOrNull()
     }
 
-    private fun deStation(uri: String): String? {
-        if (!uri.startsWith(STATION_PREFIX)) return null
-        var seed = uri
-        while (seed.startsWith(STATION_PREFIX)) {
-            seed = seed.substring(STATION_PREFIX.length)
-        }
-        val bare = seed.removePrefix(BASE_PREFIX)
-        if (bare.startsWith("track:") || bare.startsWith("artist:") || bare.startsWith("genre:")) return null
-        return if (seed.startsWith(BASE_PREFIX)) seed else BASE_PREFIX + seed
-    }
-
     private fun applyPlayOverrides(payload: Any) {
-        deStationContext(payload)
         sanitizeContext(payload)
         val cl = payload.javaClass.classLoader ?: return
         val prepPlayClass = Class.forName("com.spotify.player.esperanto.proto.EsPreparePlay\$PreparePlayRequest", false, cl)
@@ -873,23 +726,32 @@ object PlayerShuffleHook {
         }
 
         val overrideField = prepOptionsClass.getDeclaredField("playerOptionsOverride_").apply { isAccessible = true }
-        var overrides = overrideField.get(options)
-        if (overrides == null) {
-            overrides = overridesClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
-            overrideField.set(options, overrides)
-        }
         val optBitField = prepOptionsClass.getDeclaredField("bitField0_").apply { isAccessible = true }
-        optBitField.setInt(options, optBitField.getInt(options) or 4)
-
-        val optBool = optBoolClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
-        val valField = optBoolClass.getDeclaredField("value_").apply { isAccessible = true }
         val shuffleEnabled = isShuffleEnabled()
-        valField.setBoolean(optBool, shuffleEnabled)
 
-        val shuffField = overridesClass.getDeclaredField("shufflingContext_").apply { isAccessible = true }
-        shuffField.set(overrides, optBool)
-        val overBitField = overridesClass.getDeclaredField("bitField0_").apply { isAccessible = true }
-        overBitField.setInt(overrides, overBitField.getInt(overrides) or 1)
+        if (shuffleEnabled) {
+            var overrides = overrideField.get(options)
+            if (overrides == null) {
+                overrides = overridesClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
+                overrideField.set(options, overrides)
+            }
+            optBitField.setInt(options, optBitField.getInt(options) or 4)
+
+            val optBool = optBoolClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
+            val valField = optBoolClass.getDeclaredField("value_").apply { isAccessible = true }
+            valField.setBoolean(optBool, true)
+
+            val shuffField = overridesClass.getDeclaredField("shufflingContext_").apply { isAccessible = true }
+            shuffField.set(overrides, optBool)
+            val overBitField = overridesClass.getDeclaredField("bitField0_").apply { isAccessible = true }
+            overBitField.setInt(overrides, overBitField.getInt(overrides) or 1)
+
+            resetMemoizedSize(optBool)
+            resetMemoizedSize(overrides)
+        } else {
+            overrideField.set(options, null)
+            optBitField.setInt(options, optBitField.getInt(options) and 4.inv())
+        }
 
         val addSuppMethod = prepOptionsClass.declaredMethods.firstOrNull {
             it.parameterCount == 1 && Iterable::class.java.isAssignableFrom(it.parameterTypes[0])
@@ -908,17 +770,8 @@ object PlayerShuffleHook {
             }
         }
 
-        val licenseField = runCatching { prepOptionsClass.getDeclaredField("license_").apply { isAccessible = true } }.getOrNull()
-        licenseField?.set(options, "premium")
 
-        val alwaysPlayField = runCatching { prepOptionsClass.getDeclaredField("alwaysPlaySomething_").apply { isAccessible = true } }.getOrNull()
-        alwaysPlayField?.setBoolean(options, true)
 
-        val initPausedField = runCatching { prepOptionsClass.getDeclaredField("initiallyPaused_").apply { isAccessible = true } }.getOrNull()
-        initPausedField?.setBoolean(options, false)
-
-        resetMemoizedSize(optBool)
-        resetMemoizedSize(overrides)
         resetMemoizedSize(options)
         if (prepReq != null) {
             resetMemoizedSize(prepReq)
@@ -946,7 +799,7 @@ object PlayerShuffleHook {
         resetMemoizedSize(payload)
     }
 
-    private fun applySetOptionsOverrides(chain: Chain, payload: Any) {
+    private fun applySetOptionsOverrides(payload: Any) {
         val cl = payload.javaClass.classLoader ?: return
         val optBoolClass = Class.forName("com.spotify.player.esperanto.proto.EsOptional\$OptionalBoolean", false, cl)
 
@@ -955,95 +808,41 @@ object PlayerShuffleHook {
         val bitField = payload.javaClass.getDeclaredField("bitField0_").apply { isAccessible = true }
         val currentBits = bitField.getInt(payload)
 
-        val shuffleEnabled = if ((currentBits and 4) != 0 && currentOpt != null) {
-            val valField = optBoolClass.getDeclaredField("value_").apply { isAccessible = true }
-            val uiShuffle = valField.getBoolean(currentOpt)
-            userShuffleState = uiShuffle
-            PreferencesManager.setBoolean(null, PrefKeys.KEY_SHUFFLE_STATE, uiShuffle)
-            uiShuffle
-        } else {
-            isShuffleEnabled()
+        if ((currentBits and 4) == 0 || currentOpt == null) {
+            return
         }
 
-        val optBool = optBoolClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
         val valField = optBoolClass.getDeclaredField("value_").apply { isAccessible = true }
-        valField.setBoolean(optBool, shuffleEnabled)
+        val uiShuffle = valField.getBoolean(currentOpt)
+        userShuffleState = uiShuffle
+        PreferencesManager.setBoolean(null, PrefKeys.KEY_SHUFFLE_STATE, uiShuffle)
 
-        shuffField.set(payload, optBool)
-        bitField.setInt(payload, currentBits or 4)
-
-        resetMemoizedSize(optBool)
+        if (uiShuffle) {
+            val optBool = optBoolClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
+            valField.setBoolean(optBool, true)
+            shuffField.set(payload, optBool)
+            bitField.setInt(payload, currentBits or 4)
+            resetMemoizedSize(optBool)
+        } else {
+            shuffField.set(payload, null)
+            bitField.setInt(payload, currentBits and 4.inv())
+        }
         resetMemoizedSize(payload)
-
-        dispatchSetShufflingContext(chain.getThisObject(), shuffleEnabled)
     }
 
-    private fun handlePlaybackSettingsSetShuffle(
-        chain: Chain,
-        payload: Any
-    ) {
+    private fun handlePlaybackSettingsSetShuffle(payload: Any) {
         val shuffleOnField = payload.javaClass.getDeclaredField("shuffleOn_").apply { isAccessible = true }
         if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
             val shuffleOn = isShuffleEnabled()
             shuffleOnField.setBoolean(payload, shuffleOn)
             val ceField = runCatching { payload.javaClass.getDeclaredField("contextEnhancement_") }.getOrNull()?.apply { isAccessible = true }
-            ceField?.setInt(payload, 0)
+            if (ceField != null) {
+                val currentCe = ceField.getInt(payload)
+                val smartShuffle = currentCe != 0
+                userSmartShuffleInModes = smartShuffle
+                PreferencesManager.setBoolean(null, PrefKeys.KEY_SMART_SHUFFLE_IN_MODES, smartShuffle)
+            }
             resetMemoizedSize(payload)
-            dispatchSetShufflingContext(chain.getThisObject(), shuffleOn)
-        }
-    }
-
-    private fun getTransport(client: Any): Any? {
-        var cls: Class<*>? = client.javaClass
-        while (cls != null && cls != Any::class.java) {
-            val field = runCatching { cls.getDeclaredField("transport") }.getOrNull()
-            if (field != null) {
-                field.isAccessible = true
-                return runCatching { field.get(client) }.getOrNull()
-            }
-            cls = cls.superclass
-        }
-        return null
-    }
-
-    private fun dispatchSetShufflingContext(client: Any?, shuffleOn: Boolean) {
-        runCatching {
-            val transport = (if (client != null) getTransport(client) else null)
-                ?.takeIf { !it.javaClass.name.contains("Cosmos") }
-                ?: nativeTransport
-            if (transport == null) return
-            val syncMethod = transport.javaClass.methods.firstOrNull {
-                it.name == "callSync" &&
-                    it.parameterCount == 3 &&
-                    it.parameterTypes[0] == String::class.java &&
-                    it.parameterTypes[1] == String::class.java &&
-                    it.parameterTypes[2] == ByteArray::class.java
-            } ?: transport.javaClass.interfaces.firstNotNullOfOrNull { iface ->
-                iface.methods.firstOrNull {
-                    it.name == "callSync" &&
-                        it.parameterCount == 3 &&
-                        it.parameterTypes[0] == String::class.java &&
-                        it.parameterTypes[1] == String::class.java &&
-                        it.parameterTypes[2] == ByteArray::class.java
-                }
-            }
-            if (syncMethod != null) {
-                syncMethod.isAccessible = true
-                val scPayload = if (shuffleOn) byteArrayOf(0x08, 0x01) else byteArrayOf(0x08, 0x00)
-                syncMethod.invoke(
-                    transport,
-                    "spotify.player.esperanto.proto.ContextPlayer",
-                    "SetShufflingContext",
-                    scPayload
-                )
-                val soPayload = if (shuffleOn) byteArrayOf(0x1a, 0x02, 0x08, 0x01) else byteArrayOf(0x1a, 0x02, 0x08, 0x00)
-                syncMethod.invoke(
-                    transport,
-                    "spotify.player.esperanto.proto.ContextPlayer",
-                    "SetOptions",
-                    soPayload
-                )
-            }
         }
     }
 

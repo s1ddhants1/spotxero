@@ -162,6 +162,7 @@ fun AppTheme(
         colorScheme = colorScheme,
         typography = AppTypography,
         shapes = AppShapes,
-        content = content
-    )
+    ) {
+        app.spotxero.ui.haptics.AppHapticsProvider(content = content)
+    }
 }

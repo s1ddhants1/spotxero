@@ -22,6 +22,9 @@ object AdResponseHook {
     private val BLOCKED_INSTREAM_STREAMS = setOf("SubInStream", "SubBreakChanged")
 
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
         hookGetAdsWrapper(module)
         hookEsperantoSingles(module)
         hookEsperantoStreams(module)

@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.spotxero.R
 import app.spotxero.ui.theme.AppIcons
+import app.spotxero.ui.theme.AppSpacing
 
 @Composable
 fun AppQuickControls(
@@ -41,7 +42,7 @@ fun AppQuickControls(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = AppSpacing.md, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             FilledTonalButton(

@@ -5,7 +5,6 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -56,13 +55,14 @@ private val CONTRIBUTORS = listOf(
     )
 )
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AboutSettingsPage() {
+fun AboutSettingsPage(
+    modifier: Modifier = Modifier
+) {
     val uriHandler = LocalUriHandler.current
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(horizontal = AppSpacing.md)
             .verticalScroll(rememberScrollState()),
@@ -162,7 +162,7 @@ private fun ContributorItemRow(
         }
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.xxs),
             verticalAlignment = Alignment.CenterVertically
         ) {
             contributor.githubUrl?.let { url ->

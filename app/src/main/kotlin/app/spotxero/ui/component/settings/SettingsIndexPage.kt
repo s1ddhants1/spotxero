@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import app.spotxero.ui.theme.AppIcons
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -32,12 +30,13 @@ import app.spotxero.ui.viewmodel.SettingsSubpage
 
 @Composable
 fun SettingsIndexPage(
-    onNavigateToSubpage: (SettingsSubpage) -> Unit
+    onNavigateToSubpage: (SettingsSubpage) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val uriHandler = LocalUriHandler.current
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(horizontal = AppSpacing.md)
             .verticalScroll(rememberScrollState()),
@@ -53,7 +52,7 @@ fun SettingsIndexPage(
         )
 
         SettingsCategoryCard(
-            icon = Icons.Filled.Info,
+            icon = AppIcons.Info,
             title = stringResource(R.string.title_about),
             description = stringResource(R.string.about_category_desc),
             onClick = { onNavigateToSubpage(SettingsSubpage.ABOUT) }

@@ -10,6 +10,10 @@ import java.lang.reflect.Method
 object OnDemandInFreeHook {
 
     fun install(module: XposedModule) {
+        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+            return
+        }
+
         val methods = DexKitResolver.get<List<Method>>(DexKitResolver.KEY_ON_DEMAND_IN_FREE_GETTERS)
         if (methods.isNullOrEmpty()) {
             return
