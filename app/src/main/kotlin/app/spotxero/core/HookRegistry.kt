@@ -84,10 +84,7 @@ object HookRegistry {
             HookEntry("PlayerAdCards", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PlayerAdCardsHook.install(module) },
             HookEntry("ContextMenuAdBlock", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { ContextMenuAdBlockHook.install(module) },
             HookEntry("Pendragon", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PendragonHook.install(module) },
-            HookEntry("ContentFilter", {
-                PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_PODCASTS, false) ||
-                    PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_AUDIOBOOKS, false)
-            }) { ContentFilterHook.install(module) },
+            HookEntry("ContentFilter", { true }) { ContentFilterHook.install(module) },
             HookEntry("SpotifyAmoled", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_AMOLED, false) }) { SpotifyAmoledHook.install(module) },
             HookEntry("SpotifyMonet", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_MONET, false) }) { SpotifyMonetHook.install(module) },
             HookEntry("SpotifyRoundyUI", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_ROUNDY_UI, false) }) { SpotifyRoundyUIHook.install(module) },
