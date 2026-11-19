@@ -229,7 +229,7 @@ jobs:
 
   publish_nightly:
     name: Publish Nightly Release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [build_release, build_debug]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -250,7 +250,7 @@ jobs:
 
           PREVIOUS_NIGHTLY_SHA=$(gh release view nightly --json targetCommitish --jq .targetCommitish 2>/dev/null || true)
           {
-            echo "Automated prerelease built from ${GITHUB_REF_NAME:-dev} at commit $GITHUB_SHA. It may be unstable."
+            echo "Automated prerelease built from ${GITHUB_REF_NAME:-main} at commit $GITHUB_SHA. It may be unstable."
             if [ -n "$PREVIOUS_NIGHTLY_SHA" ] && [ "$PREVIOUS_NIGHTLY_SHA" != "$GITHUB_SHA" ]; then
               echo
               echo "## Changes since previous nightly"
