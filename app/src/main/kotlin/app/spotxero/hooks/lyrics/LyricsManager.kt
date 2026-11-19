@@ -102,8 +102,8 @@ object LyricsManager {
         }
     }
 
-    private fun buildCacheKey(title: String, artist: String, album: String? = null): String {
-        val transKey = if (PreferencesManager.isEnabled(PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, false)) {
+    private fun buildTranslationKey(): String {
+        return if (PreferencesManager.isEnabled(PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, false)) {
             val prompt = PreferencesManager.aiTranslationCustomPrompt.trim()
             val baseUrl = PreferencesManager.aiTranslationBaseUrl.trim()
             val formality = PreferencesManager.aiTranslationDeeplFormality.ifBlank { "default" }
@@ -116,25 +116,43 @@ object LyricsManager {
         } else {
             "orig"
         }
+    }
+
+    private fun buildProviderKey(): String {
+        val order = PreferencesManager.lyricsProvidersOrder
+            .split(",")
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+        val activeProviders = order.filter { providerId ->
+            when (providerId) {
+                "betterlyrics" -> PreferencesManager.isBetterlyricsEnabled
+                "lrcred" -> PreferencesManager.isLrcredEnabled
+                "lrclib" -> PreferencesManager.isLrclibEnabled
+                "kugou" -> PreferencesManager.isKugouEnabled
+                "netease" -> PreferencesManager.isNeteaseEnabled
+                "genius" -> PreferencesManager.isGeniusEnabled
+                else -> false
+            }
+        }
+        return activeProviders.joinToString(",")
+    }
+
+    private fun buildCacheKey(title: String, artist: String, album: String? = null): String {
+        val transKey = buildTranslationKey()
+        val provKey = buildProviderKey()
         val albumPart = album?.trim()?.takeIf { it.isNotEmpty() }?.let { "::$it" } ?: ""
-        return "$title::$artist$albumPart::$transKey".lowercase()
+        return "$title::$artist$albumPart::$provKey::$transKey".lowercase()
     }
 
     private fun buildTrackKey(trackId: String): String {
-        val transKey = if (PreferencesManager.isEnabled(PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, false)) {
-            val prompt = PreferencesManager.aiTranslationCustomPrompt.trim()
-            val baseUrl = PreferencesManager.aiTranslationBaseUrl.trim()
-            val formality = PreferencesManager.aiTranslationDeeplFormality.ifBlank { "default" }
-            val promptHash = if (prompt.isNotEmpty() || baseUrl.isNotEmpty()) {
-                "$baseUrl|$prompt".hashCode().toString()
-            } else {
-                "default"
-            }
-            "${PreferencesManager.aiTranslationTargetLang}:${PreferencesManager.aiTranslationTranslateMode}:${PreferencesManager.isAiTranslationDualLine}:${PreferencesManager.aiTranslationProvider}:${PreferencesManager.aiTranslationModel}:$formality:$promptHash"
-        } else {
-            "orig"
-        }
-        return "track:$trackId::$transKey".lowercase()
+        val transKey = buildTranslationKey()
+        val provKey = buildProviderKey()
+        return "track:$trackId::$provKey::$transKey".lowercase()
+    }
+
+    fun clearCache() {
+        parsedCache.clear()
+        inFlightFetches.clear()
     }
 
     fun getLyrics(trackId: String? = null): CachedLyrics? {
