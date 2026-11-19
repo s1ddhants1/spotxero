@@ -77,7 +77,7 @@ object LyricsManager {
 
             Log.d(TAG, "Current track updated: $title by $artist (id=$currentTrackId, $durationSec s)")
 
-            val cacheKey = buildCacheKey(title, artist ?: "")
+            val cacheKey = buildCacheKey(title, artist ?: "", album)
             val trackKey = currentTrackId?.let { buildTrackKey(it) }
             if (PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false) && parsedCache[cacheKey] == null && (trackKey == null || parsedCache[trackKey] == null)) {
                 if (pendingFetches.add(cacheKey)) {
@@ -93,8 +93,8 @@ object LyricsManager {
         }
     }
 
-    private fun buildCacheKey(title: String, artist: String): String {
-        val transKey = if (PreferencesManager.isAiLyricsTranslationEnabled) {
+    private fun buildCacheKey(title: String, artist: String, album: String? = null): String {
+        val transKey = if (PreferencesManager.isEnabled(PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, false)) {
             val prompt = PreferencesManager.aiTranslationCustomPrompt.trim()
             val baseUrl = PreferencesManager.aiTranslationBaseUrl.trim()
             val formality = PreferencesManager.aiTranslationDeeplFormality.ifBlank { "default" }
@@ -107,11 +107,12 @@ object LyricsManager {
         } else {
             "orig"
         }
-        return "$title::$artist::$transKey".lowercase()
+        val albumPart = album?.trim()?.takeIf { it.isNotEmpty() }?.let { "::$it" } ?: ""
+        return "$title::$artist$albumPart::$transKey".lowercase()
     }
 
     private fun buildTrackKey(trackId: String): String {
-        val transKey = if (PreferencesManager.isAiLyricsTranslationEnabled) {
+        val transKey = if (PreferencesManager.isEnabled(PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, false)) {
             val prompt = PreferencesManager.aiTranslationCustomPrompt.trim()
             val baseUrl = PreferencesManager.aiTranslationBaseUrl.trim()
             val formality = PreferencesManager.aiTranslationDeeplFormality.ifBlank { "default" }
@@ -145,12 +146,16 @@ object LyricsManager {
             if (oembedMeta != null) {
                 title = oembedMeta.first
                 artist = oembedMeta.second
+                album = null
+                durationSec = null
+            } else if (currentTrackId != trackId) {
+                return null
             }
         }
 
         if (title.isNullOrBlank()) return null
 
-        val cacheKey = buildCacheKey(title, artist)
+        val cacheKey = buildCacheKey(title, artist, album)
         parsedCache[cacheKey]?.let {
             if (trackKey != null) parsedCache[trackKey] = it
             return it
@@ -225,14 +230,15 @@ object LyricsManager {
                 )
                 Log.i(TAG, "Provider ${provider.displayName} returned ${lyrics?.lines?.size ?: 0} lines")
                 if (lyrics != null && lyrics.lines.isNotEmpty()) {
-                    val finalLyrics = if (PreferencesManager.isAiLyricsTranslationEnabled) {
+                    val aiTransEnabled = PreferencesManager.isEnabled(PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, false)
+                    val finalLyrics = if (aiTransEnabled) {
                         Log.i(TAG, "AI translation is enabled. Translating ${lyrics.lines.size} lines...")
                         AiLyricsTranslator.translateLyrics(lyrics, cacheKey)
                     } else {
                         Log.i(TAG, "AI translation is disabled.")
                         lyrics
                     }
-                    val lang = if (PreferencesManager.isAiLyricsTranslationEnabled) {
+                    val lang = if (aiTransEnabled) {
                         PreferencesManager.aiTranslationTargetLang.ifBlank { "en" }
                     } else {
                         if (LyricsProtobuf.isRtlText(lyrics.lines.joinToString(" ") { it.words })) "ar" else "en"

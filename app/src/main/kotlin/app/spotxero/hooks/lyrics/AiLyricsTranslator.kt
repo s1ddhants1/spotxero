@@ -34,8 +34,9 @@ object AiLyricsTranslator {
     private val freeModelSessions = ConcurrentHashMap<String, FreeModelSession>()
 
     fun translateLyrics(lyrics: ParsedLyrics, trackKey: String? = null): ParsedLyrics {
-        Log.i(TAG, "translateLyrics called: enabled=${PreferencesManager.isAiLyricsTranslationEnabled}, lines=${lyrics.lines.size}, trackKey=$trackKey")
-        if (!PreferencesManager.isAiLyricsTranslationEnabled) return lyrics
+        val enabled = PreferencesManager.isEnabled(PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, false)
+        Log.i(TAG, "translateLyrics called: enabled=$enabled, lines=${lyrics.lines.size}, trackKey=$trackKey")
+        if (!enabled) return lyrics
         if (lyrics.lines.isEmpty()) return lyrics
 
         val provider = PreferencesManager.aiTranslationProvider.ifBlank { "OpenRouter" }

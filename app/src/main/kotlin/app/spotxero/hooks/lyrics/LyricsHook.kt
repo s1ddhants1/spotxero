@@ -308,7 +308,7 @@ object LyricsHook {
 
                     val externalEnabled = PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false)
                     val force = PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_EXTERNAL_LYRICS, false)
-                    val aiTranslationEnabled = PreferencesManager.isAiLyricsTranslationEnabled
+                    val aiTranslationEnabled = PreferencesManager.isEnabled(PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, false)
 
                     val trackId = if (url.contains("/track/")) {
                         url.substringAfter("/track/").substringBefore("?").substringBefore("/")
