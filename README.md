@@ -69,9 +69,12 @@ Compiled APKs are output to `app/build/outputs/apk/release/` and `app/build/outp
 
 - **Telegram Group**: Join [@SpotXero](https://t.me/SpotXero) for discussion, announcements, and support.
 
-## Credits & License
+## Credits & Attributions
 
 - **Author**: [s1ddhants1](https://github.com/s1ddhants1)
+- **[Metrolist](https://github.com/metrolistgroup/metrolist)**: Third-party lyrics providers & UI, AI lyrics translation, and double-tap artwork to seek.
+- **[ReVanced](https://github.com/revanced)**: Force local volume and unlimited lyrics.
+- **[TheWinner02/ReVancedXposed_Spotify](https://github.com/TheWinner02/ReVancedXposed_Spotify)**: Monet dynamic theming and RoundyUI hooks.
 - **Frameworks**: [LibXposed](https://github.com/libxposed), [LSPosed](https://github.com/LSPosed/LSPosed)
 - **License**: [MIT License](LICENSE)
 
