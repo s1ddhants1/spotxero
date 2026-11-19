@@ -72,7 +72,7 @@ object LyricsManager {
 
             val cacheKey = buildCacheKey(title, artist ?: "")
             val trackKey = currentTrackId?.let { buildTrackKey(it) }
-            if (parsedCache[cacheKey] == null && (trackKey == null || parsedCache[trackKey] == null)) {
+            if (PreferencesManager.isExternalLyricsEnabled && parsedCache[cacheKey] == null && (trackKey == null || parsedCache[trackKey] == null)) {
                 if (pendingFetches.add(cacheKey)) {
                     prefetchExecutor.execute {
                         try {
@@ -105,6 +105,7 @@ object LyricsManager {
     }
 
     fun getLyrics(trackId: String? = null): CachedLyrics? {
+        if (!PreferencesManager.isExternalLyricsEnabled) return null
         val trackKey = trackId?.let { buildTrackKey(it) }
         if (trackKey != null) {
             parsedCache[trackKey]?.let { return it }
@@ -136,6 +137,7 @@ object LyricsManager {
     }
 
     fun getLyricsProto(trackId: String? = null): ByteArray? {
+        if (!PreferencesManager.isExternalLyricsEnabled) return null
         val trackKey = trackId?.let { buildTrackKey(it) }
         if (trackKey != null) {
             val persistent = PersistentLyricsCache.getProtobuf(trackKey)
