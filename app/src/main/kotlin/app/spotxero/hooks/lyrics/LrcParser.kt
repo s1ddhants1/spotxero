@@ -113,28 +113,45 @@ object LrcParser {
     }
 
     fun parseTimestampTag(tag: String): Long {
-        val trimmed = tag.trim()
-        val colon = trimmed.indexOf(':')
-        if (colon < 0) {
-            return trimmed.toLongOrNull() ?: 0L
-        }
-        val min = trimmed.substring(0, colon).toLongOrNull() ?: 0L
-        val rest = trimmed.substring(colon + 1)
-        val dot = rest.indexOfFirst { it == '.' || it == ':' }
-        val (sec, ms) = if (dot >= 0) {
-            val s = rest.substring(0, dot).toLongOrNull() ?: 0L
-            val frac = rest.substring(dot + 1)
-            val m = when {
-                frac.isEmpty() -> 0L
-                frac.length == 1 -> (frac.toLongOrNull() ?: 0L) * 100
-                frac.length == 2 -> (frac.toLongOrNull() ?: 0L) * 10
-                else -> frac.take(3).toLongOrNull() ?: 0L
+        val trimmed = tag.trim().removePrefix("[").removeSuffix("]").removePrefix("<").removeSuffix(">").removeSuffix("s")
+        val parts = trimmed.split(':')
+        return when (parts.size) {
+            3 -> {
+                val hours = parts[0].toLongOrNull() ?: 0L
+                val minutes = parts[1].toLongOrNull() ?: 0L
+                val secParts = parts[2].split('.', ',')
+                val seconds = secParts[0].toLongOrNull() ?: 0L
+                val ms = if (secParts.size > 1) {
+                    val frac = secParts[1]
+                    when {
+                        frac.isEmpty() -> 0L
+                        frac.length == 1 -> (frac.toLongOrNull() ?: 0L) * 100
+                        frac.length == 2 -> (frac.toLongOrNull() ?: 0L) * 10
+                        else -> frac.take(3).toLongOrNull() ?: 0L
+                    }
+                } else 0L
+                (hours * 3600 + minutes * 60 + seconds) * 1000 + ms
             }
-            s to m
-        } else {
-            (rest.toLongOrNull() ?: 0L) to 0L
+            2 -> {
+                val minutes = parts[0].toLongOrNull() ?: 0L
+                val secParts = parts[1].split('.', ',')
+                val seconds = secParts[0].toLongOrNull() ?: 0L
+                val ms = if (secParts.size > 1) {
+                    val frac = secParts[1]
+                    when {
+                        frac.isEmpty() -> 0L
+                        frac.length == 1 -> (frac.toLongOrNull() ?: 0L) * 100
+                        frac.length == 2 -> (frac.toLongOrNull() ?: 0L) * 10
+                        else -> frac.take(3).toLongOrNull() ?: 0L
+                    }
+                } else 0L
+                (minutes * 60 + seconds) * 1000 + ms
+            }
+            else -> {
+                val sec = trimmed.toDoubleOrNull() ?: 0.0
+                (sec * 1000).toLong()
+            }
         }
-        return (min * 60 + sec) * 1000 + ms
     }
 
     private fun parseWordTimestamps(rawText: String, lineStartTimeMs: Long): Pair<String, List<LyricSyllable>> {
@@ -240,9 +257,26 @@ object LrcParser {
     }
 
     private fun parseTtmlTime(timeStr: String): Long {
-        val trimmed = timeStr.trim()
+        val trimmed = timeStr.trim().removeSuffix("s")
         if (trimmed.isEmpty()) return 0L
         if (trimmed.contains(':')) {
+            val parts = trimmed.split(':')
+            if (parts.size >= 3) {
+                val hours = parts[0].toLongOrNull() ?: 0L
+                val minutes = parts[1].toLongOrNull() ?: 0L
+                val secParts = parts[2].split('.', ',')
+                val seconds = secParts[0].toLongOrNull() ?: 0L
+                val ms = if (secParts.size > 1) {
+                    val frac = secParts[1]
+                    when {
+                        frac.isEmpty() -> 0L
+                        frac.length == 1 -> (frac.toLongOrNull() ?: 0L) * 100
+                        frac.length == 2 -> (frac.toLongOrNull() ?: 0L) * 10
+                        else -> frac.take(3).toLongOrNull() ?: 0L
+                    }
+                } else 0L
+                return (hours * 3600 + minutes * 60 + seconds) * 1000 + ms
+            }
             return parseTimestampTag(trimmed)
         }
         val sec = trimmed.toDoubleOrNull() ?: 0.0
