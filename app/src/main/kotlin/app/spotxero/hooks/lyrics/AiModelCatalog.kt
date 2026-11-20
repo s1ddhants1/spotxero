@@ -98,26 +98,6 @@ object AiModelCatalog {
         return "${preset.id}|$baseUrl|$credentialHash"
     }
 
-    suspend fun validatedModel(
-        preset: AiProviderPreset,
-        apiKey: String,
-        baseUrl: String,
-        savedModel: String,
-    ): String {
-        val effectiveBaseUrl =
-            if (preset.id == "Gemini" && baseUrl == AiProviderPresets.LEGACY_GEMINI_ENDPOINT) {
-                preset.endpoint
-            } else {
-                baseUrl
-            }
-        if (!preset.isAi || preset.editableEndpoint || effectiveBaseUrl != preset.endpoint) return savedModel
-        val models = models(preset, apiKey, effectiveBaseUrl).getOrNull() ?: return savedModel
-        val ids = lock.withLock { availableIds[cacheKey(preset, apiKey, effectiveBaseUrl)] } ?: return savedModel
-        if (ids.isEmpty() || savedModel in ids) return savedModel
-        val candidates = models.filter { it.id in ids }
-        return defaultModel(preset, candidates, freeOnly = savedModel.endsWith(":free")) ?: savedModel
-    }
-
     suspend fun throughput(modelId: String): Double? = withContext(Dispatchers.IO) {
         lock.withLock { if (throughputCache.containsKey(modelId)) return@withContext throughputCache[modelId] }
         val value = try {

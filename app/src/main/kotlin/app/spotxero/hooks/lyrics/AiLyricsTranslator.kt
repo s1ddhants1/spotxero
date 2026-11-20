@@ -14,12 +14,6 @@ import java.net.URL
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-data class LyricsAiResult(
-    val translatedLines: List<String>? = null,
-    val romanizedLines: List<String>? = null,
-    val romanizedWordsPerLine: List<List<String>?>? = null,
-)
-
 object AiLyricsTranslator {
 
     private const val TAG = "SpotXero.AiLyrics"

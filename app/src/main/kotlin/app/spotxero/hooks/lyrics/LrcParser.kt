@@ -22,10 +22,7 @@ enum class SyncType {
 data class ParsedLyrics(
     val syncType: SyncType,
     val lines: List<LyricLine>
-) {
-    val isSynced: Boolean
-        get() = syncType != SyncType.UNSYNCED
-}
+)
 
 object LrcParser {
 

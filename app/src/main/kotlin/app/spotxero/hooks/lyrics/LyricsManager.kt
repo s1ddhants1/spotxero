@@ -4,7 +4,6 @@ import android.media.MediaMetadata
 import android.util.Log
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -239,11 +238,6 @@ object LyricsManager {
         return proto
     }
 
-    fun getLyricsJson(trackId: String? = null): String? {
-        val cached = getLyrics(trackId) ?: return null
-        return buildSpotifyLyricsJson(cached.lyrics, cached.providerDisplayName)
-    }
-
     private fun fetchAndCache(
         title: String,
         artist: String,
@@ -337,57 +331,5 @@ object LyricsManager {
         } catch (_: Throwable) {
             null
         }
-    }
-
-    fun buildSpotifyLyricsJson(lyrics: ParsedLyrics, providerName: String): String {
-        val root = JSONObject()
-        val lyricsObj = JSONObject()
-
-        val syncTypeName = when (lyrics.syncType) {
-            SyncType.SYLLABLE_SYNCED -> "LINE_SYNCED" // Spotify client requires LINE_SYNCED or UNSYNCED
-            SyncType.LINE_SYNCED -> "LINE_SYNCED"
-            SyncType.UNSYNCED -> "UNSYNCED"
-        }
-        lyricsObj.put("syncType", syncTypeName)
-
-        val linesArray = JSONArray()
-        for (line in lyrics.lines) {
-            val lineObj = JSONObject()
-            lineObj.put("startTimeMs", line.startTimeMs.toString())
-            lineObj.put("words", line.words)
-
-            val syllablesArray = JSONArray()
-            for (syllable in line.syllables) {
-                val sylObj = JSONObject()
-                sylObj.put("startTimeMs", syllable.startTimeMs.toString())
-                sylObj.put("numChars", syllable.numChars)
-                syllablesArray.put(sylObj)
-            }
-            lineObj.put("syllables", syllablesArray)
-
-            linesArray.put(lineObj)
-        }
-        lyricsObj.put("lines", linesArray)
-        lyricsObj.put("provider", providerName)
-        lyricsObj.put("providerLyricsId", "0")
-        lyricsObj.put("providerDisplayName", "$providerName (SpotXero)")
-        lyricsObj.put("syncLyricsUri", "")
-        lyricsObj.put("isDenseTypeface", false)
-        lyricsObj.put("alternatives", JSONArray())
-        lyricsObj.put("language", "en")
-        lyricsObj.put("isRtlLanguage", false)
-        lyricsObj.put("fullscreenAction", "FULLSCREEN_LYRICS")
-        lyricsObj.put("showUpsell", false)
-
-        root.put("lyrics", lyricsObj)
-
-        val colorsObj = JSONObject()
-        colorsObj.put("background", -16777216)
-        colorsObj.put("text", -1)
-        colorsObj.put("highlightText", -16711936)
-        root.put("colors", colorsObj)
-        root.put("hasVocalRemoval", false)
-
-        return root.toString()
     }
 }
