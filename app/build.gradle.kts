@@ -7,8 +7,8 @@ plugins {
 }
 
 val versionMajor = 2
-val versionMinor = 0
-val versionPatch = 2
+val versionMinor = 1
+val versionPatch = 0
 
 val isNightly = project.hasProperty("nightly") ||
     System.getenv("NIGHTLY") == "true" ||
@@ -26,6 +26,7 @@ val appVersionName = (project.findProperty("appVersionName") as? String)
 android {
     namespace = "app.spotxero"
     compileSdk = 37
+    compileSdkMinor = 1
     defaultConfig {
         applicationId = "app.spotxero"
         minSdk = 26
