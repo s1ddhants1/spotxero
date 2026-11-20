@@ -43,12 +43,9 @@ object ContextMenuAdBlockHook {
                         val filteredItems = rawItems.filterNot { item ->
                             isAdContextMenuItem(item)
                         }
-                        if (filteredItems.size != rawItems.size) {
-                            val newArgs = arrayOf(
-                                chain.getArg(0),
-                                filteredItems,
-                                chain.getArg(2)
-                            )
+                        if (filteredItems.size != rawItems.size && chain.args.size > 1) {
+                            val newArgs = chain.args.toTypedArray()
+                            newArgs[1] = filteredItems
                             return@intercept chain.proceed(newArgs)
                         }
                     }

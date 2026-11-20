@@ -37,6 +37,7 @@ import io.github.libxposed.api.XposedModule
 import java.lang.ref.WeakReference
 import java.util.Collections
 import java.util.WeakHashMap
+import java.util.concurrent.ConcurrentHashMap
 
 object ArtworkSeekHook {
 
@@ -46,6 +47,7 @@ object ArtworkSeekHook {
         Collections.newSetFromMap(WeakHashMap<ViewGroup, Boolean>())
     )
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val resourceNames = ConcurrentHashMap<Int, String>()
 
     init {
         PreferencesManager.addOnPreferenceChangedListener {
@@ -181,6 +183,9 @@ object ArtworkSeekHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val result = chain.proceed()
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_DOUBLE_TAP_TO_SEEK, true)) {
+                    return@intercept result
+                }
                 val view = chain.getThisObject() as? View
                 if (view != null) {
                     attachOverlayIfTarget(view)
@@ -190,7 +195,7 @@ object ArtworkSeekHook {
     }
 
     private fun findArtworkContainer(view: View): ViewGroup? {
-        val resName = runCatching { view.resources.getResourceEntryName(view.id).lowercase() }.getOrDefault("")
+        val resName = resourceEntryName(view)
         val className = view.javaClass.name.lowercase()
 
         if (resName.contains("avatar") || resName.contains("face") || className.contains("faceview")) {
@@ -218,7 +223,7 @@ object ArtworkSeekHook {
 
         if (resName == "image" || resName == "cover_image") {
             val parent = view.parent as? View ?: return null
-            val parentRes = runCatching { parent.resources.getResourceEntryName(parent.id).lowercase() }.getOrDefault("")
+            val parentRes = resourceEntryName(parent)
             if (parentRes == "cover_art_container" || parentRes.contains("cover") || parentRes == "music_container") {
                 return view.parent as? ViewGroup
             }
@@ -235,6 +240,14 @@ object ArtworkSeekHook {
         val targetContainer = findArtworkContainer(view) ?: return
         candidateContainers.add(targetContainer)
         attachOverlay(targetContainer)
+    }
+
+    private fun resourceEntryName(view: View): String {
+        val id = view.id
+        if (id == View.NO_ID) return ""
+        return resourceNames.computeIfAbsent(id) {
+            runCatching { view.resources.getResourceEntryName(id).lowercase() }.getOrDefault("")
+        }
     }
 
     private fun attachOverlay(targetContainer: ViewGroup) {

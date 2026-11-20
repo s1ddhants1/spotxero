@@ -13,9 +13,7 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.LocalDate
 
 data class AiModelInfo(
     val id: String,
@@ -114,14 +112,12 @@ object AiModelCatalog {
             }
         if (!preset.isAi || preset.editableEndpoint || effectiveBaseUrl != preset.endpoint) return savedModel
         val models = models(preset, apiKey, effectiveBaseUrl).getOrNull() ?: return savedModel
-        // Only a successful provider response can prove a saved model has disappeared.
         val ids = lock.withLock { availableIds[cacheKey(preset, apiKey, effectiveBaseUrl)] } ?: return savedModel
         if (ids.isEmpty() || savedModel in ids) return savedModel
         val candidates = models.filter { it.id in ids }
         return defaultModel(preset, candidates, freeOnly = savedModel.endsWith(":free")) ?: savedModel
     }
 
-    /** Median output speed over the last 30 minutes for the fastest OpenRouter endpoint; null when unknown. */
     suspend fun throughput(modelId: String): Double? = withContext(Dispatchers.IO) {
         lock.withLock { if (throughputCache.containsKey(modelId)) return@withContext throughputCache[modelId] }
         val value = try {
@@ -159,8 +155,8 @@ object AiModelCatalog {
         return try {
             val headers = mutableMapOf<String, String>()
             if (preset.id == "OpenRouter" || url.contains("openrouter.ai")) {
-                headers["HTTP-Referer"] = "https://github.com/MetrolistGroup/Metrolist"
-                headers["X-Title"] = "Metrolist"
+                headers["HTTP-Referer"] = "https://github.com/s1ddhants1/SpotXero"
+                headers["X-Title"] = "SpotXero"
             }
             if (apiKey.isNotBlank()) {
                 when (preset.protocol) {
@@ -454,7 +450,7 @@ object AiModelCatalog {
     ): Boolean {
         if (status in listOf("deprecated", "preview", "alpha", "beta")) return false
         if (expiration == null) return true
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val today = LocalDate.now().toString()
         return expiration > today
     }
 

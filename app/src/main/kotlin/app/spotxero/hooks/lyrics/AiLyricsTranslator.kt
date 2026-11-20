@@ -384,7 +384,6 @@ object AiLyricsTranslator {
                         val aligned = if (linesAreAligned(lines, parsed)) {
                             parsed
                         } else {
-                            // Pad or truncate to match exact input line count
                             parsed.take(lineCount) + List((lineCount - parsed.size).coerceAtLeast(0)) { "" }
                         }
                         return Result.success(aligned)
@@ -617,8 +616,8 @@ object AiLyricsTranslator {
 
         val headers = mutableMapOf(
             "Content-Type" to "application/json",
-            "HTTP-Referer" to "https://github.com/MetrolistGroup/Metrolist",
-            "X-Title" to "Metrolist"
+            "HTTP-Referer" to "https://github.com/s1ddhants1/SpotXero",
+            "X-Title" to "SpotXero"
         )
         if (apiKey.isNotBlank()) {
             headers["Authorization"] = "Bearer ${apiKey.trim()}"

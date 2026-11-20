@@ -172,7 +172,6 @@ fun AiLyricsTranslationScreen(
     val isCustomEndpoint = currentPreset.group == AiProviderGroup.CUSTOM || currentPreset.editableEndpoint
     val modelsReady = openRouterApiKey.isNotBlank() || currentPreset.publicModelList || isCustomEndpoint
 
-    // Dialogs
     if (showSetupWizardDialog) {
         AiTranslationSetupDialog(
             currentApiKey = openRouterApiKey,
@@ -309,7 +308,6 @@ fun AiLyricsTranslationScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 32.dp),
     ) {
-        // Group 1: Setup
         MetrolistSettingsGroup(
             title = stringResource(R.string.ai_setup_title),
             topPadding = 8.dp,
@@ -323,7 +321,6 @@ fun AiLyricsTranslationScreen(
             )
         )
 
-        // Group 2: Runtime
         MetrolistSettingsGroup(
             title = stringResource(R.string.ai_runtime),
             items = listOf(
@@ -355,7 +352,6 @@ fun AiLyricsTranslationScreen(
             )
         )
 
-        // Group 3: Provider
         MetrolistSettingsGroup(
             title = stringResource(R.string.ai_provider),
             items = listOf(
@@ -369,7 +365,6 @@ fun AiLyricsTranslationScreen(
             )
         )
 
-        // Group 4: Connection (when not a keyless direct service)
         if (!directProvider) {
             MetrolistSettingsGroup(
                 title = stringResource(R.string.ai_connection),
@@ -467,7 +462,6 @@ fun AiLyricsTranslationScreen(
             )
         }
 
-        // Group 5: Models (Only for AI providers, when not direct service)
         if (currentPreset.isAi && !directProvider) {
             MetrolistSettingsGroup(
                 title = stringResource(R.string.ai_models),
@@ -484,7 +478,6 @@ fun AiLyricsTranslationScreen(
             )
         }
 
-        // Group 6: Prompt (Always present in Metrolist)
         val canEditPrompt = currentPreset.isAi && !directProvider && (openRouterApiKey.isNotBlank() || currentPreset.publicModelList || isCustomEndpoint)
         MetrolistSettingsGroup(
             title = stringResource(R.string.ai_prompt),
@@ -507,7 +500,6 @@ fun AiLyricsTranslationScreen(
             )
         )
 
-        // Group 7: Connection Test (Matches Metrolist AiLyricsConnectionTestSetting)
         if (!directProvider) {
             MetrolistSettingsGroup(
                 title = stringResource(R.string.ai_test_connection),
@@ -1235,7 +1227,7 @@ private fun AiTranslationSetupDialog(
     onDismiss: () -> Unit,
 ) {
     var step by rememberSaveable { mutableIntStateOf(0) }
-    var apiKey by rememberSaveable { mutableStateOf(currentApiKey) }
+    var apiKey by remember { mutableStateOf(currentApiKey) }
     var model by rememberSaveable { mutableStateOf(currentModel.ifBlank { AiProviderPresets.FREE_LYRICS_AI_MODEL }) }
     var language by rememberSaveable { mutableStateOf(currentLanguage) }
     val uriHandler = LocalUriHandler.current
