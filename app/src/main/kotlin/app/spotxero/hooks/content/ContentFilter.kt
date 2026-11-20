@@ -25,9 +25,10 @@ class ContentFilter private constructor(
             Log.w(tag, "Item identifier unresolved for ${itemClass.name}")
             return items
         }
-        return ProtoLists.filter(items) { item ->
+        val filtered = ProtoLists.filter(items) { item ->
             !isUri(getFieldValue(item, ITEM_IDENTIFIER_FIELD) as? String)
         }
+        return if (filtered.isNullOrEmpty()) items else filtered
     }
 
     fun filterHomeChips(chips: MutableList<*>) {
@@ -86,7 +87,8 @@ class ContentFilter private constructor(
 
     fun filterBrowseItems(items: List<*>?): List<*>? {
         if (items.isNullOrEmpty()) return items
-        return ProtoLists.filter(items) { item -> !isBrowseItem(item) }
+        val filtered = ProtoLists.filter(items) { item -> !isBrowseItem(item) }
+        return if (filtered.isNullOrEmpty()) items else filtered
     }
 
     fun filterBrowseSections(sections: List<*>?): List<*>? {
