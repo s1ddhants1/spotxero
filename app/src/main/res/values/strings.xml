@@ -98,10 +98,7 @@
     <string name="ai_lyrics_translation">AI lyrics translation</string>
     <string name="ai_provider">Provider</string>
     <string name="ai_base_url">Base URL</string>
-    <string name="ai_api_key">API key</string>
     <string name="ai_deepl_api_key">DeepL API key</string>
-    <string name="ai_model">Model</string>
-    <string name="ai_translation_mode">Translation mode</string>
     <string name="ai_target_language">Target language</string>
     <string name="ai_translation_literal">Translation</string>
     <string name="ai_translation_literal_desc">Translates the meaning into the target language</string>
@@ -111,7 +108,6 @@
     <string name="ai_deepl_formality_default">Default</string>
     <string name="ai_deepl_formality_more">More formal</string>
     <string name="ai_deepl_formality_less">Less formal</string>
-    <string name="ai_system_prompt">System prompt</string>
     <string name="configured">Configured</string>
     <string name="required">Required</string>
     <string name="ai_setup_title">Set up AI lyrics translation</string>
