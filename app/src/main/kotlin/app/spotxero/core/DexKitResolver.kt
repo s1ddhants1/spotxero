@@ -1485,9 +1485,23 @@ object DexKitResolver {
                 java.io.Closeable::class.java.isAssignableFrom(f.type) &&
                     java.lang.reflect.Modifier.isAbstract(f.type.modifiers)
             }?.type ?: return@runCatching null
-            responseBodyClass.declaredFields.firstOrNull {
+            val fromFields = responseBodyClass.declaredFields.firstOrNull {
                 it.type != responseBodyClass && responseBodyClass.isAssignableFrom(it.type)
             }?.type
+            if (fromFields != null) return@runCatching fromFields
+
+            dexKit.findClass {
+                matcher {
+                    superClass(responseBodyClass.name)
+                }
+            }.mapNotNull { data ->
+                runCatching { Class.forName(data.name, false, classLoader) }.getOrNull()
+            }.firstOrNull { cls ->
+                !java.lang.reflect.Modifier.isAbstract(cls.modifiers) &&
+                    cls.declaredConstructors.any { ctor ->
+                        ctor.parameterCount == 3 && ctor.parameterTypes[1] == Long::class.javaPrimitiveType
+                    }
+            }
         }.getOrNull()
         if (resolved == null) {
             Log.w(TAG, "$KEY_LYRICS_CONCRETE_BODY_CLASS: no validated match")

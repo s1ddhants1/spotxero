@@ -183,9 +183,10 @@ object LyricsHook {
         }
 
         try {
-            val concreteBodyClass = responseBodyClass.declaredFields.firstOrNull {
-                it.type != responseBodyClass && responseBodyClass.isAssignableFrom(it.type)
-            }?.type ?: DexKitResolver.get<Class<*>>(DexKitResolver.KEY_LYRICS_CONCRETE_BODY_CLASS)
+            val concreteBodyClass = DexKitResolver.get<Class<*>>(DexKitResolver.KEY_LYRICS_CONCRETE_BODY_CLASS)
+                ?: responseBodyClass.declaredFields.firstOrNull {
+                    it.type != responseBodyClass && responseBodyClass.isAssignableFrom(it.type)
+                }?.type
 
             if (concreteBodyClass == null) {
                 Log.w(TAG, "Concrete response body unresolved; third-party lyrics disabled")
