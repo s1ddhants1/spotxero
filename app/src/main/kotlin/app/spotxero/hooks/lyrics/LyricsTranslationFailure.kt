@@ -1,6 +1,5 @@
 package app.spotxero.hooks.lyrics
 
-import org.json.JSONArray
 import org.json.JSONObject
 
 enum class LyricsTranslationFailure {
