@@ -41,7 +41,7 @@ object PreferencesManager {
     var aiTranslationTranslateMode: String = "Literal"
     var aiTranslationDeeplApiKey: String = ""
     var aiTranslationDeeplFormality: String = "default"
-    var lyricsProvidersOrder: String = "betterlyrics,lrcred,lrclib,kugou,netease,genius"
+    var lyricsProvidersOrder: String = PrefKeys.DEFAULT_LYRICS_PROVIDERS_ORDER
     var isBetterlyricsEnabled: Boolean = true
     var isLrcredEnabled: Boolean = true
     var isLrclibEnabled: Boolean = true
@@ -160,9 +160,14 @@ object PreferencesManager {
         }.getOrNull()
     }
 
+    private val SECRET_KEYS = setOf(
+        PrefKeys.KEY_AI_TRANSLATION_API_KEY,
+        PrefKeys.KEY_AI_TRANSLATION_DEEPL_API_KEY
+    )
+
     private val changeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         if (key != null && key != "pref_force_stop") {
-            updateMemoryCache(prefs, key)
+            if (!updateMemoryCache(prefs, key)) return@OnSharedPreferenceChangeListener
             val lp = localPrefs
             if (lp != null && prefs != lp) {
                 if (prefs.contains(key)) {
@@ -226,6 +231,7 @@ object PreferencesManager {
         preferenceChangeCallbacks.clear()
         inMemoryBooleans.clear()
         inMemoryStrings.clear()
+        inMemoryInts.clear()
         Log.i(TAG, "Cleaned up PreferencesManager resources")
     }
 
@@ -339,7 +345,7 @@ object PreferencesManager {
         inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_DEEPL_API_KEY] = aiTranslationDeeplApiKey
         aiTranslationDeeplFormality = prefs.getString(PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY, "default") ?: "default"
         inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY] = aiTranslationDeeplFormality
-        lyricsProvidersOrder = prefs.getString(PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, "betterlyrics,lrcred,lrclib,kugou,netease,genius") ?: "betterlyrics,lrcred,lrclib,kugou,netease,genius"
+        lyricsProvidersOrder = prefs.getString(PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, PrefKeys.DEFAULT_LYRICS_PROVIDERS_ORDER) ?: PrefKeys.DEFAULT_LYRICS_PROVIDERS_ORDER
         inMemoryStrings[PrefKeys.KEY_LYRICS_PROVIDERS_ORDER] = lyricsProvidersOrder
         isBetterlyricsEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS, true)
         inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS] = isBetterlyricsEnabled
@@ -428,7 +434,7 @@ object PreferencesManager {
         val tp = getTargetPrefs()
         if (tp != null) {
             runCatching {
-                tp.edit().putBoolean(key, value).commit()
+                tp.edit().putBoolean(key, value).apply()
             }
         }
         val rp = remotePrefs
@@ -472,9 +478,9 @@ object PreferencesManager {
         inMemoryStrings[key] = value
         updateStringFieldDirectly(key, value)
         val tp = getTargetPrefs()
-        if (tp != null) {
+        if (tp != null && key !in SECRET_KEYS) {
             runCatching {
-                tp.edit().putString(key, value).commit()
+                tp.edit().putString(key, value).apply()
             }
         }
         val rp = remotePrefs
@@ -520,7 +526,7 @@ object PreferencesManager {
         val tp = getTargetPrefs()
         if (tp != null) {
             runCatching {
-                tp.edit().putInt(key, value).commit()
+                tp.edit().putInt(key, value).apply()
             }
         }
         val rp = remotePrefs
@@ -591,23 +597,17 @@ object PreferencesManager {
         }
     }
 
-    private fun updateMemoryCache(prefs: SharedPreferences, key: String) {
-        if (prefs.contains(key)) {
-            val all = prefs.all
-            when (val v = all[key]) {
-                is Boolean -> {
-                    inMemoryBooleans[key] = v
-                    updateFieldDirectly(key, v)
-                }
-                is String -> {
-                    inMemoryStrings[key] = v
-                    updateStringFieldDirectly(key, v)
-                }
-                is Int -> {
-                    inMemoryInts[key] = v
-                    updateIntFieldDirectly(key, v)
-                }
-            }
+    private fun updateMemoryCache(prefs: SharedPreferences, key: String): Boolean {
+        if (!prefs.contains(key)) return false
+        val value = prefs.all[key] ?: return false
+        return when (value) {
+            is Boolean -> (inMemoryBooleans.put(key, value) != value)
+                .also { updateFieldDirectly(key, value) }
+            is String -> (inMemoryStrings.put(key, value) != value)
+                .also { updateStringFieldDirectly(key, value) }
+            is Int -> (inMemoryInts.put(key, value) != value)
+                .also { updateIntFieldDirectly(key, value) }
+            else -> false
         }
     }
 

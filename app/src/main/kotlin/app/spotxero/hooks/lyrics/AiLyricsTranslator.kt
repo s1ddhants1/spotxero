@@ -384,7 +384,6 @@ object AiLyricsTranslator {
                         val aligned = if (linesAreAligned(lines, parsed)) {
                             parsed
                         } else {
-                            // Pad or truncate to match exact input line count
                             parsed.take(lineCount) + List((lineCount - parsed.size).coerceAtLeast(0)) { "" }
                         }
                         return Result.success(aligned)
@@ -398,7 +397,17 @@ object AiLyricsTranslator {
                     lastException = completionResult.exceptionOrNull()
                 }
             } catch (e: Exception) {
-                lastException = e
+                lastException = if (e is LyricsTranslationException) {
+                    e
+                } else {
+                    val failure = when (e) {
+                        is java.net.SocketTimeoutException -> LyricsTranslationFailure.TIMEOUT
+                        is java.net.UnknownHostException, is java.net.ConnectException -> LyricsTranslationFailure.NETWORK
+                        is java.io.IOException -> LyricsTranslationFailure.NETWORK
+                        else -> LyricsTranslationFailure.REQUEST_FAILED
+                    }
+                    LyricsTranslationException(failure, e.message ?: "Request failed (${e.javaClass.simpleName})", cause = e)
+                }
             }
 
             if (attempt < maxRetries - 1) {
@@ -483,7 +492,8 @@ object AiLyricsTranslator {
             return Result.failure(LyricsTranslationException(LyricsTranslationFailure.EMPTY_RESPONSE, "Gemini returned empty content: ${resp.body.take(200)}"))
         }
         val failure = classifyLyricsTranslationHttpFailure(resp.statusCode, resp.body, resp.headers)
-        return Result.failure(LyricsTranslationException(failure, "Gemini HTTP ${resp.statusCode}: ${resp.body.take(200)}", resp.statusCode, parseRetryAtMillis(resp.headers)))
+        val errMsg = extractErrorMessage(resp.statusCode, resp.body)
+        return Result.failure(LyricsTranslationException(failure, "Gemini HTTP ${resp.statusCode}: $errMsg", resp.statusCode, parseRetryAtMillis(resp.headers)))
     }
 
     private fun requestAnthropicCompatible(
@@ -539,7 +549,8 @@ object AiLyricsTranslator {
             return Result.failure(LyricsTranslationException(LyricsTranslationFailure.EMPTY_RESPONSE, "Anthropic returned empty content: ${resp.body.take(200)}"))
         }
         val failure = classifyLyricsTranslationHttpFailure(resp.statusCode, resp.body, resp.headers)
-        return Result.failure(LyricsTranslationException(failure, "Anthropic HTTP ${resp.statusCode}: ${resp.body.take(200)}", resp.statusCode, parseRetryAtMillis(resp.headers)))
+        val errMsg = extractErrorMessage(resp.statusCode, resp.body)
+        return Result.failure(LyricsTranslationException(failure, "Anthropic HTTP ${resp.statusCode}: $errMsg", resp.statusCode, parseRetryAtMillis(resp.headers)))
     }
 
     private fun requestOpenAiWithFallback(
@@ -605,8 +616,8 @@ object AiLyricsTranslator {
 
         val headers = mutableMapOf(
             "Content-Type" to "application/json",
-            "HTTP-Referer" to "https://github.com/MetrolistGroup/Metrolist",
-            "X-Title" to "Metrolist"
+            "HTTP-Referer" to "https://github.com/s1ddhants1/SpotXero",
+            "X-Title" to "SpotXero"
         )
         if (apiKey.isNotBlank()) {
             headers["Authorization"] = "Bearer ${apiKey.trim()}"
@@ -622,7 +633,8 @@ object AiLyricsTranslator {
                 continue
             } else {
                 val failure = classifyLyricsTranslationHttpFailure(resp.statusCode, resp.body, resp.headers)
-                return Result.failure(LyricsTranslationException(failure, "OpenAI HTTP ${resp.statusCode}: ${resp.body.take(200)}", resp.statusCode, parseRetryAtMillis(resp.headers)))
+                val errMsg = extractErrorMessage(resp.statusCode, resp.body)
+                return Result.failure(LyricsTranslationException(failure, "OpenAI HTTP ${resp.statusCode}: $errMsg", resp.statusCode, parseRetryAtMillis(resp.headers)))
             }
         }
 
@@ -667,7 +679,8 @@ object AiLyricsTranslator {
             val resp = executeHttpPost(endpoint, root.toString(), headers)
             if (resp.statusCode !in 200..299) {
                 val failure = classifyLyricsTranslationHttpFailure(resp.statusCode, resp.body, resp.headers)
-                return Result.failure(LyricsTranslationException(failure, "DeepL HTTP ${resp.statusCode}: ${resp.body.take(200)}", resp.statusCode))
+                val errMsg = extractErrorMessage(resp.statusCode, resp.body)
+                return Result.failure(LyricsTranslationException(failure, "DeepL HTTP ${resp.statusCode}: $errMsg", resp.statusCode))
             }
 
             val json = JSONObject(resp.body)
@@ -830,7 +843,8 @@ object AiLyricsTranslator {
         val resp = executeHttpPost(url, postData, headers)
         if (resp.statusCode !in 200..299) {
             val failure = classifyLyricsTranslationHttpFailure(resp.statusCode, resp.body, resp.headers)
-            throw LyricsTranslationException(failure, "Google Translate HTTP ${resp.statusCode}: ${resp.body.take(200)}", resp.statusCode)
+            val errMsg = extractErrorMessage(resp.statusCode, resp.body)
+            throw LyricsTranslationException(failure, "Google Translate HTTP ${resp.statusCode}: $errMsg", resp.statusCode)
         }
         val root = JSONArray(resp.body)
         val firstArr = root.optJSONArray(0) ?: return Pair("", null)
@@ -1157,7 +1171,11 @@ object AiLyricsTranslator {
         }
 
         val code = conn.responseCode
-        val responseHeaders = conn.headerFields ?: emptyMap()
+        val responseHeaders = conn.headerFields
+            ?.filterKeys { !it.isNullOrBlank() }
+            ?.mapNotNull { (k, v) -> if (k != null && v != null) k to v.filterNotNull() else null }
+            ?.toMap()
+            ?: emptyMap()
         val stream = if (code in 200..299) conn.inputStream else conn.errorStream
         val responseText = stream?.let {
             BufferedReader(InputStreamReader(it, Charsets.UTF_8)).use { reader -> reader.readText() }

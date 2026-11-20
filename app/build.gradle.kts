@@ -169,4 +169,6 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
 
     implementation(libs.coroutines.android)
+
+    testImplementation("junit:junit:4.13.2")
 }

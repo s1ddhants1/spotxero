@@ -59,14 +59,20 @@ object AdSectionFilter {
     private val adTypes = ConcurrentHashMap<Class<*>, Set<Int>>()
     private val defaultInstances = ConcurrentHashMap<Class<*>, Any>()
 
-    fun filterHome(sections: List<*>?): List<*>? =
-        filter(sections, HOME_SECTION, HOME_TYPE_FIELD, HOME_AD_FIELDS, inspectEmbeddedAds = true)
+    fun filterHome(sections: List<*>?): List<*>? {
+        val filtered = filter(sections, HOME_SECTION, HOME_TYPE_FIELD, HOME_AD_FIELDS, inspectEmbeddedAds = true)
+        return if (filtered.isNullOrEmpty()) sections else filtered
+    }
 
-    fun filterBrowse(sections: List<*>?): List<*>? =
-        filter(sections, BROWSE_SECTION, BROWSE_TYPE_FIELD, BROWSE_AD_FIELDS, inspectEmbeddedAds = true)
+    fun filterBrowse(sections: List<*>?): List<*>? {
+        val filtered = filter(sections, BROWSE_SECTION, BROWSE_TYPE_FIELD, BROWSE_AD_FIELDS, inspectEmbeddedAds = true)
+        return if (filtered.isNullOrEmpty()) sections else filtered
+    }
 
-    fun filterPlayer(sections: List<*>?): List<*>? =
-        filter(sections, PLAYER_SECTION, PLAYER_TYPE_FIELD, PLAYER_AD_FIELDS, inspectEmbeddedAds = false)
+    fun filterPlayer(sections: List<*>?): List<*>? {
+        val filtered = filter(sections, PLAYER_SECTION, PLAYER_TYPE_FIELD, PLAYER_AD_FIELDS, inspectEmbeddedAds = false)
+        return if (filtered.isNullOrEmpty()) sections else filtered
+    }
 
     private fun filter(
         sections: List<*>?,

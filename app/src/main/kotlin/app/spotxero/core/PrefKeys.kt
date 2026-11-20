@@ -112,6 +112,15 @@ object PrefKeys {
         "ko" to "한국어",
     )
     const val KEY_LYRICS_PROVIDERS_ORDER = "pref_lyrics_providers_order"
+    val DEFAULT_LYRICS_PROVIDERS = listOf(
+        "betterlyrics",
+        "lrcred",
+        "lrclib",
+        "kugou",
+        "netease",
+        "genius"
+    )
+    val DEFAULT_LYRICS_PROVIDERS_ORDER = DEFAULT_LYRICS_PROVIDERS.joinToString(",")
     const val KEY_LYRICS_PROVIDER_BETTERLYRICS = "pref_lyrics_provider_betterlyrics"
     const val KEY_LYRICS_PROVIDER_LRCRED = "pref_lyrics_provider_lrcred"
     const val KEY_LYRICS_PROVIDER_LRCLIB = "pref_lyrics_provider_lrclib"

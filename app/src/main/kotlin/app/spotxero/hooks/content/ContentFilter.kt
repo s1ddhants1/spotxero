@@ -25,24 +25,27 @@ class ContentFilter private constructor(
             Log.w(tag, "Item identifier unresolved for ${itemClass.name}")
             return items
         }
-        return ProtoLists.filter(items) { item ->
+        val filtered = ProtoLists.filter(items) { item ->
             !isUri(getFieldValue(item, ITEM_IDENTIFIER_FIELD) as? String)
         }
+        return if (filtered.isNullOrEmpty()) items else filtered
     }
 
     fun filterHomeChips(chips: MutableList<*>) {
-        val iterator = chips.iterator()
-        while (iterator.hasNext()) {
-            val item = iterator.next() ?: continue
-            if (isHomeChip(item)) {
-                iterator.remove()
-            } else {
-                for (f in item.javaClass.declaredFields) {
-                    if (List::class.java.isAssignableFrom(f.type)) {
-                        f.isAccessible = true
-                        val sub = f.get(item) as? MutableList<*>
-                        if (!sub.isNullOrEmpty()) {
-                            filterHomeChips(sub)
+        runCatching {
+            val iterator = chips.iterator()
+            while (iterator.hasNext()) {
+                val item = iterator.next() ?: continue
+                if (isHomeChip(item)) {
+                    runCatching { iterator.remove() }
+                } else {
+                    for (f in item.javaClass.declaredFields) {
+                        if (List::class.java.isAssignableFrom(f.type)) {
+                            f.isAccessible = true
+                            val sub = f.get(item) as? MutableList<*>
+                            if (!sub.isNullOrEmpty()) {
+                                filterHomeChips(sub)
+                            }
                         }
                     }
                 }
@@ -51,45 +54,51 @@ class ContentFilter private constructor(
     }
 
     fun filterSearchChips(chips: MutableList<*>) {
-        val iterator = chips.iterator()
-        while (iterator.hasNext()) {
-            val item = iterator.next() ?: continue
-            if (isSearchChip(item)) {
-                iterator.remove()
+        runCatching {
+            val iterator = chips.iterator()
+            while (iterator.hasNext()) {
+                val item = iterator.next() ?: continue
+                if (isSearchChip(item)) {
+                    runCatching { iterator.remove() }
+                }
             }
         }
     }
 
     fun filterSearchEntities(entities: MutableList<*>) {
-        val iterator = entities.iterator()
-        while (iterator.hasNext()) {
-            val item = iterator.next() ?: continue
-            var uri: String? = null
-            for (f in item.javaClass.declaredFields) {
-                if (f.type == String::class.java) {
-                    f.isAccessible = true
-                    uri = f.get(item) as? String
-                    break
+        runCatching {
+            val iterator = entities.iterator()
+            while (iterator.hasNext()) {
+                val item = iterator.next() ?: continue
+                var uri: String? = null
+                for (f in item.javaClass.declaredFields) {
+                    if (f.type == String::class.java) {
+                        f.isAccessible = true
+                        uri = f.get(item) as? String
+                        break
+                    }
                 }
-            }
-            if (isUri(uri)) {
-                iterator.remove()
+                if (isUri(uri)) {
+                    runCatching { iterator.remove() }
+                }
             }
         }
     }
 
     fun filterBrowseItems(items: List<*>?): List<*>? {
         if (items.isNullOrEmpty()) return items
-        return ProtoLists.filter(items) { item -> !isBrowseItem(item) }
+        val filtered = ProtoLists.filter(items) { item -> !isBrowseItem(item) }
+        return if (filtered.isNullOrEmpty()) items else filtered
     }
 
     fun filterBrowseSections(sections: List<*>?): List<*>? {
         if (sections.isNullOrEmpty()) return sections
-        return ProtoLists.filter(sections) { section ->
+        val filtered = ProtoLists.filter(sections) { section ->
             val sectionInfo = getFieldValue(section, "sectionInfo_")
             val sectionId = if (sectionInfo != null) (getFieldValue(sectionInfo, "sectionId_") as? String) ?: "" else ""
             !sectionId.contains(keyword, ignoreCase = true)
         }
+        return if (filtered.isNullOrEmpty()) sections else filtered
     }
 
     fun filterSectionTypes(sections: List<*>?): List<*>? {
@@ -100,7 +109,8 @@ class ContentFilter private constructor(
             Log.w(tag, "Section type field unresolved for ${sectionClass.name}")
             return sections
         }
-        return ProtoLists.filter(sections) { section -> !isSectionType(section) }
+        val filtered = ProtoLists.filter(sections) { section -> !isSectionType(section) }
+        return if (filtered.isNullOrEmpty()) sections else filtered
     }
 
     private fun isUri(uri: String?): Boolean {

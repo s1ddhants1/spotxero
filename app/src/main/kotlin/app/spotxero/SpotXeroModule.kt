@@ -34,13 +34,16 @@ class SpotXeroModule : XposedModule() {
     companion object {
         const val TAG = "SpotXero"
         const val ACTION_FORCE_STOP = "app.spotxero.FORCE_STOP"
+        const val FORCE_STOP_PERMISSION = "app.spotxero.permission.FORCE_STOP"
     }
 
     @Volatile
     private var appContext: Context? = null
 
-    private val activeActivities: MutableSet<Activity> = Collections.newSetFromMap(WeakHashMap())
-    private val activeServices: MutableSet<Service> = Collections.newSetFromMap(WeakHashMap())
+    private val activeActivities: MutableSet<Activity> =
+        Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap()))
+    private val activeServices: MutableSet<Service> =
+        Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap()))
 
     private fun resolveTargetContext(): Context? {
         return appContext ?: runCatching {
@@ -56,13 +59,15 @@ class SpotXeroModule : XposedModule() {
     private fun terminateProcess(context: Context?) {
         val ctx = context ?: resolveTargetContext()
 
-        for (activity in activeActivities.toList()) {
+        val activities = synchronized(activeActivities) { activeActivities.toList() }
+        for (activity in activities) {
             runCatching {
                 activity.finishAffinity()
                 activity.finishAndRemoveTask()
             }
         }
-        for (service in activeServices.toList()) {
+        val services = synchronized(activeServices) { activeServices.toList() }
+        for (service in services) {
             runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     service.stopForeground(Service.STOP_FOREGROUND_REMOVE)
@@ -105,9 +110,15 @@ class SpotXeroModule : XposedModule() {
         runCatching {
             val filter = IntentFilter(ACTION_FORCE_STOP)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                targetCtx.registerReceiver(forceStopReceiver, filter, Context.RECEIVER_EXPORTED)
+                targetCtx.registerReceiver(
+                    forceStopReceiver,
+                    filter,
+                    FORCE_STOP_PERMISSION,
+                    null,
+                    Context.RECEIVER_EXPORTED
+                )
             } else {
-                targetCtx.registerReceiver(forceStopReceiver, filter)
+                targetCtx.registerReceiver(forceStopReceiver, filter, FORCE_STOP_PERMISSION, null)
             }
         }
     }
@@ -282,6 +293,8 @@ class SpotXeroModule : XposedModule() {
                 classLoader = param.classLoader
             )
             log(Log.INFO, TAG, "Hooks injected")
+        }.onFailure { t ->
+            log(Log.ERROR, TAG, "Hook injection failed: ${t.message}", t)
         }
     }
 }

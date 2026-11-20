@@ -49,19 +49,19 @@ object SharingLinksUtil {
     fun sanitizeUrl(textOrUrl: String?): String? {
         if (textOrUrl.isNullOrEmpty()) return textOrUrl
 
-        // If the entire string is a single valid HTTP/HTTPS URI
         if (!textOrUrl.contains(' ') && (textOrUrl.startsWith("http://", ignoreCase = true) || textOrUrl.startsWith("https://", ignoreCase = true))) {
             return sanitizeSingleUri(textOrUrl)
         }
 
-        // If text contains Spotify URL(s), sanitize each matching URL in the text
         if (SPOTIFY_URL_REGEX.containsMatchIn(textOrUrl)) {
             return SPOTIFY_URL_REGEX.replace(textOrUrl) { matchResult ->
-                sanitizeSingleUri(matchResult.value)
+                val raw = matchResult.value
+                val trimmed = raw.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}')
+                val suffix = raw.substring(trimmed.length)
+                sanitizeSingleUri(trimmed) + suffix
             }
         }
 
-        // Handle schemeless links like open.spotify.com/...
         if (!textOrUrl.contains(' ') && (textOrUrl.startsWith("open.spotify.com/", ignoreCase = true) || textOrUrl.startsWith("spotify.link/", ignoreCase = true))) {
             val sanitized = sanitizeSingleUri("https://$textOrUrl")
             return if (sanitized.startsWith("https://", ignoreCase = true)) {

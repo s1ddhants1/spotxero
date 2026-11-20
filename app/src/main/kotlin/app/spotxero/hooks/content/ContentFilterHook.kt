@@ -54,7 +54,7 @@ object ContentFilterHook {
             .setId("hide_home_chips")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
-                filterHomeChips(chain.args[0])
+                filterHomeChips(chain.args.getOrNull(0))
                 val result = chain.proceed()
                 filterHomeChips(result)
                 result
@@ -67,7 +67,7 @@ object ContentFilterHook {
             .setId("hide_search_chips")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
-                val chips = chain.args[0] as? MutableList<*>
+                val chips = chain.args.getOrNull(0) as? MutableList<*>
                 if (chips != null) {
                     activeFilters().forEach { it.filterSearchChips(chips) }
                 }
@@ -143,7 +143,9 @@ object ContentFilterHook {
 
     private fun filterHomeChips(arg: Any?) {
         val chips = arg as? MutableList<*> ?: return
-        activeFilters().forEach { it.filterHomeChips(chips) }
+        val active = activeFilters()
+        if (active.isEmpty()) return
+        active.forEach { it.filterHomeChips(chips) }
     }
 
     private fun activeFilters(): List<ContentFilter> = FILTERS.mapNotNull { (prefKey, filter) ->

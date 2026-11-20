@@ -41,6 +41,7 @@ fun classifyLyricsTranslationHttpFailure(
     val type = metadata?.optString("error_type")?.takeIf { it.isNotEmpty() }
         ?: error?.optString("error_type")?.takeIf { it.isNotEmpty() }
         ?: error?.optString("type")?.takeIf { it.isNotEmpty() }
+        ?: root?.optString("type")?.takeIf { it.isNotEmpty() }
     val message = error?.optString("message", "")?.lowercase() ?: ""
     val code = error?.optInt("code", statusCode) ?: statusCode
 
@@ -49,17 +50,20 @@ fun classifyLyricsTranslationHttpFailure(
             LyricsTranslationFailure.DATA_POLICY
         }
 
-        type == "authentication" || code == 401 -> {
+        type.equals("authentication", ignoreCase = true) || code == 401 -> {
             LyricsTranslationFailure.AUTHENTICATION
         }
 
-        type == "payment_required" || code == 402 -> {
+        type.equals("payment_required", ignoreCase = true) || code == 402 -> {
             LyricsTranslationFailure.CREDIT_LIMIT
         }
 
-        type == "rate_limit_exceeded" || code == 429 -> {
+        type.equals("rate_limit_exceeded", ignoreCase = true) ||
+            type.equals("FreeUsageLimitError", ignoreCase = true) ||
+            code == 429 -> {
             when {
-                "free-models-per-day" in message || "daily" in message || "per day" in message -> {
+                "free-models-per-day" in message || "daily" in message || "per day" in message ||
+                    "free usage limit" in message || type.equals("FreeUsageLimitError", ignoreCase = true) -> {
                     LyricsTranslationFailure.FREE_DAILY_LIMIT
                 }
 
@@ -85,7 +89,7 @@ fun classifyLyricsTranslationHttpFailure(
             LyricsTranslationFailure.MODEL_UNAVAILABLE
         }
 
-        type == "timeout" || code == 408 || code == 504 -> {
+        type.equals("timeout", ignoreCase = true) || code == 408 || code == 504 -> {
             LyricsTranslationFailure.TIMEOUT
         }
 
@@ -105,4 +109,17 @@ fun parseRetryAtMillis(headers: Map<String, List<String>>, now: Long = System.cu
     if (retryAfter != null) return now + retryAfter * 1_000L
 
     return null
+}
+
+fun extractErrorMessage(statusCode: Int, responseBody: String): String {
+    val clean = runCatching {
+        val root = JSONObject(responseBody)
+        val choices = root.optJSONArray("choices")
+        val firstChoice = choices?.optJSONObject(0)
+        val error = root.optJSONObject("error") ?: firstChoice?.optJSONObject("error")
+        error?.optString("message")?.takeIf { it.isNotBlank() }
+            ?: root.optString("message").takeIf { it.isNotBlank() }
+            ?: root.optString("error").takeIf { it.isNotBlank() }
+    }.getOrNull()
+    return clean ?: responseBody.take(200)
 }

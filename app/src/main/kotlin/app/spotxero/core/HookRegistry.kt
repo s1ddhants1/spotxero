@@ -119,7 +119,12 @@ object HookRegistry {
                 System.loadLibrary("dexkit")
                 DexKitBridge.create(apkPath).use { dexKit ->
                     val signatures = DexKitResolver.resolve(dexKit, classLoader, cachedSignatures)
-                    if (signatures.isNotEmpty() && signatures != cachedSignatures) {
+                    if (signatures.isEmpty()) {
+                        throw IllegalStateException(
+                            "DexKit resolution produced no signatures for ${appInfo.packageName}"
+                        )
+                    }
+                    if (signatures != cachedSignatures) {
                         DexKitSignatureCache.saveToFile(appInfo, versionCode, signatures)
                     }
                 }
@@ -161,16 +166,21 @@ object HookRegistry {
                 HookEntry("Lyrics", { true }) { LyricsHook.install(module) },
             )
 
+            val failures = mutableListOf<String>()
             for (hook in hooks) {
                 if (hook.isEnabled() && installedHooks.add(hook.name)) {
-                    runCatching {
+                    try {
                         hook.install()
                         Log.i(TAG, "Installed hook: ${hook.name}")
-                    }.onFailure { t ->
+                    } catch (t: Throwable) {
                         installedHooks.remove(hook.name)
-                        Log.w(TAG, "Failed installing hook ${hook.name}: ${t.message}", t)
+                        failures += hook.name
+                        Log.e(TAG, "Failed installing hook ${hook.name}", t)
                     }
                 }
+            }
+            if (failures.isNotEmpty()) {
+                throw IllegalStateException("Hook installation failed: ${failures.joinToString()}")
             }
         }
     }

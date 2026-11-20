@@ -1,5 +1,6 @@
 package app.spotxero.hooks.player
 
+import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -9,6 +10,8 @@ import java.lang.reflect.Field
 import java.lang.reflect.Method
 
 object ProductStateHook {
+
+    private const val TAG = "SpotXero.ProductState"
 
     private val TYPED_SPOOFS: Map<String, Any> = mapOf(
         "ads" to false,
@@ -119,7 +122,11 @@ object ProductStateHook {
     }
 
     private fun installMapSeam(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_PRODUCT_STATE_MAP) ?: return
+        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_PRODUCT_STATE_MAP)
+        if (method == null) {
+            Log.w(TAG, "Product state map unresolved; map seam disabled")
+            return
+        }
 
         module.deoptimize(method)
         module.hook(method)
@@ -144,6 +151,7 @@ object ProductStateHook {
         val accessor = DexKitResolver.get<Method>(DexKitResolver.KEY_PRODUCT_STATE_ATTRIBUTE_OBJECTS)
         val valueField = DexKitResolver.get<Field>(DexKitResolver.KEY_PRODUCT_STATE_ATTRIBUTE_VALUE_FIELD)
         if (accessor == null || valueField == null) {
+            Log.w(TAG, "Product state attribute seam unresolved; disabled")
             return
         }
 
@@ -182,7 +190,11 @@ object ProductStateHook {
     }
 
     private fun installUcsAttributeSeam(module: XposedModule) {
-        val getter = DexKitResolver.get<Method>(DexKitResolver.KEY_UCS_ACCOUNT_ATTRIBUTES_GETTER) ?: return
+        val getter = DexKitResolver.get<Method>(DexKitResolver.KEY_UCS_ACCOUNT_ATTRIBUTES_GETTER)
+        if (getter == null) {
+            Log.w(TAG, "UCS account attributes getter unresolved; seam disabled")
+            return
+        }
         module.deoptimize(getter)
         module.hook(getter)
             .setId("ucs_account_attributes_getter")
@@ -262,7 +274,11 @@ object ProductStateHook {
     }
 
     private fun installRcsConfigurationSeam(module: XposedModule) {
-        val getter = DexKitResolver.get<Method>(DexKitResolver.KEY_RCS_CONFIGURATION_ASSIGNED_VALUES) ?: return
+        val getter = DexKitResolver.get<Method>(DexKitResolver.KEY_RCS_CONFIGURATION_ASSIGNED_VALUES)
+        if (getter == null) {
+            Log.w(TAG, "RCS assigned values getter unresolved; seam disabled")
+            return
+        }
         module.deoptimize(getter)
         module.hook(getter)
             .setId("rcs_configuration_assigned_values")

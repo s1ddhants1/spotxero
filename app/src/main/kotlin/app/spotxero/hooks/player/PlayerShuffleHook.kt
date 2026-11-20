@@ -3,6 +3,7 @@ package app.spotxero.hooks.player
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
+import android.util.Log
 import io.github.libxposed.api.XposedInterface.Chain
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
@@ -10,6 +11,8 @@ import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 
 object PlayerShuffleHook {
+
+    private const val TAG = "SpotXero.PlayerShuffle"
 
     private val BASE_SUPPRESSIONS = setOf("ad", "podcast_ad")
     private val SHUFFLE_OFF_SUPPRESSIONS = setOf("mft/force_shuffle")
@@ -285,11 +288,11 @@ object PlayerShuffleHook {
         } else {
             val overrideField = runCatching { builderObj.javaClass.getDeclaredField("playerOptionsOverride").apply { isAccessible = true } }.getOrNull()
             if (overrideField != null) {
-                val absent = runCatching {
-                    Class.forName("p.j5", false, cl).getDeclaredField("a").apply { isAccessible = true }.get(null)
-                }.getOrNull()
-                if (absent != null) {
+                val absent = DexKitResolver.get<Any>(DexKitResolver.KEY_OPTIONAL_ABSENT_INSTANCE)
+                if (absent != null && overrideField.type.isInstance(absent)) {
                     overrideField.set(builderObj, absent)
+                } else {
+                    Log.w(TAG, "Optional absent instance unavailable for ${overrideField.type.name}")
                 }
             }
         }

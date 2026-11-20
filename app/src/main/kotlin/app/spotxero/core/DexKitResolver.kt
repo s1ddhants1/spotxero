@@ -63,6 +63,7 @@ object DexKitResolver {
     const val KEY_RETROFIT_CREATE = "retrofit_create"
     const val KEY_CONTEXT_MENU_VIEW_MODEL_CTOR = "context_menu_view_model_ctor"
     const val KEY_LYRICS_CAP_STATUS_GETTER = "lyrics_cap_status_getter"
+    const val KEY_LYRICS_CONCRETE_BODY_CLASS = "lyrics_concrete_body_class"
     const val KEY_HOME_CHIPS_MAPPER = "home_chips_mapper"
     const val KEY_SEARCH_CHIPS_CTOR = "search_chips_ctor"
     const val KEY_SEARCH_RESPONSE_MAPPER = "search_response_mapper"
@@ -168,6 +169,7 @@ object DexKitResolver {
         resolveRetrofitCreate(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveContextMenuViewModelCtor(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveLyricsCapStatus(classLoader, cachedSignatures, signatures, members)
+        resolveLyricsConcreteBodyClass(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveHomeChipsMapper(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveSearchChips(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveVolumeKeyHandlers(dexKit, classLoader, cachedSignatures, signatures, members)
@@ -1466,6 +1468,48 @@ object DexKitResolver {
             method.parameterCount == 0 &&
             method.returnType.isEnum &&
             method.returnType.enumConstants?.any { (it as? Enum<*>)?.name == "UNCAPPED" } == true
+
+    private fun resolveLyricsConcreteBodyClass(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val cachedClass = cached?.get(KEY_LYRICS_CONCRETE_BODY_CLASS)
+            ?.let { name -> runCatching { Class.forName(name, false, classLoader) }.getOrNull() }
+        val resolved = cachedClass ?: runCatching {
+            val responseBuilderBuild = members[KEY_OKHTTP_RESPONSE_BUILDER_BUILD] as? Method ?: return@runCatching null
+            val builderClass = responseBuilderBuild.declaringClass
+            val responseBodyClass = builderClass.declaredFields.firstOrNull { f ->
+                java.io.Closeable::class.java.isAssignableFrom(f.type) &&
+                    java.lang.reflect.Modifier.isAbstract(f.type.modifiers)
+            }?.type ?: return@runCatching null
+            val fromFields = responseBodyClass.declaredFields.firstOrNull {
+                it.type != responseBodyClass && responseBodyClass.isAssignableFrom(it.type)
+            }?.type
+            if (fromFields != null) return@runCatching fromFields
+
+            dexKit.findClass {
+                matcher {
+                    superClass(responseBodyClass.name)
+                }
+            }.mapNotNull { data ->
+                runCatching { Class.forName(data.name, false, classLoader) }.getOrNull()
+            }.firstOrNull { cls ->
+                !java.lang.reflect.Modifier.isAbstract(cls.modifiers) &&
+                    cls.declaredConstructors.any { ctor ->
+                        ctor.parameterCount == 3 && ctor.parameterTypes[1] == Long::class.javaPrimitiveType
+                    }
+            }
+        }.getOrNull()
+        if (resolved == null) {
+            Log.w(TAG, "$KEY_LYRICS_CONCRETE_BODY_CLASS: no validated match")
+            return
+        }
+        members[KEY_LYRICS_CONCRETE_BODY_CLASS] = resolved
+        sigs[KEY_LYRICS_CONCRETE_BODY_CLASS] = resolved.name
+    }
 
     private fun resolveHomeChipsMapper(
         dexKit: DexKitBridge,

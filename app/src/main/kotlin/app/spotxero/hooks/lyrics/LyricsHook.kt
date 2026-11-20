@@ -183,15 +183,29 @@ object LyricsHook {
         }
 
         try {
-            val concreteBodyClass = responseBodyClass.declaredFields.firstOrNull {
-                it.type != responseBodyClass && responseBodyClass.isAssignableFrom(it.type)
-            }?.type ?: runCatching { Class.forName("p.hi31", false, builderClass.classLoader) }.getOrNull()
+            val concreteBodyClass = DexKitResolver.get<Class<*>>(DexKitResolver.KEY_LYRICS_CONCRETE_BODY_CLASS)
+                ?: responseBodyClass.declaredFields.firstOrNull {
+                    it.type != responseBodyClass && responseBodyClass.isAssignableFrom(it.type)
+                }?.type
+
+            if (concreteBodyClass == null) {
+                Log.w(TAG, "Concrete response body unresolved; third-party lyrics disabled")
+                return
+            }
+
+            val concreteBodyCtor = concreteBodyClass.declaredConstructors.firstOrNull {
+                it.parameterCount == 3 && it.parameterTypes[1] == Long::class.javaPrimitiveType
+            }?.apply { isAccessible = true }
+
+            if (concreteBodyCtor == null) {
+                Log.w(TAG, "Concrete response body constructor unresolved for ${concreteBodyClass.name}")
+                return
+            }
 
             Log.i(TAG, "concreteBodyClass: $concreteBodyClass")
 
-            val concreteBodyCtor = concreteBodyClass?.declaredConstructors?.firstOrNull()?.apply { isAccessible = true }
-            val mediaTypeClass = concreteBodyCtor?.parameterTypes?.getOrNull(0)
-            val bufferClass = concreteBodyCtor?.parameterTypes?.getOrNull(2)
+            val mediaTypeClass = concreteBodyCtor.parameterTypes.getOrNull(0)
+            val bufferClass = concreteBodyCtor.parameterTypes.getOrNull(2)
 
             Log.i(TAG, "mediaTypeClass: $mediaTypeClass, bufferClass: $bufferClass")
 
@@ -237,35 +251,33 @@ object LyricsHook {
             Log.i(TAG, "hookThirdPartyLyrics: concreteBodyCtor=$concreteBodyCtor, bufferWrite=$bufferWrite, bHeadersField=${bHeadersField?.name}, headerAddMethod=${headerAddMethod?.name}")
 
             fun createBody(bytes: ByteArray, contentType: String): Any? {
-                if (concreteBodyCtor != null && bufferWrite != null) {
-                    val buffer = createBuffer()
-                    if (buffer == null) {
-                        Log.w(TAG, "createBuffer returned null")
-                        return null
-                    }
-                    return runCatching {
-                        val mediaType = runCatching {
-                            if (contentType.contains("protobuf")) {
-                                mediaTypeCtor?.newInstance(
-                                    "application/protobuf",
-                                    "application",
-                                    "protobuf",
-                                    emptyArray<String>()
-                                )
-                            } else {
-                                mediaTypeCtor?.newInstance(
-                                    "application/json; charset=utf-8",
-                                    "application",
-                                    "json",
-                                    arrayOf("charset", "utf-8")
-                                )
-                            }
-                        }.getOrNull()
-                        bufferWrite.invoke(buffer, bytes)
-                        concreteBodyCtor.newInstance(mediaType, bytes.size.toLong(), buffer)
-                    }.onFailure { Log.w(TAG, "concrete createBody failed: ${it.message}", it) }.getOrNull()
+                if (bufferWrite == null) return null
+                val buffer = createBuffer()
+                if (buffer == null) {
+                    Log.w(TAG, "createBuffer returned null")
+                    return null
                 }
-                return null
+                return runCatching {
+                    val mediaType = runCatching {
+                        if (contentType.contains("protobuf")) {
+                            mediaTypeCtor?.newInstance(
+                                "application/protobuf",
+                                "application",
+                                "protobuf",
+                                emptyArray<String>()
+                            )
+                        } else {
+                            mediaTypeCtor?.newInstance(
+                                "application/json; charset=utf-8",
+                                "application",
+                                "json",
+                                arrayOf("charset", "utf-8")
+                            )
+                        }
+                    }.getOrNull()
+                    bufferWrite.invoke(buffer, bytes)
+                    concreteBodyCtor.newInstance(mediaType, bytes.size.toLong(), buffer)
+                }.onFailure { Log.w(TAG, "concrete createBody failed: ${it.message}", it) }.getOrNull()
             }
 
             fun buildResponse(request: Any, body: Any, contentType: String): Any? {
@@ -316,7 +328,6 @@ object LyricsHook {
 
                     Log.i(TAG, "Color-lyrics requested: trackId=$trackId, externalEnabled=$externalEnabled, force=$force, aiTranslationEnabled=$aiTranslationEnabled")
 
-                    // 1. Check cached translated stock response
                     if (aiTranslationEnabled && trackId != null) {
                         val stockCacheKey = getStockCacheKey(trackId)
                         val cachedStock = PersistentLyricsCache.getProtobuf(stockCacheKey) ?: stockTranslatedCache[stockCacheKey]
@@ -333,7 +344,6 @@ object LyricsHook {
                         }
                     }
 
-                    // 2. Try third-party lyrics if external is enabled and force or ai translation is active
                     if (externalEnabled && (force || aiTranslationEnabled)) {
                         val protoBytes = LyricsManager.getLyricsProto(trackId)
                         Log.i(TAG, "LyricsManager proto returned: ${if (protoBytes != null) "${protoBytes.size} bytes" else "null"}")
@@ -370,7 +380,6 @@ object LyricsHook {
 
                     Log.d(TAG, "Original color-lyrics response code: $statusCode for $trackId")
 
-                    // 3. If Spotify returned 200 and AI translation is enabled, translate stock lyrics!
                     if (statusCode == 200 && aiTranslationEnabled && trackId != null) {
                         val rawBytes = extractBodyBytes(originalResponse)
                         if (rawBytes != null && rawBytes.isNotEmpty()) {
@@ -414,7 +423,6 @@ object LyricsHook {
                                 }
                             }
 
-                            // Reconstruct response from consumed rawBytes if translation didn't replace
                             val fallbackBody = createBody(rawBytes, "application/protobuf")
                             if (fallbackBody != null) {
                                 val fallbackResp = buildResponse(request, fallbackBody, "application/protobuf")
@@ -426,7 +434,6 @@ object LyricsHook {
                         }
                     }
 
-                    // 4. Fallback if Spotify returned non-200 and external lyrics is enabled
                     if (externalEnabled && statusCode != 200) {
                         val protoBytes = LyricsManager.getLyricsProto(trackId)
                         if (protoBytes != null) {
