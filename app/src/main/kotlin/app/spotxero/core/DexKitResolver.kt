@@ -57,7 +57,6 @@ object DexKitResolver {
     const val KEY_RCS_MAP_LOADER = "rcs_map_loader"
     const val KEY_RCS_PROPERTY_LOOKUP = "rcs_property_lookup"
     const val KEY_PLAYER_SECTION_LIST = "player_section_list_getter"
-    const val KEY_PLAY_INTEGRITY_OUTCOMES = "dexkit_play_integrity_outcomes"
     const val KEY_OKHTTP_REQUEST_TO_STRING = "okhttp_request_to_string"
     const val KEY_OKHTTP_RESPONSE_BUILDER_BUILD = "okhttp_response_builder_build"
     const val KEY_OKHTTP_REAL_CALL_CHAIN = "okhttp_real_call_chain"
@@ -78,12 +77,6 @@ object DexKitResolver {
     private const val GET_ADS_REQUEST = "com.spotify.ads.esperanto.proto.GetAdsRequest"
     private const val GET_ADS_RESPONSE = "com.spotify.ads.esperanto.proto.GetAdsResponse"
     private val GET_ADS_CALL = listOf("spotify.ads.esperanto.proto.Ads", "GetAds")
-    private val PLAY_INTEGRITY_OUTCOME_MARKERS = listOf(
-        "standard_pi_init",
-        "standard_pi_request",
-        "standard_pi_error",
-        "standard_pi_result"
-    )
     private const val HOME_STRUCTURE = "com.spotify.casita.v1.resolved.HomeStructure"
     private const val BROWSE_STRUCTURE = "com.spotify.browsita.v1.resolved.BrowseStructure"
     private const val CONTENT_CATEGORY = "com.spotify.browsita.v1.resolved.ContentCategory"
@@ -180,7 +173,6 @@ object DexKitResolver {
         resolveHomeChipsMapper(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveSearchChips(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveVolumeKeyHandlers(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolvePlayIntegrityOutcomes(dexKit, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -1642,40 +1634,4 @@ object DexKitResolver {
             method.parameterTypes[0].name == "android.view.KeyEvent" &&
             method.parameterTypes[1] == String::class.java &&
             method.returnType == Boolean::class.javaPrimitiveType
-
-    private fun resolvePlayIntegrityOutcomes(
-        dexKit: DexKitBridge,
-        classLoader: ClassLoader,
-        cached: Map<String, String>?,
-        sigs: MutableMap<String, String>,
-        members: MutableMap<String, Any>
-    ) {
-        val cachedEntries = cached?.get(KEY_PLAY_INTEGRITY_OUTCOMES)?.split('|').orEmpty()
-        val methods = cachedEntries.takeIf { it.isNotEmpty() }
-            ?.mapNotNull { cachedMethod(classLoader, it, ::isPlayIntegrityOutcomeEmitter) }
-            ?.takeIf { it.size == cachedEntries.size }
-            ?: runCatching {
-                PLAY_INTEGRITY_OUTCOME_MARKERS.flatMap { marker ->
-                    dexKit.findMethod {
-                        matcher {
-                            usingStrings(listOf(marker), StringMatchType.Contains)
-                        }
-                    }.mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
-                        .filter(::isPlayIntegrityOutcomeEmitter)
-                }
-            }.getOrNull().orEmpty()
-                .distinctBy { signatureOf(it) }
-        if (methods.isEmpty()) {
-            Log.w(TAG, "$KEY_PLAY_INTEGRITY_OUTCOMES: no validated match")
-            return
-        }
-        members[KEY_PLAY_INTEGRITY_OUTCOMES] = methods
-        sigs[KEY_PLAY_INTEGRITY_OUTCOMES] = methods.joinToString("|") { signatureOf(it) }
-    }
-
-    private fun isPlayIntegrityOutcomeEmitter(method: Method): Boolean =
-        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
-            method.returnType == Void.TYPE &&
-            (method.parameterCount == 0 ||
-                (method.parameterCount == 1 && method.parameterTypes[0] == String::class.java))
 }
