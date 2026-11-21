@@ -26,6 +26,10 @@ object ModuleStatus {
 
     fun detectFramework(): String {
         val knownClasses = listOf(
+            "LSPatch" to listOf(
+                "org.lsposed.lspatch.metaloader.LSPAppComponentFactoryStub",
+                "org.lsposed.lspatch.loader.LSPApplication"
+            ),
             "LSPosed" to listOf(
                 "org.lsposed.lspd.service.ILSPManager",
                 "org.lsposed.lspd.models.Module",
@@ -60,6 +64,7 @@ object ModuleStatus {
                 for (line in lines) {
                     val lower = line.lowercase()
                     when {
+                        "lspatch" in lower -> return "LSPatch"
                         "lsposed" in lower -> return "LSPosed"
                         "edxp" in lower || "edxposed" in lower -> return "EdXposed"
                         "sandhook" in lower -> return "SandHook"

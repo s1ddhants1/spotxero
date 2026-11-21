@@ -154,7 +154,7 @@ object HookRegistry {
                 HookEntry("ContextMenuAdBlock", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { ContextMenuAdBlockHook.install(module) },
                 HookEntry("Pendragon", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PendragonHook.install(module) },
                 HookEntry("ContentFilter", { true }) { ContentFilterHook.install(module) },
-                HookEntry("ClientSpoof", { PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_SPOOF, true) }) { ClientSpoofHook.install(module) },
+                HookEntry("ClientSpoof", { PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_SPOOF, true) }) { ClientSpoofHook.install(module, startupClassLoader) },
                 HookEntry("SpotifyAmoled", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_AMOLED, false) }) { SpotifyAmoledHook.install(module) },
                 HookEntry("SpotifyMonet", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_MONET, false) }) { SpotifyMonetHook.install(module) },
                 HookEntry("SpotifyRoundyUI", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_ROUNDY_UI, false) }) { SpotifyRoundyUIHook.install(module) },
