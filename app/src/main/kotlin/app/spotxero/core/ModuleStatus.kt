@@ -73,6 +73,6 @@ object ModuleStatus {
             return "VirtualXposed"
         }
 
-        return "LSPosed"
+        return "Unknown"
     }
 }

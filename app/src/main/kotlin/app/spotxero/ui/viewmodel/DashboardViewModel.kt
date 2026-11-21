@@ -180,7 +180,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isHideAudiobooksEnabled = PreferencesManager.isHideAudiobooksEnabled,
                 isDoubleTapToSeekEnabled = PreferencesManager.isDoubleTapToSeekEnabled,
                 seekDurationSeconds = PreferencesManager.seekDurationSeconds,
-                isSeekProgressive = PreferencesManager.isSeekProgressive
+                isSeekProgressive = PreferencesManager.isSeekProgressive,
+                isClientSpoofEnabled = PreferencesManager.isClientSpoofEnabled
             )
         }
     }
@@ -434,6 +435,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val orderStr = newOrder.joinToString(",")
         PreferencesManager.setString(getApplication(), PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, orderStr)
         _uiState.update { it.copy(lyricsProvidersOrder = newOrder) }
+    }
+
+    fun setClientSpoof(enabled: Boolean) {
+        val app = getApplication<Application>()
+        PreferencesManager.setBoolean(app, PrefKeys.KEY_CLIENT_SPOOF, enabled)
+        PreferencesManager.isClientSpoofEnabled = enabled
+        _uiState.update { it.copy(isClientSpoofEnabled = enabled) }
     }
 
     fun showSettingsScreen() {

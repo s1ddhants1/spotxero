@@ -197,6 +197,7 @@ fun SpotXeroApp(
                                 onSeekDurationChange = { viewModel.setSeekDurationSeconds(it.roundToInt()) },
                                 onSeekProgressiveToggle = { viewModel.setSeekProgressive(it) },
                                 onOpenLyricsSources = { viewModel.showLyricsSourcesScreen() },
+                                onClientSpoofToggle = { viewModel.setClientSpoof(it) },
                                 onRequestScope = { viewModel.requestScope() }
                             )
                         }

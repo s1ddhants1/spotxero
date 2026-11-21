@@ -132,6 +132,7 @@ object PrefKeys {
     const val KEY_SPOTIFY_ROUNDY_UI = "pref_spotify_roundy_ui"
     const val KEY_HIDE_PODCASTS = "pref_hide_podcasts"
     const val KEY_HIDE_AUDIOBOOKS = "pref_hide_audiobooks"
+    const val KEY_CLIENT_SPOOF = "pref_client_spoof"
     const val KEY_SHUFFLE_STATE = "pref_user_shuffle_state"
     const val KEY_SMART_SHUFFLE_IN_MODES = "pref_smart_shuffle_in_modes"
     const val KEY_DOUBLE_TAP_TO_SEEK = "pref_double_tap_to_seek"

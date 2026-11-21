@@ -4,6 +4,7 @@ import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
+import app.spotxero.core.ProtoLists
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
@@ -90,6 +91,21 @@ object ProductStateHook {
         "core-player:player.autoplay" to true,
         "player:player.autoplay" to true
     )
+
+    private val RCS_INTEGRITY_OVERRIDES: Map<String, Any> = mapOf(
+        "android-integrity:validation_enabled" to false,
+        "android-integrity:employee_validation_enabled" to false,
+        "android-integrity:time_tracking_enabled" to false
+    )
+
+    private val RCS_ALL_OVERRIDES: Map<String, Any> = RCS_SCOPED_OVERRIDES + RCS_INTEGRITY_OVERRIDES
+
+    private fun rcsScopedOverrides(): Map<String, Any> =
+        if (PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_SPOOF, true)) {
+            RCS_ALL_OVERRIDES
+        } else {
+            RCS_SCOPED_OVERRIDES
+        }
 
     private val RCS_INT_BY_NAME: Map<String, Int> = mapOf(
         "pick_and_shuffle_timecap" to 1440,
@@ -289,14 +305,18 @@ object ProductStateHook {
                 if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept result
                 }
-                list.filterNot { assignedValue ->
-                    if (assignedValue == null) return@filterNot false
+                val filtered = ProtoLists.filter(list) { assignedValue ->
                     val propId = assignedValue.javaClass.methods.firstOrNull {
                         it.parameterCount == 0 && it.returnType.name == "com.spotify.rcs.admin.grpc.v0.PropertyDefinition\$Identifier"
-                    }?.invoke(assignedValue) ?: return@filterNot false
-                    val name = propId.javaClass.getMethod("getName").invoke(propId) as? String
-                    name != null && MFT_FLAGS_TO_REMOVE.contains(name)
+                    }?.invoke(assignedValue)
+                    if (propId == null) {
+                        true
+                    } else {
+                        val name = propId.javaClass.getMethod("getName").invoke(propId) as? String
+                        name == null || !MFT_FLAGS_TO_REMOVE.contains(name)
+                    }
                 }
+                filtered ?: result
             }
     }
 
@@ -359,7 +379,8 @@ object ProductStateHook {
                 val origHeader = headerField.get(snapshot) ?: return@intercept snapshot
                 @Suppress("UNCHECKED_CAST")
                 val origMap = mapField.get(snapshot) as? Map<String, Any?> ?: return@intercept snapshot
-                val patched = HashMap<String, Any?>(origMap.size + RCS_SCOPED_OVERRIDES.size)
+                val overrides = rcsScopedOverrides()
+                val patched = HashMap<String, Any?>(origMap.size + overrides.size)
                 patched.putAll(origMap)
 
                 for ((fullKey, existing) in origMap) {
@@ -379,7 +400,7 @@ object ProductStateHook {
                     }
                 }
 
-                for ((fullKey, value) in RCS_SCOPED_OVERRIDES) {
+                for ((fullKey, value) in overrides) {
                     val sep = fullKey.indexOf(':')
                     val scope = fullKey.substring(0, sep)
                     val name = fullKey.substring(sep + 1)
@@ -405,7 +426,7 @@ object ProductStateHook {
                 }
                 val scope = chain.getArg(0) as? String ?: return@intercept result
                 val name = chain.getArg(1) as? String ?: return@intercept result
-                val overrideVal = RCS_SCOPED_OVERRIDES["$scope:$name"] ?: return@intercept result
+                val overrideVal = rcsScopedOverrides()["$scope:$name"] ?: return@intercept result
                 buildRcsValue(r27Ctor, name, scope, overrideVal) ?: result
             }
     }

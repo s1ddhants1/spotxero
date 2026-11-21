@@ -8,6 +8,7 @@ import app.spotxero.hooks.ads.ContextMenuAdBlockHook
 import app.spotxero.hooks.ads.NetworkAdBlockHook
 import app.spotxero.hooks.ads.PendragonHook
 import app.spotxero.hooks.ads.PlayerAdCardsHook
+import app.spotxero.hooks.attestation.ClientSpoofHook
 import app.spotxero.hooks.content.ContentFilterHook
 import app.spotxero.hooks.lyrics.LyricsHook
 import app.spotxero.hooks.navigation.HidePremiumTabHook
@@ -153,6 +154,7 @@ object HookRegistry {
                 HookEntry("ContextMenuAdBlock", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { ContextMenuAdBlockHook.install(module) },
                 HookEntry("Pendragon", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PendragonHook.install(module) },
                 HookEntry("ContentFilter", { true }) { ContentFilterHook.install(module) },
+                HookEntry("ClientSpoof", { PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_SPOOF, true) }) { ClientSpoofHook.install(module) },
                 HookEntry("SpotifyAmoled", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_AMOLED, false) }) { SpotifyAmoledHook.install(module) },
                 HookEntry("SpotifyMonet", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_MONET, false) }) { SpotifyMonetHook.install(module) },
                 HookEntry("SpotifyRoundyUI", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_ROUNDY_UI, false) }) { SpotifyRoundyUIHook.install(module) },

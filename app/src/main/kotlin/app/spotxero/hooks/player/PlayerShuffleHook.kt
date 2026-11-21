@@ -27,9 +27,7 @@ object PlayerShuffleHook {
     private var userSmartShuffleInModes: Boolean? = null
 
     private fun isShuffleEnabled(): Boolean {
-        val cached = userShuffleState
-        if (cached != null) return cached
-        val stored = PreferencesManager.isEnabled(PrefKeys.KEY_SHUFFLE_STATE, false)
+        val stored = PreferencesManager.isEnabled(PrefKeys.KEY_SHUFFLE_STATE, userShuffleState ?: false)
         userShuffleState = stored
         return stored
     }

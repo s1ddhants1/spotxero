@@ -63,6 +63,7 @@ fun HomeDashboard(
     onSeekDurationChange: (Float) -> Unit = {},
     onSeekProgressiveToggle: (Boolean) -> Unit = {},
     onOpenLyricsSources: () -> Unit = {},
+    onClientSpoofToggle: (Boolean) -> Unit = {},
     onRequestScope: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -183,6 +184,14 @@ fun HomeDashboard(
             icon = AppIcons.RoundedCorner,
             checked = uiState.isSpotifyRoundyUiEnabled,
             onCheckedChange = onSpotifyRoundyUiToggle
+        )
+
+        SwitchSettingCard(
+            title = stringResource(R.string.feature_client_spoof_title),
+            subtitle = stringResource(R.string.feature_client_spoof_desc),
+            icon = AppIcons.Smartphone,
+            checked = uiState.isClientSpoofEnabled,
+            onCheckedChange = onClientSpoofToggle
         )
     }
 }
