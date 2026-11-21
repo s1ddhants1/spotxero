@@ -78,7 +78,12 @@ object DexKitResolver {
     private const val GET_ADS_REQUEST = "com.spotify.ads.esperanto.proto.GetAdsRequest"
     private const val GET_ADS_RESPONSE = "com.spotify.ads.esperanto.proto.GetAdsResponse"
     private val GET_ADS_CALL = listOf("spotify.ads.esperanto.proto.Ads", "GetAds")
-    private val PLAY_INTEGRITY_OUTCOME_MARKERS = listOf("standard_pi_init", "standard_pi_request")
+    private val PLAY_INTEGRITY_OUTCOME_MARKERS = listOf(
+        "standard_pi_init",
+        "standard_pi_request",
+        "standard_pi_error",
+        "standard_pi_result"
+    )
     private const val HOME_STRUCTURE = "com.spotify.casita.v1.resolved.HomeStructure"
     private const val BROWSE_STRUCTURE = "com.spotify.browsita.v1.resolved.BrowseStructure"
     private const val CONTENT_CATEGORY = "com.spotify.browsita.v1.resolved.ContentCategory"
