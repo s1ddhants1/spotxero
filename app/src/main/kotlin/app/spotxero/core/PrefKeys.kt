@@ -30,8 +30,6 @@ object PrefKeys {
     const val AnthropicDefaultEndpoint = "https://api.anthropic.com/v1/messages"
     const val AnthropicDefaultModel = "claude-haiku-5-5"
 
-    const val DEFAULT_AI_SYSTEM_PROMPT = "You are a lyrics localization engine. Return only JSON that matches the provided schema. Do not explain, think aloud, use markdown, merge lines, split lines, or add notes. Return exactly {lineCount} strings in `lines`, preserving input line order. Empty input lines must stay empty. Make translations natural for music listening while staying faithful to meaning, tense, names, punctuation, and repeated hooks. Preserve text already in the target language verbatim, including the target-language parts of mixed lines."
-
     val LanguageCodeToName = mapOf(
         "af" to "Afrikaans",
         "az" to "Azərbaycan",

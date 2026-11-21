@@ -316,16 +316,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(showLyricsSources = true, showAiLyricsTranslation = false) }
     }
 
-    fun hideLyricsSourcesScreen() {
-        _uiState.update { it.copy(showLyricsSources = false, showAiLyricsTranslation = false) }
-    }
-
     fun showAiLyricsTranslationScreen() {
         _uiState.update { it.copy(showAiLyricsTranslation = true) }
-    }
-
-    fun hideAiLyricsTranslationScreen() {
-        _uiState.update { it.copy(showAiLyricsTranslation = false) }
     }
 
     fun setAiTranslationProvider(provider: String) {

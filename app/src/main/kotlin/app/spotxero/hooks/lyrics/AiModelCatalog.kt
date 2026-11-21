@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -96,26 +95,6 @@ object AiModelCatalog {
         val hash = digest.digest(apiKey.trim().toByteArray(Charsets.UTF_8))
         val credentialHash = Base64.encodeToString(hash, Base64.NO_WRAP)
         return "${preset.id}|$baseUrl|$credentialHash"
-    }
-
-    suspend fun validatedModel(
-        preset: AiProviderPreset,
-        apiKey: String,
-        baseUrl: String,
-        savedModel: String,
-    ): String {
-        val effectiveBaseUrl =
-            if (preset.id == "Gemini" && baseUrl == AiProviderPresets.LEGACY_GEMINI_ENDPOINT) {
-                preset.endpoint
-            } else {
-                baseUrl
-            }
-        if (!preset.isAi || preset.editableEndpoint || effectiveBaseUrl != preset.endpoint) return savedModel
-        val models = models(preset, apiKey, effectiveBaseUrl).getOrNull() ?: return savedModel
-        val ids = lock.withLock { availableIds[cacheKey(preset, apiKey, effectiveBaseUrl)] } ?: return savedModel
-        if (ids.isEmpty() || savedModel in ids) return savedModel
-        val candidates = models.filter { it.id in ids }
-        return defaultModel(preset, candidates, freeOnly = savedModel.endsWith(":free")) ?: savedModel
     }
 
     suspend fun throughput(modelId: String): Double? = withContext(Dispatchers.IO) {

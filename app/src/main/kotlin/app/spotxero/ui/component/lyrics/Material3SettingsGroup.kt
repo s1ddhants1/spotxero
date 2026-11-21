@@ -68,18 +68,6 @@ fun segmentedGroupShape(
     return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
 }
 
-fun connectedShape(
-    first: Boolean,
-    last: Boolean,
-    outer: Dp = 20.dp,
-    inner: Dp = 5.dp,
-): RoundedCornerShape = RoundedCornerShape(
-    topStart = if (first) outer else inner,
-    topEnd = if (first) outer else inner,
-    bottomStart = if (last) outer else inner,
-    bottomEnd = if (last) outer else inner,
-)
-
 data class MetrolistSettingsItem(
     val title: String,
     val description: String? = null,

@@ -1,6 +1,5 @@
 package app.spotxero.ui.component.lyrics
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +21,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,7 +50,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import app.spotxero.R
 import app.spotxero.core.PrefKeys
-import app.spotxero.core.PreferencesManager
 import app.spotxero.hooks.lyrics.AiLyricsTranslator
 import app.spotxero.hooks.lyrics.AiModelCatalog
 import app.spotxero.hooks.lyrics.AiModelInfo
