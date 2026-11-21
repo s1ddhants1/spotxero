@@ -46,7 +46,7 @@
     <string name="feature_hide_audiobooks_title">Hide Audiobooks</string>
     <string name="feature_hide_audiobooks_desc">Remove audiobooks and chapters from Home and Search</string>
     <string name="feature_client_spoof_title">Client Spoof</string>
-    <string name="feature_client_spoof_desc">Neutralize Play Integrity outcome reporting to prevent account restrictions</string>
+    <string name="feature_client_spoof_desc">Emulate non-GMS environment and neutralize Play Integrity attestation</string>
     <string name="title_appearance">Appearance</string>
     <string name="title_about">About</string>
     <string name="appearance_category_desc">Themes • Hide App Icon</string>

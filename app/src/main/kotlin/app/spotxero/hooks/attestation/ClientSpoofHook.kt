@@ -2,6 +2,7 @@ package app.spotxero.hooks.attestation
 
 import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
@@ -15,6 +16,8 @@ import java.lang.reflect.Proxy
 object ClientSpoofHook {
 
     private const val TAG = "SpotXero.ClientSpoof"
+    private const val GMS_PACKAGE = "com.google.android.gms"
+    private const val GMS_SERVICE_MISSING = 1
 
     private fun enabled() = PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_SPOOF, true)
 
@@ -27,6 +30,8 @@ object ClientSpoofHook {
 
         installOutcomeSuppression(module)
         installServiceBindingBlock(module, cl)
+        installPackageManagerGmsHide(module, cl)
+        installGoogleApiAvailability(module, cl)
         installPlayIntegrityUnavailability(module, cl)
     }
 
@@ -68,15 +73,79 @@ object ClientSpoofHook {
                     .intercept { chain ->
                         if (!enabled()) return@intercept chain.proceed()
                         val intent = chain.getArg(0) as? Intent
-                        val action = intent?.action
-                        if (action == "com.google.android.play.core.expressintegrityservice.BIND_EXPRESS_INTEGRITY_SERVICE" ||
-                            action == "com.google.android.play.core.integrityservice.BIND_INTEGRITY_SERVICE"
-                        ) {
-                            Log.i(TAG, "Blocked Play Integrity service binding ($action) for non-GMS fallback")
+                        if (isGmsIntent(intent)) {
+                            Log.i(TAG, "Blocked GMS service binding (${intent?.action ?: intent?.`package`}) for non-GMS emulation")
                             return@intercept false
                         }
                         chain.proceed()
                     }
+            }
+        }
+    }
+
+    private fun isGmsIntent(intent: Intent?): Boolean {
+        if (intent == null) return false
+        val pkg = intent.`package`
+        val componentPkg = intent.component?.packageName
+        val action = intent.action
+        return pkg == GMS_PACKAGE ||
+            componentPkg == GMS_PACKAGE ||
+            action == "com.google.android.play.core.expressintegrityservice.BIND_EXPRESS_INTEGRITY_SERVICE" ||
+            action == "com.google.android.play.core.integrityservice.BIND_INTEGRITY_SERVICE" ||
+            (action != null && action.startsWith("com.google.android.gms"))
+    }
+
+    private fun installPackageManagerGmsHide(module: XposedModule, classLoader: ClassLoader) {
+        val apmClass = runCatching {
+            Class.forName("android.app.ApplicationPackageManager", false, classLoader)
+        }.getOrNull() ?: return
+
+        for (method in apmClass.declaredMethods) {
+            if (method.name in listOf("getPackageInfo", "getApplicationInfo") &&
+                method.parameterTypes.isNotEmpty() &&
+                method.parameterTypes[0] == String::class.java
+            ) {
+                module.deoptimize(method)
+                module.hook(method)
+                    .setId("client_spoof_pm_${method.name}_${method.parameterCount}")
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        if (!enabled()) return@intercept chain.proceed()
+                        val pkgName = chain.getArg(0) as? String
+                        if (pkgName == GMS_PACKAGE) {
+                            Log.i(TAG, "Simulated NameNotFoundException for $GMS_PACKAGE")
+                            throw PackageManager.NameNotFoundException(GMS_PACKAGE)
+                        }
+                        chain.proceed()
+                    }
+            }
+        }
+    }
+
+    private fun installGoogleApiAvailability(module: XposedModule, classLoader: ClassLoader) {
+        val availabilityClasses = listOf(
+            "com.google.android.gms.common.GoogleApiAvailability",
+            "com.google.android.gms.common.GoogleApiAvailabilityLight",
+            "com.google.android.gms.common.GooglePlayServicesUtil",
+            "com.google.android.gms.common.GooglePlayServicesUtilLight"
+        )
+
+        for (className in availabilityClasses) {
+            val clazz = runCatching { Class.forName(className, false, classLoader) }.getOrNull() ?: continue
+            for (method in clazz.declaredMethods) {
+                if (method.name == "isGooglePlayServicesAvailable" &&
+                    method.returnType == Int::class.javaPrimitiveType
+                ) {
+                    module.deoptimize(method)
+                    module.hook(method)
+                        .setId("client_spoof_gms_avail_${clazz.simpleName}_${method.parameterCount}")
+                        .setExceptionMode(ExceptionMode.PROTECTIVE)
+                        .intercept { chain ->
+                            if (!enabled()) return@intercept chain.proceed()
+                            Log.i(TAG, "isGooglePlayServicesAvailable intercepted: returning SERVICE_MISSING")
+                            GMS_SERVICE_MISSING
+                        }
+                }
             }
         }
     }
