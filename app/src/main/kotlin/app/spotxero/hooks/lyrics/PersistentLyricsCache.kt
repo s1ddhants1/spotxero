@@ -18,7 +18,6 @@ object PersistentLyricsCache {
     @Volatile
     private var appContext: Context? = null
 
-    // L1 caches
     private val protoMemoryCache = Collections.synchronizedMap(
         object : LinkedHashMap<String, ByteArray>(MAX_L1_SIZE, 0.75f, true) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?): Boolean {
@@ -61,10 +60,8 @@ object PersistentLyricsCache {
     }
 
     fun getProtobuf(key: String): ByteArray? {
-        // 1. Check L1 memory cache
         protoMemoryCache[key]?.let { return it }
 
-        // 2. Check L2 disk cache
         val dir = getCacheDir() ?: return null
         val file = File(dir, "${hashKey(key)}.proto")
         if (file.exists() && file.isFile && file.length() > 0) {
@@ -93,10 +90,8 @@ object PersistentLyricsCache {
     }
 
     fun getLines(key: String): List<String>? {
-        // 1. Check L1 memory cache
         linesMemoryCache[key]?.let { return it }
 
-        // 2. Check L2 disk cache
         val dir = getCacheDir() ?: return null
         val file = File(dir, "${hashKey(key)}.json")
         if (file.exists() && file.isFile && file.length() > 0) {

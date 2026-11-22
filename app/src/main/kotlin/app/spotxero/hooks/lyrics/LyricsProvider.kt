@@ -354,7 +354,6 @@ object LrcRedProvider : LyricsProvider {
             val isrcToFetch = bestIsrc ?: hits.getJSONObject(0).optString("isrc")
             if (isrcToFetch.isNullOrBlank()) return null
 
-            // 1. Fetch .lrc directly (provides word-level syllable sync)
             val lrcUrl = "$BASE_URL/s/$isrcToFetch.lrc"
             val lrcContent = httpGet(lrcUrl, headers)
             if (!lrcContent.isNullOrBlank()) {
@@ -364,7 +363,6 @@ object LrcRedProvider : LyricsProvider {
                 }
             }
 
-            // 2. Fallback to song json if direct .lrc fails
             val metaUrl = "$BASE_URL/s/$isrcToFetch.json"
             val metaResp = httpGet(metaUrl, headers)
             if (!metaResp.isNullOrBlank()) {
@@ -403,7 +401,6 @@ object GeniusProvider : LyricsProvider {
     override fun fetchLyrics(trackName: String, artistName: String, albumName: String?, durationSec: Long?): ParsedLyrics? {
         val cleanTitle = removeExtraInfo(trackName)
 
-        // 1. Attempt Genius song search and HTML scrape
         try {
             val query = "$artistName $cleanTitle".trim()
             val searchUrl = "https://genius.com/api/search/song?per_page=5&q=" + URLEncoder.encode(query, "UTF-8")
@@ -435,7 +432,6 @@ object GeniusProvider : LyricsProvider {
             Log.d(TAG, "Genius scrape attempt failed: ${t.message}")
         }
 
-        // 2. Fallback to public lyrics API (api.lyrics.ovh) which aggregates lyrics sources including Genius
         try {
             val ovhUrl = "https://api.lyrics.ovh/v1/" +
                     URLEncoder.encode(artistName, "UTF-8") + "/" +

@@ -166,7 +166,6 @@ object LyricsManager {
         var album = currentTrackAlbum
         var durationSec = currentTrackDurationSec
 
-        // If trackId is provided but does not match current track or title is missing, try oEmbed fallback
         if (trackId != null && (title == null || currentTrackId != trackId)) {
             val oembedMeta = fetchTrackMetadataFromOembed(trackId)
             if (oembedMeta != null) {
@@ -187,7 +186,6 @@ object LyricsManager {
             return it
         }
 
-        // Reuse an in-flight fetch (from prefetch or concurrent caller) if one is running
         var inFlight = inFlightFetches[cacheKey]
         if (inFlight == null) {
             val newFuture = CompletableFuture<CachedLyrics?>()

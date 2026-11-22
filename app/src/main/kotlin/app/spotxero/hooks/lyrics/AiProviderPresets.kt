@@ -15,7 +15,6 @@ data class AiProviderPreset(
     val id: String,
     val group: AiProviderGroup,
     val protocol: AiProtocol = AiProtocol.OPENAI,
-    /** Full request endpoint; Gemini endpoints may include a model or {model} placeholder. */
     val endpoint: String = "",
     val defaultModel: String = "",
     val modelsDevId: String? = null,
