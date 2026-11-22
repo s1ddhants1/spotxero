@@ -45,8 +45,6 @@
     <string name="feature_hide_podcasts_desc">Remove podcasts and episodes from Home and Search</string>
     <string name="feature_hide_audiobooks_title">Hide Audiobooks</string>
     <string name="feature_hide_audiobooks_desc">Remove audiobooks and chapters from Home and Search</string>
-    <string name="feature_client_token_title">Client Token</string>
-    <string name="feature_client_token_desc">Fallback to synthetic client token when native issuance fails</string>
     <string name="title_appearance">Appearance</string>
     <string name="title_about">About</string>
     <string name="appearance_category_desc">Themes • Hide App Icon</string>

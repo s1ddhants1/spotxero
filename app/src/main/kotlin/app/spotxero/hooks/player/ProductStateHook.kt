@@ -109,12 +109,7 @@ object ProductStateHook {
 
     private val RCS_ALL_OVERRIDES: Map<String, Any> = RCS_SCOPED_OVERRIDES + RCS_INTEGRITY_OVERRIDES
 
-    private fun rcsScopedOverrides(): Map<String, Any> =
-        if (PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_TOKEN, true)) {
-            RCS_ALL_OVERRIDES
-        } else {
-            RCS_SCOPED_OVERRIDES
-        }
+    private fun rcsScopedOverrides(): Map<String, Any> = RCS_ALL_OVERRIDES
 
     private val RCS_INT_BY_NAME: Map<String, Int> = mapOf(
         "pick_and_shuffle_timecap" to 1440,

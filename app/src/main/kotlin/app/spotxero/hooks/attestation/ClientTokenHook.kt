@@ -1,8 +1,6 @@
 package app.spotxero.hooks.attestation
 
 import app.spotxero.core.DexKitResolver
-import app.spotxero.core.PrefKeys
-import app.spotxero.core.PreferencesManager
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
 import java.io.ByteArrayOutputStream
@@ -66,8 +64,6 @@ object ClientTokenHook {
         out.toByteArray()
     }
 
-    private fun enabled() = PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_TOKEN, true)
-
     private fun isValidClientToken(bytes: ByteArray?): Boolean {
         if (bytes == null || bytes.size < 16) return false
         return (bytes[0].toInt() and 0xFF) == 0x0A
@@ -85,7 +81,6 @@ object ClientTokenHook {
                 .setId("client_token_coroutine_single_token")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
-                    if (!enabled()) return@intercept chain.proceed()
                     val service = chain.getArg(0) as? String
                     val method = chain.getArg(1) as? String
                     if (service == CLIENT_TOKEN_SERVICE && method == METHOD_GET_TOKEN) {
@@ -110,7 +105,6 @@ object ClientTokenHook {
                     .setExceptionMode(ExceptionMode.PROTECTIVE)
                     .intercept { chain ->
                         val result = chain.proceed()
-                        if (!enabled()) return@intercept result
                         val service = chain.getArg(0) as? String
                         val method = chain.getArg(1) as? String
                         if (service == CLIENT_TOKEN_SERVICE && method == METHOD_GET_TOKEN && result != null) {
@@ -131,7 +125,6 @@ object ClientTokenHook {
                     .setExceptionMode(ExceptionMode.PROTECTIVE)
                     .intercept { chain ->
                         val result = chain.proceed()
-                        if (!enabled()) return@intercept result
                         val service = chain.getArg(0) as? String
                         val method = chain.getArg(1) as? String
                         if (service == CLIENT_TOKEN_SERVICE && method == METHOD_GET_ENCRYPTED_TOKEN && result != null) {

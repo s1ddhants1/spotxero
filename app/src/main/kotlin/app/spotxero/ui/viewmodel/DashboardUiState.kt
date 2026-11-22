@@ -69,7 +69,6 @@ data class DashboardUiState(
     val isDoubleTapToSeekEnabled: Boolean = true,
     val seekDurationSeconds: Int = 10,
     val isSeekProgressive: Boolean = false,
-    val isClientTokenEnabled: Boolean = true,
 
     val activeSpotify: InstalledSpotifyInfo? = null,
     val installedSpotifyVariants: List<InstalledSpotifyInfo> = emptyList()

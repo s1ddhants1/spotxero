@@ -182,7 +182,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isDoubleTapToSeekEnabled = PreferencesManager.isDoubleTapToSeekEnabled,
                 seekDurationSeconds = PreferencesManager.seekDurationSeconds,
                 isSeekProgressive = PreferencesManager.isSeekProgressive,
-                isClientTokenEnabled = PreferencesManager.isClientTokenEnabled
             )
         }
     }
@@ -440,13 +439,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val orderStr = newOrder.joinToString(",")
         PreferencesManager.setString(getApplication(), PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, orderStr)
         _uiState.update { it.copy(lyricsProvidersOrder = newOrder) }
-    }
-
-    fun setClientToken(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PrefKeys.KEY_CLIENT_TOKEN, enabled)
-        PreferencesManager.isClientTokenEnabled = enabled
-        _uiState.update { it.copy(isClientTokenEnabled = enabled) }
     }
 
     fun showSettingsScreen() {

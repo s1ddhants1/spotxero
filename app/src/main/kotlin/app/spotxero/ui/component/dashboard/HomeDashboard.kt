@@ -63,7 +63,6 @@ fun HomeDashboard(
     onSeekDurationChange: (Float) -> Unit = {},
     onSeekProgressiveToggle: (Boolean) -> Unit = {},
     onOpenLyricsSources: () -> Unit = {},
-    onClientTokenToggle: (Boolean) -> Unit = {},
     onRequestScope: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -186,13 +185,6 @@ fun HomeDashboard(
             onCheckedChange = onSpotifyRoundyUiToggle
         )
 
-        SwitchSettingCard(
-            title = stringResource(R.string.feature_client_token_title),
-            subtitle = stringResource(R.string.feature_client_token_desc),
-            icon = AppIcons.Smartphone,
-            checked = uiState.isClientTokenEnabled,
-            onCheckedChange = onClientTokenToggle
-        )
     }
 }
 
