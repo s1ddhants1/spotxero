@@ -402,6 +402,7 @@ object LyricsHook {
                                         providerName = parsed.provider,
                                         providerDisplayName = "${parsed.providerDisplayName} (Translated)",
                                         customColorData = parsed.colorDataBytes,
+                                        backgroundColor = LyricsManager.currentTrackColor,
                                         hasVocalRemoval = parsed.hasVocalRemoval,
                                         language = targetLang,
                                         isRtl = isRtl

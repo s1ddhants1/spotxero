@@ -36,6 +36,7 @@ object LyricsProtobuf {
         providerName: String,
         providerDisplayName: String = "$providerName (SpotXero)",
         customColorData: ByteArray? = null,
+        backgroundColor: Int? = null,
         hasVocalRemoval: Boolean = false,
         language: String = "en",
         isRtl: Boolean = isRtlLanguage(language)
@@ -47,7 +48,7 @@ object LyricsProtobuf {
         writeVarint(out, lyricsResponseBytes.size.toLong())
         out.write(lyricsResponseBytes)
 
-        val colorDataBytes = customColorData ?: buildColorData()
+        val colorDataBytes = customColorData ?: buildColorData(backgroundColor)
         writeTag(out, 2, WIRE_TYPE_LENGTH_DELIMITED)
         writeVarint(out, colorDataBytes.size.toLong())
         out.write(colorDataBytes)
@@ -223,10 +224,10 @@ object LyricsProtobuf {
         return LyricSyllable(startTimeMs = startTimeMs, numChars = numChars)
     }
 
-    private fun buildColorData(): ByteArray {
+    fun buildColorData(backgroundColor: Int? = null): ByteArray {
         val out = ByteArrayOutputStream()
         writeTag(out, 1, WIRE_TYPE_VARINT)
-        writeVarint(out, -16777216L)
+        writeVarint(out, (backgroundColor ?: -16777216).toLong())
 
         writeTag(out, 2, WIRE_TYPE_VARINT)
         writeVarint(out, -1L)

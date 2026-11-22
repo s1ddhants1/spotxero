@@ -29,7 +29,9 @@ object ProductStateHook {
         "high-bitrate" to true,
         "tablet-free" to false,
         "autoplay" to true,
-        "player.autoplay" to true
+        "player.autoplay" to true,
+        "enable_has_lyrics_check_bypass" to true,
+        "has_lyrics" to true
     )
 
     private val PLAYER_LOCAL_SPOOFS: Map<String, Any> = mapOf(
@@ -89,7 +91,14 @@ object ProductStateHook {
         "core-player:autoplay" to true,
         "player:autoplay" to true,
         "core-player:player.autoplay" to true,
-        "player:player.autoplay" to true
+        "player:player.autoplay" to true,
+        "android-feature-lyrics-repository:enable_has_lyrics_check_bypass" to true,
+        "android-feature-lyrics:enable_has_lyrics_check_bypass" to true,
+        "lyrics:enable_has_lyrics_check_bypass" to true,
+        "enable_has_lyrics_check_bypass" to true,
+        "android-feature-lyrics-npvelements:lyrics_entry_point_enabled" to true,
+        "android-feature-lyrics-npvelements:lyrics_entry_point_button_v2_enabled" to true,
+        "android-feature-lyrics-npvelements:shared_npv_lyrics_loading_enabled" to true
     )
 
     private val RCS_INTEGRITY_OVERRIDES: Map<String, Any> = mapOf(
@@ -402,6 +411,7 @@ object ProductStateHook {
 
                 for ((fullKey, value) in overrides) {
                     val sep = fullKey.indexOf(':')
+                    if (sep <= 0) continue
                     val scope = fullKey.substring(0, sep)
                     val name = fullKey.substring(sep + 1)
                     buildRcsValue(r27Ctor, name, scope, value)?.let { patched[fullKey] = it }
@@ -426,7 +436,7 @@ object ProductStateHook {
                 }
                 val scope = chain.getArg(0) as? String ?: return@intercept result
                 val name = chain.getArg(1) as? String ?: return@intercept result
-                val overrideVal = rcsScopedOverrides()["$scope:$name"] ?: return@intercept result
+                val overrideVal = rcsScopedOverrides()["$scope:$name"] ?: rcsScopedOverrides()[name] ?: return@intercept result
                 buildRcsValue(r27Ctor, name, scope, overrideVal) ?: result
             }
     }

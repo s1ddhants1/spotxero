@@ -166,6 +166,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 aiTranslationDeeplApiKey = PreferencesManager.aiTranslationDeeplApiKey,
                 aiTranslationDeeplFormality = PreferencesManager.aiTranslationDeeplFormality,
                 lyricsProvidersOrder = parseLyricsProviders(PreferencesManager.lyricsProvidersOrder),
+                isSpicylyricsEnabled = PreferencesManager.isSpicylyricsEnabled,
                 isBetterlyricsEnabled = PreferencesManager.isBetterlyricsEnabled,
                 isLrcredEnabled = PreferencesManager.isLrcredEnabled,
                 isLrclibEnabled = PreferencesManager.isLrclibEnabled,
@@ -404,6 +405,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun setLyricsProviderEnabled(id: String, enabled: Boolean) {
         val app = getApplication<Application>()
         when (id) {
+            "spicylyrics" -> {
+                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_SPICYLYRICS, enabled)
+                _uiState.update { it.copy(isSpicylyricsEnabled = enabled) }
+            }
             "betterlyrics" -> {
                 PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS, enabled)
                 _uiState.update { it.copy(isBetterlyricsEnabled = enabled) }
@@ -474,7 +479,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun parseLyricsProviders(raw: String): List<String> {
-        val defaultList = listOf("betterlyrics", "lrcred", "lrclib", "kugou", "netease", "genius")
+        val defaultList = listOf("spicylyrics", "betterlyrics", "lrcred", "lrclib", "kugou", "netease", "genius")
         val items = raw.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
         val result = items.filter { defaultList.contains(it) }.distinct().toMutableList()
         for (d in defaultList) {

@@ -42,6 +42,7 @@ object PreferencesManager {
     var aiTranslationDeeplApiKey: String = ""
     var aiTranslationDeeplFormality: String = "default"
     var lyricsProvidersOrder: String = PrefKeys.DEFAULT_LYRICS_PROVIDERS_ORDER
+    var isSpicylyricsEnabled: Boolean = true
     var isBetterlyricsEnabled: Boolean = true
     var isLrcredEnabled: Boolean = true
     var isLrclibEnabled: Boolean = true
@@ -348,6 +349,8 @@ object PreferencesManager {
         inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY] = aiTranslationDeeplFormality
         lyricsProvidersOrder = prefs.getString(PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, PrefKeys.DEFAULT_LYRICS_PROVIDERS_ORDER) ?: PrefKeys.DEFAULT_LYRICS_PROVIDERS_ORDER
         inMemoryStrings[PrefKeys.KEY_LYRICS_PROVIDERS_ORDER] = lyricsProvidersOrder
+        isSpicylyricsEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_SPICYLYRICS, true)
+        inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_SPICYLYRICS] = isSpicylyricsEnabled
         isBetterlyricsEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS, true)
         inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS] = isBetterlyricsEnabled
         isLrcredEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_LRCRED, true)

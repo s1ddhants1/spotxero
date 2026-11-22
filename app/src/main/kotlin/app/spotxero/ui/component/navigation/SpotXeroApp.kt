@@ -140,6 +140,7 @@ fun SpotXeroApp(
                         isExternalLyricsEnabled = uiState.isExternalLyricsEnabled,
                         isForceExternalLyricsEnabled = uiState.isForceExternalLyricsEnabled,
                         lyricsProvidersOrder = uiState.lyricsProvidersOrder,
+                        isSpicylyricsEnabled = uiState.isSpicylyricsEnabled,
                         isBetterlyricsEnabled = uiState.isBetterlyricsEnabled,
                         isLrcredEnabled = uiState.isLrcredEnabled,
                         isLrclibEnabled = uiState.isLrclibEnabled,

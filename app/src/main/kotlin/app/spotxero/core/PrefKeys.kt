@@ -111,6 +111,7 @@ object PrefKeys {
     )
     const val KEY_LYRICS_PROVIDERS_ORDER = "pref_lyrics_providers_order"
     val DEFAULT_LYRICS_PROVIDERS = listOf(
+        "spicylyrics",
         "betterlyrics",
         "lrcred",
         "lrclib",
@@ -119,6 +120,7 @@ object PrefKeys {
         "genius"
     )
     val DEFAULT_LYRICS_PROVIDERS_ORDER = DEFAULT_LYRICS_PROVIDERS.joinToString(",")
+    const val KEY_LYRICS_PROVIDER_SPICYLYRICS = "pref_lyrics_provider_spicylyrics"
     const val KEY_LYRICS_PROVIDER_BETTERLYRICS = "pref_lyrics_provider_betterlyrics"
     const val KEY_LYRICS_PROVIDER_LRCRED = "pref_lyrics_provider_lrcred"
     const val KEY_LYRICS_PROVIDER_LRCLIB = "pref_lyrics_provider_lrclib"

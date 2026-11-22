@@ -85,6 +85,7 @@
     <string name="ai_lyrics_translation_desc">Translation languages, providers and models</string>
     <string name="lyrics_providers_header">Providers &amp; Priority</string>
     <string name="lyrics_providers_desc">Drag or move items to configure fallback priority</string>
+    <string name="provider_spicylyrics_title">SpicyLyrics</string>
     <string name="provider_betterlyrics_title">BetterLyrics</string>
     <string name="provider_lrcred_title">lrc.red</string>
     <string name="provider_lrclib_title">LRCLIB</string>

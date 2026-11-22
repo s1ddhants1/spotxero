@@ -1,5 +1,6 @@
 package app.spotxero.hooks.lyrics
 
+import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.util.Log
 import app.spotxero.core.PrefKeys
@@ -41,6 +42,10 @@ object LyricsManager {
     var currentTrackId: String? = null
         private set
 
+    @Volatile
+    var currentTrackColor: Int? = null
+        private set
+
     private val prefetchExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "LyricsPrefetch").apply { isDaemon = true }
     }
@@ -48,6 +53,7 @@ object LyricsManager {
     data class CachedLyrics(
         val lyrics: ParsedLyrics,
         val providerDisplayName: String,
+        val backgroundColor: Int? = null,
         val language: String = "en",
         val isRtl: Boolean = false
     )
@@ -77,7 +83,13 @@ object LyricsManager {
             currentTrackDurationSec = durationSec
             currentTrackId = mediaId?.substringAfterLast(":")?.takeIf { it.isNotBlank() }
 
-            Log.d(TAG, "Current track updated: $title by $artist (id=$currentTrackId, $durationSec s)")
+            val artBitmap = runCatching {
+                metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                    ?: metadata.getBitmap(MediaMetadata.METADATA_KEY_ART)
+            }.getOrNull()
+            currentTrackColor = artBitmap?.let { runCatching { extractDarkColor(it) }.getOrNull() }
+
+            Log.d(TAG, "Current track updated: $title by $artist (id=$currentTrackId, $durationSec s, color=$currentTrackColor)")
 
             val cacheKey = buildCacheKey(title, artist ?: "", album)
             val trackKey = currentTrackId?.let { buildTrackKey(it) }
@@ -87,7 +99,7 @@ object LyricsManager {
                 if (existing == null) {
                     prefetchExecutor.execute {
                         try {
-                            val result = fetchAndCache(title, artist ?: "", album, durationSec, cacheKey, trackKey)
+                            val result = fetchAndCache(title, artist ?: "", album, durationSec, currentTrackId, cacheKey, trackKey)
                             future.complete(result)
                         } catch (t: Throwable) {
                             Log.w(TAG, "Prefetch failed: ${t.message}", t)
@@ -124,6 +136,7 @@ object LyricsManager {
             .filter { it.isNotEmpty() }
         val activeProviders = order.filter { providerId ->
             when (providerId) {
+                "spicylyrics" -> PreferencesManager.isSpicylyricsEnabled
                 "betterlyrics" -> PreferencesManager.isBetterlyricsEnabled
                 "lrcred" -> PreferencesManager.isLrcredEnabled
                 "lrclib" -> PreferencesManager.isLrclibEnabled
@@ -192,7 +205,7 @@ object LyricsManager {
             val existing = inFlightFetches.putIfAbsent(cacheKey, newFuture)
             if (existing == null) {
                 return try {
-                    val result = fetchAndCache(title, artist, album, durationSec, cacheKey, trackKey)
+                    val result = fetchAndCache(title, artist, album, durationSec, trackId, cacheKey, trackKey)
                     newFuture.complete(result)
                     result
                 } catch (t: Throwable) {
@@ -225,8 +238,10 @@ object LyricsManager {
         }
         val cached = getLyrics(trackId) ?: return null
         val proto = LyricsProtobuf.buildColorLyricsResponse(
-            cached.lyrics,
-            cached.providerDisplayName,
+            lyrics = cached.lyrics,
+            providerName = cached.providerDisplayName,
+            providerDisplayName = cached.providerDisplayName,
+            backgroundColor = cached.backgroundColor ?: currentTrackColor,
             language = cached.language,
             isRtl = cached.isRtl
         )
@@ -241,6 +256,7 @@ object LyricsManager {
         artist: String,
         album: String?,
         durationSec: Long?,
+        trackId: String?,
         cacheKey: String,
         trackKey: String?
     ): CachedLyrics? {
@@ -253,6 +269,7 @@ object LyricsManager {
 
         for (providerId in order) {
             val provider: LyricsProvider? = when (providerId) {
+                "spicylyrics" -> if (PreferencesManager.isSpicylyricsEnabled) SpicyLyricsProvider else null
                 "betterlyrics" -> if (PreferencesManager.isBetterlyricsEnabled) BetterLyricsProvider else null
                 "lrcred" -> if (PreferencesManager.isLrcredEnabled) LrcRedProvider else null
                 "lrclib" -> if (PreferencesManager.isLrclibEnabled) LrclibProvider else null
@@ -273,7 +290,8 @@ object LyricsManager {
                     trackName = title,
                     artistName = artist,
                     albumName = album,
-                    durationSec = durationSec
+                    durationSec = durationSec,
+                    trackId = trackId ?: currentTrackId
                 )
                 Log.i(TAG, "Provider ${provider.displayName} returned ${lyrics?.lines?.size ?: 0} lines")
                 if (lyrics != null && lyrics.lines.isNotEmpty()) {
@@ -291,10 +309,17 @@ object LyricsManager {
                         if (LyricsProtobuf.isRtlText(lyrics.lines.joinToString(" ") { it.words })) "ar" else "en"
                     }
                     val isRtl = LyricsProtobuf.isRtlLanguage(lang) || LyricsProtobuf.isRtlText(finalLyrics.lines.joinToString(" ") { it.words })
-                    val cached = CachedLyrics(finalLyrics, provider.displayName, lang, isRtl)
+                    val color = currentTrackColor
+                    val cached = CachedLyrics(finalLyrics, provider.displayName, color, lang, isRtl)
                     Log.i(TAG, "Fetched ${lyrics.lines.size} lines from ${provider.displayName}")
                     parsedCache[cacheKey] = cached
-                    val proto = LyricsProtobuf.buildColorLyricsResponse(finalLyrics, provider.displayName, language = lang, isRtl = isRtl)
+                    val proto = LyricsProtobuf.buildColorLyricsResponse(
+                        finalLyrics,
+                        provider.displayName,
+                        backgroundColor = color,
+                        language = lang,
+                        isRtl = isRtl
+                    )
                     PersistentLyricsCache.putProtobuf(cacheKey, proto)
                     if (trackKey != null) {
                         parsedCache[trackKey] = cached
@@ -309,6 +334,44 @@ object LyricsManager {
 
         Log.w(TAG, "No lyrics found from any configured provider for '$title' by '$artist'")
         return null
+    }
+
+    private fun extractDarkColor(bitmap: Bitmap): Int {
+        val w = bitmap.width
+        val h = bitmap.height
+        if (w <= 0 || h <= 0) return -16777216
+        val stepX = (w / 16).coerceAtLeast(1)
+        val stepY = (h / 16).coerceAtLeast(1)
+        var totalR = 0L
+        var totalG = 0L
+        var totalB = 0L
+        var count = 0
+        var y = 0
+        while (y < h) {
+            var x = 0
+            while (x < w) {
+                val pixel = bitmap.getPixel(x, y)
+                totalR += (pixel shr 16) and 0xFF
+                totalG += (pixel shr 8) and 0xFF
+                totalB += pixel and 0xFF
+                count++
+                x += stepX
+            }
+            y += stepY
+        }
+        if (count == 0) return -16777216
+        var r = (totalR / count).toDouble()
+        var g = (totalG / count).toDouble()
+        var b = (totalB / count).toDouble()
+        val luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        val maxLuminance = 60.0
+        if (luminance > maxLuminance) {
+            val factor = maxLuminance / luminance
+            r *= factor
+            g *= factor
+            b *= factor
+        }
+        return (0xFF shl 24) or (r.toInt().coerceIn(0, 255) shl 16) or (g.toInt().coerceIn(0, 255) shl 8) or b.toInt().coerceIn(0, 255)
     }
 
     private fun fetchTrackMetadataFromOembed(trackId: String): Pair<String, String>? {

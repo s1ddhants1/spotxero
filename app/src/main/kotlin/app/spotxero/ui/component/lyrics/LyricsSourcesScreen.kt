@@ -61,6 +61,7 @@ fun LyricsSourcesScreen(
     isExternalLyricsEnabled: Boolean,
     isForceExternalLyricsEnabled: Boolean,
     lyricsProvidersOrder: List<String>,
+    isSpicylyricsEnabled: Boolean,
     isBetterlyricsEnabled: Boolean,
     isLrcredEnabled: Boolean,
     isLrclibEnabled: Boolean,
@@ -126,6 +127,7 @@ fun LyricsSourcesScreen(
         item(key = "providers_list") {
             LyricsProviderOrderCard(
                 providersOrder = lyricsProvidersOrder,
+                isSpicylyricsEnabled = isSpicylyricsEnabled,
                 isBetterlyricsEnabled = isBetterlyricsEnabled,
                 isLrcredEnabled = isLrcredEnabled,
                 isLrclibEnabled = isLrclibEnabled,
@@ -254,6 +256,7 @@ fun ReorderMenu(
 @Composable
 private fun LyricsProviderOrderCard(
     providersOrder: List<String>,
+    isSpicylyricsEnabled: Boolean,
     isBetterlyricsEnabled: Boolean,
     isLrcredEnabled: Boolean,
     isLrclibEnabled: Boolean,
@@ -301,6 +304,7 @@ private fun LyricsProviderOrderCard(
 
                 val isItemDragging = draggingIndex == index
                 val isChecked = when (providerId) {
+                    "spicylyrics" -> isSpicylyricsEnabled
                     "betterlyrics" -> isBetterlyricsEnabled
                     "lrcred" -> isLrcredEnabled
                     "lrclib" -> isLrclibEnabled
@@ -311,6 +315,7 @@ private fun LyricsProviderOrderCard(
                 }
 
                 val title = when (providerId) {
+                    "spicylyrics" -> stringResource(R.string.provider_spicylyrics_title)
                     "betterlyrics" -> stringResource(R.string.provider_betterlyrics_title)
                     "lrcred" -> stringResource(R.string.provider_lrcred_title)
                     "lrclib" -> stringResource(R.string.provider_lrclib_title)

@@ -19,6 +19,8 @@ interface LyricsProvider {
     val id: String
     val displayName: String
     fun fetchLyrics(trackName: String, artistName: String, albumName: String?, durationSec: Long?): ParsedLyrics?
+    fun fetchLyrics(trackName: String, artistName: String, albumName: String?, durationSec: Long?, trackId: String?): ParsedLyrics? =
+        fetchLyrics(trackName, artistName, albumName, durationSec)
 }
 
 object BetterLyricsProvider : LyricsProvider {
@@ -497,6 +499,118 @@ internal fun removeExtraInfo(title: String): String {
         .replace(Regex("""\s*[-–—]\s*(?:feat(?:uring)?|ft)\.?\s+.+$""", RegexOption.IGNORE_CASE), "")
         .replace(Regex("""\s*[\[(][^()\[\]]*(?:remaster|deluxe|version|mono|stereo|bonus)[^()\[\]]*[\])]""", RegexOption.IGNORE_CASE), "")
         .trim()
+}
+
+object SpicyLyricsProvider : LyricsProvider {
+    override val id = "spicylyrics"
+    override val displayName = "SpicyLyrics"
+    private const val TAG = "SpotXero.SpicyLyrics"
+    private const val BASE_URL = "https://api.spicylyrics.org/v1/lyrics"
+    private const val DEFAULT_TOKEN = "sl_pk_2bickG_gRxepd6CvYUPwUpsMcLWaOE9zJ3mdk9fEF8Y"
+
+    override fun fetchLyrics(trackName: String, artistName: String, albumName: String?, durationSec: Long?): ParsedLyrics? =
+        fetchLyrics(trackName, artistName, albumName, durationSec, null)
+
+    override fun fetchLyrics(
+        trackName: String,
+        artistName: String,
+        albumName: String?,
+        durationSec: Long?,
+        trackId: String?
+    ): ParsedLyrics? {
+        val resolvedId = trackId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return try {
+            val headers = mapOf(
+                "Authorization" to "Bearer $DEFAULT_TOKEN",
+                "User-Agent" to "SpotXero/2.0 (Android; +https://github.com/s1ddhants1/SpotXero)"
+            )
+            val response = httpGet("$BASE_URL/$resolvedId", headers) ?: return null
+            val json = JSONObject(response)
+            if (json.optInt("Status", 200) != 200) return null
+            val body = json.optJSONObject("Body") ?: return null
+            parseBody(body)
+        } catch (t: Throwable) {
+            Log.d(TAG, "SpicyLyrics fetch failed: ${t.message}")
+            null
+        }
+    }
+
+    private fun parseBody(body: JSONObject): ParsedLyrics? {
+        return when (body.optString("Type")) {
+            "Syllable" -> parseSyllable(body)
+            "Line" -> parseLine(body)
+            "Static" -> parseStatic(body)
+            else -> null
+        }
+    }
+
+    private fun parseSyllable(body: JSONObject): ParsedLyrics? {
+        val content = body.optJSONArray("Content") ?: return null
+        val parsedLines = mutableListOf<LyricLine>()
+        for (i in 0 until content.length()) {
+            val item = content.optJSONObject(i) ?: continue
+            val lead = item.optJSONObject("Lead") ?: continue
+            val lineStartMs = (lead.optDouble("StartTime", 0.0) * 1000).toLong()
+            val syllablesArray = lead.optJSONArray("Syllables")
+            val lineWords = StringBuilder()
+            val lyricSyllables = mutableListOf<LyricSyllable>()
+
+            if (syllablesArray != null && syllablesArray.length() > 0) {
+                for (j in 0 until syllablesArray.length()) {
+                    val sylObj = syllablesArray.optJSONObject(j) ?: continue
+                    val text = sylObj.optString("Text")
+                    val isPartOfWord = sylObj.optBoolean("IsPartOfWord", false)
+                    val sylStartMs = (sylObj.optDouble("StartTime", 0.0) * 1000).toLong()
+                    val isLast = j == syllablesArray.length() - 1
+                    val token = if (!isPartOfWord && !isLast) "$text " else text
+                    lineWords.append(token)
+                    lyricSyllables.add(LyricSyllable(startTimeMs = sylStartMs, numChars = token.length))
+                }
+            }
+
+            val words = lineWords.toString()
+            if (words.isNotBlank()) {
+                parsedLines.add(
+                    LyricLine(
+                        startTimeMs = lineStartMs,
+                        words = words,
+                        syllables = lyricSyllables
+                    )
+                )
+            }
+        }
+        if (parsedLines.isEmpty()) return null
+        parsedLines.sortBy { it.startTimeMs }
+        return ParsedLyrics(syncType = SyncType.SYLLABLE_SYNCED, lines = parsedLines)
+    }
+
+    private fun parseLine(body: JSONObject): ParsedLyrics? {
+        val linesArray = body.optJSONArray("Lines") ?: return null
+        val parsedLines = mutableListOf<LyricLine>()
+        for (i in 0 until linesArray.length()) {
+            val lineObj = linesArray.optJSONObject(i) ?: continue
+            val text = lineObj.optString("Text").trim()
+            if (text.isEmpty()) continue
+            val startMs = (lineObj.optDouble("StartTime", 0.0) * 1000).toLong()
+            parsedLines.add(LyricLine(startTimeMs = startMs, words = text))
+        }
+        if (parsedLines.isEmpty()) return null
+        parsedLines.sortBy { it.startTimeMs }
+        return ParsedLyrics(syncType = SyncType.LINE_SYNCED, lines = parsedLines)
+    }
+
+    private fun parseStatic(body: JSONObject): ParsedLyrics? {
+        val linesArray = body.optJSONArray("Lines") ?: return null
+        val parsedLines = mutableListOf<LyricLine>()
+        for (i in 0 until linesArray.length()) {
+            val lineObj = linesArray.optJSONObject(i) ?: continue
+            val text = lineObj.optString("Text").trim()
+            if (text.isEmpty()) continue
+            parsedLines.add(LyricLine(startTimeMs = 0L, words = text))
+        }
+        if (parsedLines.isEmpty()) return null
+        return ParsedLyrics(syncType = SyncType.UNSYNCED, lines = parsedLines)
+    }
 }
 
 private fun httpGet(urlString: String, headers: Map<String, String> = emptyMap(), redirectCount: Int = 0): String? {
