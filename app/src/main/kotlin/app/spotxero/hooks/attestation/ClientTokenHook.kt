@@ -7,10 +7,10 @@ import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
 import java.io.ByteArrayOutputStream
 import java.lang.reflect.Method
+import java.lang.reflect.Proxy
 
 object ClientTokenHook {
 
-    private const val TAG = "SpotXero.ClientToken"
     private const val CLIENT_TOKEN_SERVICE = "spotify.connectivity.auth.client_token.esperanto.proto.ClientTokenProvider"
     private const val METHOD_GET_TOKEN = "getToken"
     private const val METHOD_GET_ENCRYPTED_TOKEN = "getEncryptedToken"
@@ -68,80 +68,13 @@ object ClientTokenHook {
 
     private fun enabled() = PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_TOKEN, true)
 
-    fun install(module: XposedModule, targetClassLoader: ClassLoader? = null) {
-        val cl = targetClassLoader
-            ?: DexKitResolver.get<Method>(DexKitResolver.KEY_CLIENT_BASE_CALL_SINGLE)?.declaringClass?.classLoader
-            ?: Thread.currentThread().contextClassLoader
-            ?: return
-
-        installOrbitConnectivity(module, cl)
-        installClientTokenEsperanto(module)
+    private fun isValidClientToken(bytes: ByteArray?): Boolean {
+        if (bytes == null || bytes.size < 16) return false
+        return (bytes[0].toInt() and 0xFF) == 0x0A
     }
 
-    private fun installOrbitConnectivity(module: XposedModule, classLoader: ClassLoader) {
-        val configClass = runCatching {
-            Class.forName("com.spotify.connectivity.ApplicationScopeConfiguration", false, classLoader)
-        }.getOrNull()
-
-        if (configClass != null) {
-            val setEnableClientToken = runCatching {
-                configClass.getMethod("setEnableClientToken", Boolean::class.javaPrimitiveType)
-            }.getOrNull()
-            if (setEnableClientToken != null) {
-                module.deoptimize(setEnableClientToken)
-                module.hook(setEnableClientToken)
-                    .setId("orbit_set_enable_client_token")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        if (!enabled()) return@intercept chain.proceed()
-                        chain.proceed(arrayOf(java.lang.Boolean.FALSE))
-                    }
-            }
-
-            val getEnableClientToken = runCatching {
-                configClass.getMethod("getEnableClientToken")
-            }.getOrNull()
-            if (getEnableClientToken != null) {
-                module.deoptimize(getEnableClientToken)
-                module.hook(getEnableClientToken)
-                    .setId("orbit_get_enable_client_token")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        if (!enabled()) return@intercept chain.proceed()
-                        false
-                    }
-            }
-        }
-
-        val nativeScopeClass = runCatching {
-            Class.forName("com.spotify.connectivity.NativeApplicationScope", false, classLoader)
-        }.getOrNull()
-
-        val createMethod = nativeScopeClass?.declaredMethods?.firstOrNull { it.name == "create" }
-        if (createMethod != null && configClass != null) {
-            val clientTokenField = runCatching {
-                configClass.getDeclaredField("enableClientToken").apply { isAccessible = true }
-            }.getOrNull()
-            val setClientTokenMethod = runCatching {
-                configClass.getMethod("setEnableClientToken", Boolean::class.javaPrimitiveType)
-            }.getOrNull()
-
-            module.deoptimize(createMethod)
-            module.hook(createMethod)
-                .setId("orbit_native_app_scope_create")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (enabled()) {
-                        for (arg in chain.args) {
-                            if (arg != null && configClass.isInstance(arg)) {
-                                runCatching { clientTokenField?.setBoolean(arg, false) }
-                                runCatching { setClientTokenMethod?.invoke(arg, false) }
-                            }
-                        }
-                    }
-                    chain.proceed()
-                }
-        }
+    fun install(module: XposedModule, targetClassLoader: ClassLoader? = null) {
+        installClientTokenEsperanto(module)
     }
 
     private fun installClientTokenEsperanto(module: XposedModule) {
@@ -156,6 +89,11 @@ object ClientTokenHook {
                     val service = chain.getArg(0) as? String
                     val method = chain.getArg(1) as? String
                     if (service == CLIENT_TOKEN_SERVICE && method == METHOD_GET_TOKEN) {
+                        val result = runCatching { chain.proceed() }.getOrNull()
+                        val bytes = result as? ByteArray
+                        if (isValidClientToken(bytes)) {
+                            return@intercept bytes
+                        }
                         return@intercept SYNTHETIC_CLIENT_TOKEN_ACQUIRE_RESULT
                     }
                     chain.proceed()
@@ -165,49 +103,101 @@ object ClientTokenHook {
         val clientSingle = DexKitResolver.get<Method>(DexKitResolver.KEY_CLIENT_BASE_CALL_SINGLE)
         if (clientSingle != null) {
             val cl = clientSingle.declaringClass.classLoader
-            val singleClass = cl?.let { runCatching { Class.forName("io.reactivex.rxjava3.core.Single", false, it) }.getOrNull() }
-            val justMethod = singleClass?.let { runCatching { it.getMethod("just", Any::class.java) }.getOrNull() }
-
-            module.deoptimize(clientSingle)
-            module.hook(clientSingle)
-                .setId("client_token_client_single_token")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!enabled()) return@intercept chain.proceed()
-                    val service = chain.getArg(0) as? String
-                    val method = chain.getArg(1) as? String
-                    if (service == CLIENT_TOKEN_SERVICE && method == METHOD_GET_TOKEN && justMethod != null) {
-                        val syntheticSingle = justMethod.invoke(null, SYNTHETIC_CLIENT_TOKEN_ACQUIRE_RESULT)
-                        if (syntheticSingle != null) {
-                            return@intercept syntheticSingle
+            if (cl != null) {
+                module.deoptimize(clientSingle)
+                module.hook(clientSingle)
+                    .setId("client_token_client_single_token")
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        val result = chain.proceed()
+                        if (!enabled()) return@intercept result
+                        val service = chain.getArg(0) as? String
+                        val method = chain.getArg(1) as? String
+                        if (service == CLIENT_TOKEN_SERVICE && method == METHOD_GET_TOKEN && result != null) {
+                            return@intercept attachSingleFallback(result, cl, SYNTHETIC_CLIENT_TOKEN_ACQUIRE_RESULT)
                         }
+                        result
                     }
-                    chain.proceed()
-                }
+            }
         }
 
         val clientStream = DexKitResolver.get<Method>(DexKitResolver.KEY_CLIENT_BASE_CALL_STREAM)
         if (clientStream != null) {
             val cl = clientStream.declaringClass.classLoader
-            val obsClass = cl?.let { runCatching { Class.forName("io.reactivex.rxjava3.core.Observable", false, it) }.getOrNull() }
-            val justMethod = obsClass?.let { runCatching { it.getMethod("just", Any::class.java) }.getOrNull() }
-
-            module.deoptimize(clientStream)
-            module.hook(clientStream)
-                .setId("client_token_client_stream_token")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!enabled()) return@intercept chain.proceed()
-                    val service = chain.getArg(0) as? String
-                    val method = chain.getArg(1) as? String
-                    if (service == CLIENT_TOKEN_SERVICE && method == METHOD_GET_ENCRYPTED_TOKEN && justMethod != null) {
-                        val synth = justMethod.invoke(null, SYNTHETIC_ENCRYPTED_CLIENT_TOKEN)
-                        if (synth != null) {
-                            return@intercept synth
+            if (cl != null) {
+                module.deoptimize(clientStream)
+                module.hook(clientStream)
+                    .setId("client_token_client_stream_token")
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        val result = chain.proceed()
+                        if (!enabled()) return@intercept result
+                        val service = chain.getArg(0) as? String
+                        val method = chain.getArg(1) as? String
+                        if (service == CLIENT_TOKEN_SERVICE && method == METHOD_GET_ENCRYPTED_TOKEN && result != null) {
+                            return@intercept attachObservableFallback(result, cl, SYNTHETIC_ENCRYPTED_CLIENT_TOKEN)
                         }
+                        result
                     }
-                    chain.proceed()
-                }
+            }
         }
+    }
+
+    private fun attachSingleFallback(single: Any, cl: ClassLoader, fallbackBytes: ByteArray): Any {
+        val singleClass = single.javaClass
+        val onErrorReturnItem = runCatching {
+            singleClass.getMethod("onErrorReturnItem", Any::class.java)
+        }.getOrNull()
+        val withError = onErrorReturnItem?.invoke(single, fallbackBytes) ?: single
+
+        val functionClass = runCatching {
+            Class.forName("io.reactivex.rxjava3.functions.Function", false, cl)
+        }.getOrNull() ?: return withError
+
+        val mapMethod = runCatching {
+            singleClass.getMethod("map", functionClass)
+        }.getOrNull() ?: return withError
+
+        val mapper = Proxy.newProxyInstance(
+            cl,
+            arrayOf(functionClass)
+        ) { _, method, args ->
+            if (method.name == "apply" && args != null && args.isNotEmpty()) {
+                val item = args[0] as? ByteArray
+                if (isValidClientToken(item)) item else fallbackBytes
+            } else {
+                null
+            }
+        }
+        return mapMethod.invoke(withError, mapper) ?: withError
+    }
+
+    private fun attachObservableFallback(observable: Any, cl: ClassLoader, fallbackBytes: ByteArray): Any {
+        val obsClass = observable.javaClass
+        val onErrorReturnItem = runCatching {
+            obsClass.getMethod("onErrorReturnItem", Any::class.java)
+        }.getOrNull()
+        val withError = onErrorReturnItem?.invoke(observable, fallbackBytes) ?: observable
+
+        val functionClass = runCatching {
+            Class.forName("io.reactivex.rxjava3.functions.Function", false, cl)
+        }.getOrNull() ?: return withError
+
+        val mapMethod = runCatching {
+            obsClass.getMethod("map", functionClass)
+        }.getOrNull() ?: return withError
+
+        val mapper = Proxy.newProxyInstance(
+            cl,
+            arrayOf(functionClass)
+        ) { _, method, args ->
+            if (method.name == "apply" && args != null && args.isNotEmpty()) {
+                val item = args[0] as? ByteArray
+                if (isValidClientToken(item)) item else fallbackBytes
+            } else {
+                null
+            }
+        }
+        return mapMethod.invoke(withError, mapper) ?: withError
     }
 }
