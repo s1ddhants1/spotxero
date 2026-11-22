@@ -35,7 +35,9 @@ object BrandAdsHook {
                     return@intercept result
                 }
                 val list = result as? List<*> ?: return@intercept result
-                filter(list)
+                val filtered = filter(list)
+                android.util.Log.i("SpotXero.BrandAds", "[$hookId] in: ${list.size}, out: ${filtered?.size}")
+                filtered
             }
     }
 }

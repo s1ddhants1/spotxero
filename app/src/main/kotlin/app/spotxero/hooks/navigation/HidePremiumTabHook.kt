@@ -10,10 +10,6 @@ import java.lang.reflect.Method
 object HidePremiumTabHook {
 
     fun install(module: XposedModule) {
-        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-            return
-        }
-
         val method = DexKitResolver.get<Method>(DexKitResolver.KEY_PREMIUM_TAB_FLAG)
         if (method == null ||
             method.parameterCount != 0 ||
@@ -28,11 +24,10 @@ object HidePremiumTabHook {
             .setId("hide_premium_tab")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
-                val result = chain.proceed()
-                if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_PREMIUM_TAB, true)) {
                     false
                 } else {
-                    result
+                    true
                 }
             }
     }

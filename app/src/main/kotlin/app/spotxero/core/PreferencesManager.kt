@@ -42,6 +42,7 @@ object PreferencesManager {
     var aiTranslationDeeplApiKey: String = ""
     var aiTranslationDeeplFormality: String = "default"
     var lyricsProvidersOrder: String = PrefKeys.DEFAULT_LYRICS_PROVIDERS_ORDER
+    var isSpicylyricsEnabled: Boolean = true
     var isBetterlyricsEnabled: Boolean = true
     var isLrcredEnabled: Boolean = true
     var isLrclibEnabled: Boolean = true
@@ -56,6 +57,7 @@ object PreferencesManager {
     var isSpotifyRoundyUiEnabled: Boolean = false
     var isHidePodcastsEnabled: Boolean = false
     var isHideAudiobooksEnabled: Boolean = false
+    var isHidePremiumTabEnabled: Boolean = true
     var isDoubleTapToSeekEnabled: Boolean = true
     var seekDurationSeconds: Int = 10
     var isSeekProgressive: Boolean = false
@@ -347,6 +349,8 @@ object PreferencesManager {
         inMemoryStrings[PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY] = aiTranslationDeeplFormality
         lyricsProvidersOrder = prefs.getString(PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, PrefKeys.DEFAULT_LYRICS_PROVIDERS_ORDER) ?: PrefKeys.DEFAULT_LYRICS_PROVIDERS_ORDER
         inMemoryStrings[PrefKeys.KEY_LYRICS_PROVIDERS_ORDER] = lyricsProvidersOrder
+        isSpicylyricsEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_SPICYLYRICS, true)
+        inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_SPICYLYRICS] = isSpicylyricsEnabled
         isBetterlyricsEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS, true)
         inMemoryBooleans[PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS] = isBetterlyricsEnabled
         isLrcredEnabled = prefs.getBoolean(PrefKeys.KEY_LYRICS_PROVIDER_LRCRED, true)
@@ -375,6 +379,8 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_HIDE_PODCASTS] = isHidePodcastsEnabled
         isHideAudiobooksEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_AUDIOBOOKS, false)
         inMemoryBooleans[PrefKeys.KEY_HIDE_AUDIOBOOKS] = isHideAudiobooksEnabled
+        isHidePremiumTabEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PREMIUM_TAB, true)
+        inMemoryBooleans[PrefKeys.KEY_HIDE_PREMIUM_TAB] = isHidePremiumTabEnabled
         isDoubleTapToSeekEnabled = prefs.getBoolean(PrefKeys.KEY_DOUBLE_TAP_TO_SEEK, true)
         inMemoryBooleans[PrefKeys.KEY_DOUBLE_TAP_TO_SEEK] = isDoubleTapToSeekEnabled
         seekDurationSeconds = prefs.getInt(PrefKeys.KEY_SEEK_DURATION_SECONDS, 10)
@@ -589,6 +595,7 @@ object PreferencesManager {
             PrefKeys.KEY_SPOTIFY_ROUNDY_UI -> isSpotifyRoundyUiEnabled = value
             PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = value
             PrefKeys.KEY_HIDE_AUDIOBOOKS -> isHideAudiobooksEnabled = value
+            PrefKeys.KEY_HIDE_PREMIUM_TAB -> isHidePremiumTabEnabled = value
             PrefKeys.KEY_DOUBLE_TAP_TO_SEEK -> isDoubleTapToSeekEnabled = value
             PrefKeys.KEY_SEEK_PROGRESSIVE -> isSeekProgressive = value
             KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = value

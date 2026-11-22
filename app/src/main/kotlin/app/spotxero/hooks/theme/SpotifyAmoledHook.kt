@@ -18,17 +18,17 @@ import kotlin.math.abs
 object SpotifyAmoledHook {
 
     private val DARK_COLORS = setOf(
-        0xFF121212.toInt(), // primary background base
-        0xFF181818.toInt(), // classic dark
-        0xFF191414.toInt(), // spotify brand dark
-        0xFF191919.toInt(), // elevated press
-        0xFF1F1F1F.toInt(), // elevated base & highlight
-        0xFF212121.toInt(), // dark grey
-        0xFF242424.toInt(), // dark grey
-        0xFF282828.toInt(), // dark grey
-        0xFF292929.toInt(), // decorative subdued
-        0xFF2A2A2A.toInt(), // elevated highlight
-        0xFF333333.toInt()  // subdued separator
+        0xFF121212.toInt(),
+        0xFF181818.toInt(),
+        0xFF191414.toInt(),
+        0xFF191919.toInt(),
+        0xFF1F1F1F.toInt(),
+        0xFF212121.toInt(),
+        0xFF242424.toInt(),
+        0xFF282828.toInt(),
+        0xFF292929.toInt(),
+        0xFF2A2A2A.toInt(),
+        0xFF333333.toInt()
     )
 
     private fun isAmoledEnabled(): Boolean =
@@ -37,7 +37,7 @@ object SpotifyAmoledHook {
     private fun isDarkColor(color: Int): Boolean {
         if (color in DARK_COLORS) return true
         val alpha = (color ushr 24) and 0xFF
-        if (alpha < 0x80) return false // Ignore transparent / translucent colors
+        if (alpha < 0x80) return false
         val r = (color ushr 16) and 0xFF
         val g = (color ushr 8) and 0xFF
         val b = color and 0xFF
@@ -330,7 +330,6 @@ object SpotifyAmoledHook {
                 val name = method.name
                 val params = method.parameterTypes
 
-                // drawRect, drawRoundRect, drawPath, drawPaint (Paint is the last argument)
                 if (name in listOf("drawRect", "drawRoundRect", "drawPath", "drawPaint")) {
                     if (params.isNotEmpty() && params.last() == Paint::class.java) {
                         val key = "${clazz.name}.${method.name}(${params.joinToString { it.simpleName }})"

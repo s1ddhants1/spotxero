@@ -1044,7 +1044,7 @@ object DexKitResolver {
             val enabled = holderClass.declaredMethods.firstOrNull {
                 !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
                     it.parameterCount == 0 &&
-                    (it.returnType == Boolean::class.javaPrimitiveType || it.returnType == java.lang.Boolean::class.java)
+                    (it.returnType == Boolean::class.javaPrimitiveType || it.returnType == Boolean::class.javaObjectType)
             } ?: return@runCatching null
 
             ShuffleContextResolved(modes, def, enabled, enumConstants)
@@ -1083,7 +1083,7 @@ object DexKitResolver {
     private fun isShuffleContextEnabledGetter(method: Method): Boolean =
         !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
             method.parameterCount == 0 &&
-            (method.returnType == Boolean::class.javaPrimitiveType || method.returnType == java.lang.Boolean::class.java)
+            (method.returnType == Boolean::class.javaPrimitiveType || method.returnType == Boolean::class.javaObjectType)
 
     private fun resolveContextCapabilityInit(
         dexKit: DexKitBridge,

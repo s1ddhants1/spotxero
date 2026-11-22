@@ -4,6 +4,7 @@ import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
+import app.spotxero.core.ProtoLists
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
@@ -13,7 +14,7 @@ object ProductStateHook {
 
     private const val TAG = "SpotXero.ProductState"
 
-    private val TYPED_SPOOFS: Map<String, Any> = mapOf(
+    private val BASE_TYPED_SPOOFS: Map<String, Any> = mapOf(
         "ads" to false,
         "shuffle" to false,
         "on-demand" to true,
@@ -21,15 +22,21 @@ object ProductStateHook {
         "streaming" to true,
         "streaming-rules" to "",
         "previous-streaming-rules" to "",
-        "nft-disabled" to "1",
         "can_use_superbird" to true,
         "unrestricted" to true,
         "shuffle-eligible" to true,
         "high-bitrate" to true,
         "tablet-free" to false,
         "autoplay" to true,
-        "player.autoplay" to true
+        "player.autoplay" to true,
+        "enable_has_lyrics_check_bypass" to true,
+        "has_lyrics" to true
     )
+
+    private fun typedSpoofs(): Map<String, Any> {
+        val hideTab = PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_PREMIUM_TAB, true)
+        return BASE_TYPED_SPOOFS + ("nft-disabled" to (if (hideTab) "1" else "0"))
+    }
 
     private val PLAYER_LOCAL_SPOOFS: Map<String, Any> = mapOf(
         "type" to "premium",
@@ -88,8 +95,25 @@ object ProductStateHook {
         "core-player:autoplay" to true,
         "player:autoplay" to true,
         "core-player:player.autoplay" to true,
-        "player:player.autoplay" to true
+        "player:player.autoplay" to true,
+        "android-feature-lyrics-repository:enable_has_lyrics_check_bypass" to true,
+        "android-feature-lyrics:enable_has_lyrics_check_bypass" to true,
+        "lyrics:enable_has_lyrics_check_bypass" to true,
+        "enable_has_lyrics_check_bypass" to true,
+        "android-feature-lyrics-npvelements:lyrics_entry_point_enabled" to true,
+        "android-feature-lyrics-npvelements:lyrics_entry_point_button_v2_enabled" to true,
+        "android-feature-lyrics-npvelements:shared_npv_lyrics_loading_enabled" to true
     )
+
+    private val RCS_INTEGRITY_OVERRIDES: Map<String, Any> = mapOf(
+        "android-integrity:validation_enabled" to false,
+        "android-integrity:employee_validation_enabled" to false,
+        "android-integrity:time_tracking_enabled" to false
+    )
+
+    private val RCS_ALL_OVERRIDES: Map<String, Any> = RCS_SCOPED_OVERRIDES + RCS_INTEGRITY_OVERRIDES
+
+    private fun rcsScopedOverrides(): Map<String, Any> = RCS_ALL_OVERRIDES
 
     private val RCS_INT_BY_NAME: Map<String, Int> = mapOf(
         "pick_and_shuffle_timecap" to 1440,
@@ -101,13 +125,16 @@ object ProductStateHook {
         "playback_timeout_action" to "Nothing"
     )
 
-    private val LEGACY_SPOOFS: Map<String, String> = TYPED_SPOOFS.mapValues { (_, value) ->
-        (value as? Boolean)?.let { if (it) "1" else "0" } ?: value.toString()
-    } + mapOf(
+    private val EXTRA_LEGACY_SPOOFS: Map<String, String> = mapOf(
         "horizon" to "FULL",
         "shuffle-restricted" to "0",
         "unlimited-skips" to "1"
     )
+
+    private fun legacySpoofs(): Map<String, String> =
+        typedSpoofs().mapValues { (_, value) ->
+            (value as? Boolean)?.let { if (it) "1" else "0" } ?: value.toString()
+        } + EXTRA_LEGACY_SPOOFS
 
     fun install(module: XposedModule) {
         if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
@@ -141,7 +168,7 @@ object ProductStateHook {
                 @Suppress("UNCHECKED_CAST")
                 (map as Map<Any?, Any?>).toMutableMap().apply {
                     KEYS_TO_STRIP.forEach { remove(it) }
-                    putAll(LEGACY_SPOOFS)
+                    putAll(legacySpoofs())
                     PLAYER_LOCAL_SPOOFS.forEach { (k, v) -> put(k, v.toString()) }
                 }
             }
@@ -156,7 +183,6 @@ object ProductStateHook {
         }
 
         val accessors = attributeAccessorsOf(valueField.declaringClass, valueField)
-        val allSpoofs = TYPED_SPOOFS + PLAYER_LOCAL_SPOOFS
 
         module.deoptimize(accessor)
         module.hook(accessor)
@@ -168,6 +194,7 @@ object ProductStateHook {
                 if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || map.isEmpty()) {
                     return@intercept result
                 }
+                val allSpoofs = typedSpoofs() + PLAYER_LOCAL_SPOOFS
                 map.forEach { (key, attribute) ->
                     if (valueField.declaringClass.isInstance(attribute)) {
                         if (KEYS_TO_STRIP.contains(key)) {
@@ -216,7 +243,7 @@ object ProductStateHook {
                         attributeClass.getDeclaredConstructor().apply { isAccessible = true }
                     }.getOrNull()
                     val accessors = attributeAccessorsOf(attributeClass)
-                    for ((key, value) in TYPED_SPOOFS) {
+                    for ((key, value) in typedSpoofs()) {
                         val existing = mutableMap[key]
                         val target = existing ?: constructor?.newInstance() ?: continue
                         runCatching {
@@ -289,14 +316,18 @@ object ProductStateHook {
                 if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
                     return@intercept result
                 }
-                list.filterNot { assignedValue ->
-                    if (assignedValue == null) return@filterNot false
+                val filtered = ProtoLists.filter(list) { assignedValue ->
                     val propId = assignedValue.javaClass.methods.firstOrNull {
                         it.parameterCount == 0 && it.returnType.name == "com.spotify.rcs.admin.grpc.v0.PropertyDefinition\$Identifier"
-                    }?.invoke(assignedValue) ?: return@filterNot false
-                    val name = propId.javaClass.getMethod("getName").invoke(propId) as? String
-                    name != null && MFT_FLAGS_TO_REMOVE.contains(name)
+                    }?.invoke(assignedValue)
+                    if (propId == null) {
+                        true
+                    } else {
+                        val name = propId.javaClass.getMethod("getName").invoke(propId) as? String
+                        name == null || !MFT_FLAGS_TO_REMOVE.contains(name)
+                    }
                 }
+                filtered ?: result
             }
     }
 
@@ -359,7 +390,8 @@ object ProductStateHook {
                 val origHeader = headerField.get(snapshot) ?: return@intercept snapshot
                 @Suppress("UNCHECKED_CAST")
                 val origMap = mapField.get(snapshot) as? Map<String, Any?> ?: return@intercept snapshot
-                val patched = HashMap<String, Any?>(origMap.size + RCS_SCOPED_OVERRIDES.size)
+                val overrides = rcsScopedOverrides()
+                val patched = HashMap<String, Any?>(origMap.size + overrides.size)
                 patched.putAll(origMap)
 
                 for ((fullKey, existing) in origMap) {
@@ -379,8 +411,9 @@ object ProductStateHook {
                     }
                 }
 
-                for ((fullKey, value) in RCS_SCOPED_OVERRIDES) {
+                for ((fullKey, value) in overrides) {
                     val sep = fullKey.indexOf(':')
+                    if (sep <= 0) continue
                     val scope = fullKey.substring(0, sep)
                     val name = fullKey.substring(sep + 1)
                     buildRcsValue(r27Ctor, name, scope, value)?.let { patched[fullKey] = it }
@@ -405,7 +438,7 @@ object ProductStateHook {
                 }
                 val scope = chain.getArg(0) as? String ?: return@intercept result
                 val name = chain.getArg(1) as? String ?: return@intercept result
-                val overrideVal = RCS_SCOPED_OVERRIDES["$scope:$name"] ?: return@intercept result
+                val overrideVal = rcsScopedOverrides()["$scope:$name"] ?: rcsScopedOverrides()[name] ?: return@intercept result
                 buildRcsValue(r27Ctor, name, scope, overrideVal) ?: result
             }
     }

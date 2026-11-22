@@ -30,8 +30,6 @@ object PrefKeys {
     const val AnthropicDefaultEndpoint = "https://api.anthropic.com/v1/messages"
     const val AnthropicDefaultModel = "claude-haiku-5-5"
 
-    const val DEFAULT_AI_SYSTEM_PROMPT = "You are a lyrics localization engine. Return only JSON that matches the provided schema. Do not explain, think aloud, use markdown, merge lines, split lines, or add notes. Return exactly {lineCount} strings in `lines`, preserving input line order. Empty input lines must stay empty. Make translations natural for music listening while staying faithful to meaning, tense, names, punctuation, and repeated hooks. Preserve text already in the target language verbatim, including the target-language parts of mixed lines."
-
     val LanguageCodeToName = mapOf(
         "af" to "Afrikaans",
         "az" to "Azərbaycan",
@@ -113,6 +111,7 @@ object PrefKeys {
     )
     const val KEY_LYRICS_PROVIDERS_ORDER = "pref_lyrics_providers_order"
     val DEFAULT_LYRICS_PROVIDERS = listOf(
+        "spicylyrics",
         "betterlyrics",
         "lrcred",
         "lrclib",
@@ -121,6 +120,7 @@ object PrefKeys {
         "genius"
     )
     val DEFAULT_LYRICS_PROVIDERS_ORDER = DEFAULT_LYRICS_PROVIDERS.joinToString(",")
+    const val KEY_LYRICS_PROVIDER_SPICYLYRICS = "pref_lyrics_provider_spicylyrics"
     const val KEY_LYRICS_PROVIDER_BETTERLYRICS = "pref_lyrics_provider_betterlyrics"
     const val KEY_LYRICS_PROVIDER_LRCRED = "pref_lyrics_provider_lrcred"
     const val KEY_LYRICS_PROVIDER_LRCLIB = "pref_lyrics_provider_lrclib"
@@ -134,6 +134,7 @@ object PrefKeys {
     const val KEY_SPOTIFY_ROUNDY_UI = "pref_spotify_roundy_ui"
     const val KEY_HIDE_PODCASTS = "pref_hide_podcasts"
     const val KEY_HIDE_AUDIOBOOKS = "pref_hide_audiobooks"
+    const val KEY_HIDE_PREMIUM_TAB = "pref_hide_premium_tab"
     const val KEY_SHUFFLE_STATE = "pref_user_shuffle_state"
     const val KEY_SMART_SHUFFLE_IN_MODES = "pref_smart_shuffle_in_modes"
     const val KEY_DOUBLE_TAP_TO_SEEK = "pref_double_tap_to_seek"

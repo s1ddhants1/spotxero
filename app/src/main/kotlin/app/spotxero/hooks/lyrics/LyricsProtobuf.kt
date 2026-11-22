@@ -31,46 +31,34 @@ object LyricsProtobuf {
         return false
     }
 
-    /**
-     * Serializes lyrics into Spotify's ColorLyricsResponse protobuf wire format.
-     * Schema matching com.spotify.lyrics.serviceretrofit.proto.ColorLyricsResponse:
-     * - Field 1: LyricsResponse lyrics (length-delimited)
-     * - Field 2: ColorData colors (length-delimited)
-     * - Field 3: bool hasVocalRemoval (varint)
-     */
     fun buildColorLyricsResponse(
         lyrics: ParsedLyrics,
         providerName: String,
         providerDisplayName: String = "$providerName (SpotXero)",
         customColorData: ByteArray? = null,
+        backgroundColor: Int? = null,
         hasVocalRemoval: Boolean = false,
         language: String = "en",
         isRtl: Boolean = isRtlLanguage(language)
     ): ByteArray {
         val out = ByteArrayOutputStream()
 
-        // Field 1: LyricsResponse
         val lyricsResponseBytes = buildLyricsResponse(lyrics, providerName, providerDisplayName, language, isRtl)
         writeTag(out, 1, WIRE_TYPE_LENGTH_DELIMITED)
         writeVarint(out, lyricsResponseBytes.size.toLong())
         out.write(lyricsResponseBytes)
 
-        // Field 2: ColorData
-        val colorDataBytes = customColorData ?: buildColorData()
+        val colorDataBytes = customColorData ?: buildColorData(backgroundColor)
         writeTag(out, 2, WIRE_TYPE_LENGTH_DELIMITED)
         writeVarint(out, colorDataBytes.size.toLong())
         out.write(colorDataBytes)
 
-        // Field 3: hasVocalRemoval
         writeTag(out, 3, WIRE_TYPE_VARINT)
         writeVarint(out, if (hasVocalRemoval) 1L else 0L)
 
         return out.toByteArray()
     }
 
-    /**
-     * Parses a ColorLyricsResponse protobuf payload into ParsedColorLyrics.
-     */
     fun parseColorLyricsResponse(bytes: ByteArray): ParsedColorLyrics? {
         val reader = ProtoReader(bytes)
         var lyricsBytes: ByteArray? = null
@@ -236,19 +224,16 @@ object LyricsProtobuf {
         return LyricSyllable(startTimeMs = startTimeMs, numChars = numChars)
     }
 
-    private fun buildColorData(): ByteArray {
+    fun buildColorData(backgroundColor: Int? = null): ByteArray {
         val out = ByteArrayOutputStream()
-        // 1: background = -16777216 (0xFF000000)
         writeTag(out, 1, WIRE_TYPE_VARINT)
-        writeVarint(out, -16777216L)
+        writeVarint(out, (backgroundColor ?: -16777216).toLong())
 
-        // 2: text = -1 (0xFFFFFFFF)
         writeTag(out, 2, WIRE_TYPE_VARINT)
         writeVarint(out, -1L)
 
-        // 3: highlightText = -16711936 (0xFF00FF00)
         writeTag(out, 3, WIRE_TYPE_VARINT)
-        writeVarint(out, -16711936L)
+        writeVarint(out, -1L)
 
         return out.toByteArray()
     }
@@ -262,7 +247,6 @@ object LyricsProtobuf {
     ): ByteArray {
         val out = ByteArrayOutputStream()
 
-        // 1: syncType (enum: 0=UNSYNCED, 1=LINE_SYNCED, 2=SYLLABLE_SYNCED)
         val syncTypeValue = when (lyrics.syncType) {
             SyncType.UNSYNCED -> 0L
             SyncType.LINE_SYNCED -> 1L
@@ -271,7 +255,6 @@ object LyricsProtobuf {
         writeTag(out, 1, WIRE_TYPE_VARINT)
         writeVarint(out, syncTypeValue)
 
-        // 2: lines (repeated LyricsLine)
         for (line in lyrics.lines) {
             val lineBytes = buildLyricsLine(line)
             writeTag(out, 2, WIRE_TYPE_LENGTH_DELIMITED)
@@ -279,26 +262,13 @@ object LyricsProtobuf {
             out.write(lineBytes)
         }
 
-        // 3: provider (string)
         writeString(out, 3, providerName)
-
-        // 4: providerLyricsId (string)
         writeString(out, 4, "0")
-
-        // 5: providerDisplayName (string)
         writeString(out, 5, providerDisplayName)
-
-        // 7: syncLyricsUri (string)
         writeString(out, 7, "")
-
-        // 10: language (string)
         writeString(out, 10, language)
-
-        // 11: isRtlLanguage (bool)
         writeTag(out, 11, WIRE_TYPE_VARINT)
         writeVarint(out, if (isRtl) 1L else 0L)
-
-        // 14: capStatus (enum: 1 = UNCAPPED)
         writeTag(out, 14, WIRE_TYPE_VARINT)
         writeVarint(out, 1)
 
@@ -308,14 +278,10 @@ object LyricsProtobuf {
     private fun buildLyricsLine(line: LyricLine): ByteArray {
         val out = ByteArrayOutputStream()
 
-        // 1: startTimeMs (int64)
         writeTag(out, 1, WIRE_TYPE_VARINT)
         writeVarint(out, line.startTimeMs)
-
-        // 2: words (string)
         writeString(out, 2, line.words)
 
-        // 3: syllables (repeated Syllable)
         for (syl in line.syllables) {
             val sylBytes = buildSyllable(syl)
             writeTag(out, 3, WIRE_TYPE_LENGTH_DELIMITED)
@@ -329,11 +295,8 @@ object LyricsProtobuf {
     private fun buildSyllable(syl: LyricSyllable): ByteArray {
         val out = ByteArrayOutputStream()
 
-        // 1: startTimeMs (int64)
         writeTag(out, 1, WIRE_TYPE_VARINT)
         writeVarint(out, syl.startTimeMs)
-
-        // 2: numChars (int64)
         writeTag(out, 2, WIRE_TYPE_VARINT)
         writeVarint(out, syl.numChars.toLong())
 

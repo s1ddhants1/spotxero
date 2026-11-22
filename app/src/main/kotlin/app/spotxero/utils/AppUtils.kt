@@ -6,12 +6,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
-import android.provider.Settings
 import android.util.Log
-import app.spotxero.SpotXeroApplication
 import app.spotxero.SpotXeroModule
-import app.spotxero.core.PreferencesManager
 import app.spotxero.utils.core.CommonUtils
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineDispatcher

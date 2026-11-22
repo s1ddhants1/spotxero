@@ -237,9 +237,6 @@ object LyricsHook {
                 }.getOrNull()
                 if (fromCtor != null) return fromCtor
 
-                val fromNew = runCatching { bufferClass?.newInstance() }.getOrNull()
-                if (fromNew != null) return fromNew
-
                 return runCatching {
                     val emptyBody = responseBodyClass.declaredFields.firstOrNull { it.type == concreteBodyClass }?.apply { isAccessible = true }?.get(null)
                     val bufField = emptyBody?.javaClass?.declaredFields?.firstOrNull { it.type == bufferClass }?.apply { isAccessible = true }
@@ -402,6 +399,7 @@ object LyricsHook {
                                         providerName = parsed.provider,
                                         providerDisplayName = "${parsed.providerDisplayName} (Translated)",
                                         customColorData = parsed.colorDataBytes,
+                                        backgroundColor = LyricsManager.currentTrackColor,
                                         hasVocalRemoval = parsed.hasVocalRemoval,
                                         language = targetLang,
                                         isRtl = isRtl

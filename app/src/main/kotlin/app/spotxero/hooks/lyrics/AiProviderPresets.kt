@@ -15,7 +15,6 @@ data class AiProviderPreset(
     val id: String,
     val group: AiProviderGroup,
     val protocol: AiProtocol = AiProtocol.OPENAI,
-    /** Full request endpoint; Gemini endpoints may include a model or {model} placeholder. */
     val endpoint: String = "",
     val defaultModel: String = "",
     val modelsDevId: String? = null,
@@ -185,15 +184,4 @@ object AiProviderPresets {
             else -> AiProtocol.OPENAI
         }
     }
-
-    fun requestUrl(
-        provider: String,
-        baseUrl: String,
-        model: String,
-    ): String =
-        if (find(provider)?.mixedProtocols == true && protocolFor(provider, baseUrl, model) == AiProtocol.ANTHROPIC) {
-            baseUrl.replace(Regex("/chat/completions$"), "/messages")
-        } else {
-            baseUrl
-        }
 }

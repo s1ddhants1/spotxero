@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
@@ -25,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -46,7 +44,6 @@ import app.spotxero.ui.haptics.LocalAppHaptics
 import app.spotxero.ui.theme.AppCardDefaults
 import app.spotxero.ui.theme.AppIcons
 import app.spotxero.ui.theme.AppSpacing
-import app.spotxero.ui.theme.appSwitchColors
 import app.spotxero.ui.viewmodel.DashboardUiState
 
 @Composable
@@ -60,6 +57,7 @@ fun HomeDashboard(
     onSpotifyRoundyUiToggle: (Boolean) -> Unit = {},
     onHidePodcastsToggle: (Boolean) -> Unit = {},
     onHideAudiobooksToggle: (Boolean) -> Unit = {},
+    onHidePremiumTabToggle: (Boolean) -> Unit = {},
     onLyricsToggle: (Boolean) -> Unit = {},
     onForceLocalPlaybackToggle: (Boolean) -> Unit = {},
     onDoubleTapToSeekToggle: (Boolean) -> Unit = {},
@@ -116,7 +114,7 @@ fun HomeDashboard(
             SwitchSettingCard(
                 title = stringResource(R.string.seek_seconds_addup),
                 subtitle = stringResource(R.string.seek_seconds_addup_desc),
-                icon = AppIcons.Replay,
+                icon = AppIcons.ArrowForward,
                 checked = uiState.isSeekProgressive,
                 onCheckedChange = onSeekProgressiveToggle
             )
@@ -147,6 +145,14 @@ fun HomeDashboard(
         )
 
         CategoryHeader(title = stringResource(R.string.category_content))
+        SwitchSettingCard(
+            title = stringResource(R.string.feature_hide_premium_tab_title),
+            subtitle = stringResource(R.string.feature_hide_premium_tab_desc),
+            icon = AppIcons.VisibilityOff,
+            checked = uiState.isHidePremiumTabEnabled,
+            onCheckedChange = onHidePremiumTabToggle
+        )
+
         SwitchSettingCard(
             title = stringResource(R.string.feature_hide_podcasts_title),
             subtitle = stringResource(R.string.feature_hide_podcasts_desc),
@@ -187,6 +193,7 @@ fun HomeDashboard(
             checked = uiState.isSpotifyRoundyUiEnabled,
             onCheckedChange = onSpotifyRoundyUiToggle
         )
+
     }
 }
 

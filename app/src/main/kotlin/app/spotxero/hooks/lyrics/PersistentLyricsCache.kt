@@ -7,7 +7,6 @@ import java.io.File
 import java.security.MessageDigest
 import java.util.Collections
 import java.util.LinkedHashMap
-import java.util.concurrent.ConcurrentHashMap
 
 object PersistentLyricsCache {
 
@@ -18,7 +17,6 @@ object PersistentLyricsCache {
     @Volatile
     private var appContext: Context? = null
 
-    // L1 caches
     private val protoMemoryCache = Collections.synchronizedMap(
         object : LinkedHashMap<String, ByteArray>(MAX_L1_SIZE, 0.75f, true) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?): Boolean {
@@ -27,7 +25,13 @@ object PersistentLyricsCache {
         }
     )
 
-    private val linesMemoryCache = ConcurrentHashMap<String, List<String>>()
+    private val linesMemoryCache = Collections.synchronizedMap(
+        object : LinkedHashMap<String, List<String>>(MAX_L1_SIZE, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<String>>?): Boolean {
+                return size > MAX_L1_SIZE
+            }
+        }
+    )
 
     fun init(context: Context) {
         if (appContext == null) {
@@ -61,10 +65,8 @@ object PersistentLyricsCache {
     }
 
     fun getProtobuf(key: String): ByteArray? {
-        // 1. Check L1 memory cache
         protoMemoryCache[key]?.let { return it }
 
-        // 2. Check L2 disk cache
         val dir = getCacheDir() ?: return null
         val file = File(dir, "${hashKey(key)}.proto")
         if (file.exists() && file.isFile && file.length() > 0) {
@@ -93,10 +95,8 @@ object PersistentLyricsCache {
     }
 
     fun getLines(key: String): List<String>? {
-        // 1. Check L1 memory cache
         linesMemoryCache[key]?.let { return it }
 
-        // 2. Check L2 disk cache
         val dir = getCacheDir() ?: return null
         val file = File(dir, "${hashKey(key)}.json")
         if (file.exists() && file.isFile && file.length() > 0) {
