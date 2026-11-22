@@ -57,6 +57,7 @@ fun HomeDashboard(
     onSpotifyRoundyUiToggle: (Boolean) -> Unit = {},
     onHidePodcastsToggle: (Boolean) -> Unit = {},
     onHideAudiobooksToggle: (Boolean) -> Unit = {},
+    onHidePremiumTabToggle: (Boolean) -> Unit = {},
     onLyricsToggle: (Boolean) -> Unit = {},
     onForceLocalPlaybackToggle: (Boolean) -> Unit = {},
     onDoubleTapToSeekToggle: (Boolean) -> Unit = {},
@@ -144,6 +145,14 @@ fun HomeDashboard(
         )
 
         CategoryHeader(title = stringResource(R.string.category_content))
+        SwitchSettingCard(
+            title = stringResource(R.string.feature_hide_premium_tab_title),
+            subtitle = stringResource(R.string.feature_hide_premium_tab_desc),
+            icon = AppIcons.VisibilityOff,
+            checked = uiState.isHidePremiumTabEnabled,
+            onCheckedChange = onHidePremiumTabToggle
+        )
+
         SwitchSettingCard(
             title = stringResource(R.string.feature_hide_podcasts_title),
             subtitle = stringResource(R.string.feature_hide_podcasts_desc),

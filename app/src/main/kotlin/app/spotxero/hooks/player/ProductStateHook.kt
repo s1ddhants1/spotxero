@@ -14,7 +14,7 @@ object ProductStateHook {
 
     private const val TAG = "SpotXero.ProductState"
 
-    private val TYPED_SPOOFS: Map<String, Any> = mapOf(
+    private val BASE_TYPED_SPOOFS: Map<String, Any> = mapOf(
         "ads" to false,
         "shuffle" to false,
         "on-demand" to true,
@@ -22,7 +22,6 @@ object ProductStateHook {
         "streaming" to true,
         "streaming-rules" to "",
         "previous-streaming-rules" to "",
-        "nft-disabled" to "1",
         "can_use_superbird" to true,
         "unrestricted" to true,
         "shuffle-eligible" to true,
@@ -33,6 +32,11 @@ object ProductStateHook {
         "enable_has_lyrics_check_bypass" to true,
         "has_lyrics" to true
     )
+
+    private fun typedSpoofs(): Map<String, Any> {
+        val hideTab = PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_PREMIUM_TAB, true)
+        return BASE_TYPED_SPOOFS + ("nft-disabled" to (if (hideTab) "1" else "0"))
+    }
 
     private val PLAYER_LOCAL_SPOOFS: Map<String, Any> = mapOf(
         "type" to "premium",
@@ -121,13 +125,16 @@ object ProductStateHook {
         "playback_timeout_action" to "Nothing"
     )
 
-    private val LEGACY_SPOOFS: Map<String, String> = TYPED_SPOOFS.mapValues { (_, value) ->
-        (value as? Boolean)?.let { if (it) "1" else "0" } ?: value.toString()
-    } + mapOf(
+    private val EXTRA_LEGACY_SPOOFS: Map<String, String> = mapOf(
         "horizon" to "FULL",
         "shuffle-restricted" to "0",
         "unlimited-skips" to "1"
     )
+
+    private fun legacySpoofs(): Map<String, String> =
+        typedSpoofs().mapValues { (_, value) ->
+            (value as? Boolean)?.let { if (it) "1" else "0" } ?: value.toString()
+        } + EXTRA_LEGACY_SPOOFS
 
     fun install(module: XposedModule) {
         if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
@@ -161,7 +168,7 @@ object ProductStateHook {
                 @Suppress("UNCHECKED_CAST")
                 (map as Map<Any?, Any?>).toMutableMap().apply {
                     KEYS_TO_STRIP.forEach { remove(it) }
-                    putAll(LEGACY_SPOOFS)
+                    putAll(legacySpoofs())
                     PLAYER_LOCAL_SPOOFS.forEach { (k, v) -> put(k, v.toString()) }
                 }
             }
@@ -176,7 +183,6 @@ object ProductStateHook {
         }
 
         val accessors = attributeAccessorsOf(valueField.declaringClass, valueField)
-        val allSpoofs = TYPED_SPOOFS + PLAYER_LOCAL_SPOOFS
 
         module.deoptimize(accessor)
         module.hook(accessor)
@@ -188,6 +194,7 @@ object ProductStateHook {
                 if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || map.isEmpty()) {
                     return@intercept result
                 }
+                val allSpoofs = typedSpoofs() + PLAYER_LOCAL_SPOOFS
                 map.forEach { (key, attribute) ->
                     if (valueField.declaringClass.isInstance(attribute)) {
                         if (KEYS_TO_STRIP.contains(key)) {
@@ -236,7 +243,7 @@ object ProductStateHook {
                         attributeClass.getDeclaredConstructor().apply { isAccessible = true }
                     }.getOrNull()
                     val accessors = attributeAccessorsOf(attributeClass)
-                    for ((key, value) in TYPED_SPOOFS) {
+                    for ((key, value) in typedSpoofs()) {
                         val existing = mutableMap[key]
                         val target = existing ?: constructor?.newInstance() ?: continue
                         runCatching {

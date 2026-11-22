@@ -45,6 +45,8 @@
     <string name="feature_hide_podcasts_desc">Remove podcasts and episodes from Home and Search</string>
     <string name="feature_hide_audiobooks_title">Hide Audiobooks</string>
     <string name="feature_hide_audiobooks_desc">Remove audiobooks and chapters from Home and Search</string>
+    <string name="feature_hide_premium_tab_title">Hide Premium Tab</string>
+    <string name="feature_hide_premium_tab_desc">Remove the Premium tab from the bottom navigation bar</string>
     <string name="title_appearance">Appearance</string>
     <string name="title_about">About</string>
     <string name="appearance_category_desc">Themes • Hide App Icon</string>

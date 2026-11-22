@@ -146,7 +146,7 @@ object HookRegistry {
         synchronized(lock) {
             val hooks = listOf(
                 HookEntry("CleanSharing", { PreferencesManager.isEnabled(PrefKeys.KEY_CLEAN_SHARING, true) }) { CleanSharingHook.install(module) },
-                HookEntry("HidePremiumTab", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { HidePremiumTabHook.install(module) },
+                HookEntry("HidePremiumTab", { true }) { HidePremiumTabHook.install(module) },
                 HookEntry("AdResponse", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { AdResponseHook.install(module) },
                 HookEntry("NetworkAdBlock", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { NetworkAdBlockHook.install(module) },
                 HookEntry("BrandAds", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { BrandAdsHook.install(module) },

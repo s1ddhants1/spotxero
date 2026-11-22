@@ -179,6 +179,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isSpotifyRoundyUiEnabled = PreferencesManager.isSpotifyRoundyUiEnabled,
                 isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled,
                 isHideAudiobooksEnabled = PreferencesManager.isHideAudiobooksEnabled,
+                isHidePremiumTabEnabled = PreferencesManager.isHidePremiumTabEnabled,
                 isDoubleTapToSeekEnabled = PreferencesManager.isDoubleTapToSeekEnabled,
                 seekDurationSeconds = PreferencesManager.seekDurationSeconds,
                 isSeekProgressive = PreferencesManager.isSeekProgressive,
@@ -310,6 +311,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun setHideAudiobooks(enabled: Boolean) {
         PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_HIDE_AUDIOBOOKS, enabled)
         _uiState.update { it.copy(isHideAudiobooksEnabled = enabled) }
+    }
+
+    fun setHidePremiumTab(enabled: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_HIDE_PREMIUM_TAB, enabled)
+        _uiState.update { it.copy(isHidePremiumTabEnabled = enabled) }
     }
 
 
