@@ -69,7 +69,7 @@ object ClientTokenHook {
         return (bytes[0].toInt() and 0xFF) == 0x0A
     }
 
-    fun install(module: XposedModule, targetClassLoader: ClassLoader? = null) {
+    fun install(module: XposedModule) {
         installClientTokenEsperanto(module)
     }
 

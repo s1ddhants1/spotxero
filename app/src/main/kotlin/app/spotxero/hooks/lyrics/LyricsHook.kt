@@ -237,9 +237,6 @@ object LyricsHook {
                 }.getOrNull()
                 if (fromCtor != null) return fromCtor
 
-                val fromNew = runCatching { bufferClass?.newInstance() }.getOrNull()
-                if (fromNew != null) return fromNew
-
                 return runCatching {
                     val emptyBody = responseBodyClass.declaredFields.firstOrNull { it.type == concreteBodyClass }?.apply { isAccessible = true }?.get(null)
                     val bufField = emptyBody?.javaClass?.declaredFields?.firstOrNull { it.type == bufferClass }?.apply { isAccessible = true }

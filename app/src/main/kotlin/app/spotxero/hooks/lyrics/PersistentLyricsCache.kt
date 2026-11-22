@@ -7,7 +7,6 @@ import java.io.File
 import java.security.MessageDigest
 import java.util.Collections
 import java.util.LinkedHashMap
-import java.util.concurrent.ConcurrentHashMap
 
 object PersistentLyricsCache {
 
@@ -26,7 +25,13 @@ object PersistentLyricsCache {
         }
     )
 
-    private val linesMemoryCache = ConcurrentHashMap<String, List<String>>()
+    private val linesMemoryCache = Collections.synchronizedMap(
+        object : LinkedHashMap<String, List<String>>(MAX_L1_SIZE, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<String>>?): Boolean {
+                return size > MAX_L1_SIZE
+            }
+        }
+    )
 
     fun init(context: Context) {
         if (appContext == null) {
