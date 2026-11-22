@@ -8,9 +8,9 @@ import io.github.libxposed.api.XposedModule
 import java.io.ByteArrayOutputStream
 import java.lang.reflect.Method
 
-object ClientSpoofHook {
+object ClientTokenHook {
 
-    private const val TAG = "SpotXero.ClientSpoof"
+    private const val TAG = "SpotXero.ClientToken"
     private const val CLIENT_TOKEN_SERVICE = "spotify.connectivity.auth.client_token.esperanto.proto.ClientTokenProvider"
     private const val METHOD_GET_TOKEN = "getToken"
     private const val METHOD_GET_ENCRYPTED_TOKEN = "getEncryptedToken"
@@ -66,7 +66,7 @@ object ClientSpoofHook {
         out.toByteArray()
     }
 
-    private fun enabled() = PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_SPOOF, true)
+    private fun enabled() = PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_TOKEN, true)
 
     fun install(module: XposedModule, targetClassLoader: ClassLoader? = null) {
         val cl = targetClassLoader
@@ -149,7 +149,7 @@ object ClientSpoofHook {
         if (coroutineSingle != null) {
             module.deoptimize(coroutineSingle)
             module.hook(coroutineSingle)
-                .setId("client_spoof_coroutine_single_token")
+                .setId("client_token_coroutine_single_token")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     if (!enabled()) return@intercept chain.proceed()
@@ -170,7 +170,7 @@ object ClientSpoofHook {
 
             module.deoptimize(clientSingle)
             module.hook(clientSingle)
-                .setId("client_spoof_client_single_token")
+                .setId("client_token_client_single_token")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     if (!enabled()) return@intercept chain.proceed()
@@ -194,7 +194,7 @@ object ClientSpoofHook {
 
             module.deoptimize(clientStream)
             module.hook(clientStream)
-                .setId("client_spoof_client_stream_token")
+                .setId("client_token_client_stream_token")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     if (!enabled()) return@intercept chain.proceed()

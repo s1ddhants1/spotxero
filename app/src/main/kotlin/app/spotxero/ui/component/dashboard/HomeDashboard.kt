@@ -63,7 +63,7 @@ fun HomeDashboard(
     onSeekDurationChange: (Float) -> Unit = {},
     onSeekProgressiveToggle: (Boolean) -> Unit = {},
     onOpenLyricsSources: () -> Unit = {},
-    onClientSpoofToggle: (Boolean) -> Unit = {},
+    onClientTokenToggle: (Boolean) -> Unit = {},
     onRequestScope: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -187,11 +187,11 @@ fun HomeDashboard(
         )
 
         SwitchSettingCard(
-            title = stringResource(R.string.feature_client_spoof_title),
-            subtitle = stringResource(R.string.feature_client_spoof_desc),
+            title = stringResource(R.string.feature_client_token_title),
+            subtitle = stringResource(R.string.feature_client_token_desc),
             icon = AppIcons.Smartphone,
-            checked = uiState.isClientSpoofEnabled,
-            onCheckedChange = onClientSpoofToggle
+            checked = uiState.isClientTokenEnabled,
+            onCheckedChange = onClientTokenToggle
         )
     }
 }

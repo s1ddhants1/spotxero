@@ -60,7 +60,7 @@ object PreferencesManager {
     var isDoubleTapToSeekEnabled: Boolean = true
     var seekDurationSeconds: Int = 10
     var isSeekProgressive: Boolean = false
-    var isClientSpoofEnabled: Boolean = true
+    var isClientTokenEnabled: Boolean = true
 
     var onPreferenceChangedListener: (() -> Unit)? = null
     private val preferenceChangeCallbacks = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
@@ -385,8 +385,8 @@ object PreferencesManager {
         inMemoryInts[PrefKeys.KEY_SEEK_DURATION_SECONDS] = seekDurationSeconds
         isSeekProgressive = prefs.getBoolean(PrefKeys.KEY_SEEK_PROGRESSIVE, false)
         inMemoryBooleans[PrefKeys.KEY_SEEK_PROGRESSIVE] = isSeekProgressive
-        isClientSpoofEnabled = prefs.getBoolean(PrefKeys.KEY_CLIENT_SPOOF, true)
-        inMemoryBooleans[PrefKeys.KEY_CLIENT_SPOOF] = isClientSpoofEnabled
+        isClientTokenEnabled = prefs.getBoolean(PrefKeys.KEY_CLIENT_TOKEN, true)
+        inMemoryBooleans[PrefKeys.KEY_CLIENT_TOKEN] = isClientTokenEnabled
         isLauncherIconHidden = prefs.getBoolean(KEY_HIDE_LAUNCHER_ICON, false)
         inMemoryBooleans[KEY_HIDE_LAUNCHER_ICON] = isLauncherIconHidden
         val tp = getTargetPrefs()

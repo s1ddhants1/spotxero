@@ -110,7 +110,7 @@ object ProductStateHook {
     private val RCS_ALL_OVERRIDES: Map<String, Any> = RCS_SCOPED_OVERRIDES + RCS_INTEGRITY_OVERRIDES
 
     private fun rcsScopedOverrides(): Map<String, Any> =
-        if (PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_SPOOF, true)) {
+        if (PreferencesManager.isEnabled(PrefKeys.KEY_CLIENT_TOKEN, true)) {
             RCS_ALL_OVERRIDES
         } else {
             RCS_SCOPED_OVERRIDES
