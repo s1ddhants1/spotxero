@@ -71,7 +71,6 @@
     <string name="msg_spotify_not_running">Spotify is not running</string>
     <string name="msg_spotify_not_installed">Spotify is not installed</string>
     <string name="variant_official">Official</string>
-    <string name="variant_lite">Spotify Lite</string>
     <string name="cd_github">GitHub</string>
     <string name="cd_telegram">Telegram</string>
     <string name="title_lyrics_sources">Lyrics Sources</string>
