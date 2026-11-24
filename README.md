@@ -1,5 +1,9 @@
 <div align="center">
-<img src="art/spotxero_logo_dark.svg" width="100" alt="SpotXero Logo"/>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/s1ddhants1/spotxero/main/art/spotxero_logo_dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/s1ddhants1/spotxero/main/art/spotxero_logo.svg">
+  <img src="https://raw.githubusercontent.com/s1ddhants1/spotxero/main/art/spotxero_logo_dark.svg" width="100" alt="SpotXero Logo"/>
+</picture>
 <h1>SpotXero</h1>
 
 <p>An Xposed module for Spotify on Android </p>
