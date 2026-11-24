@@ -6,10 +6,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="app.spotxero.permission.FORCE_STOP" />
+    <uses-permission android:name="io.github.s1ddhants1.spotxero.permission.FORCE_STOP" />
 
     <permission
-        android:name="app.spotxero.permission.FORCE_STOP"
+        android:name="io.github.s1ddhants1.spotxero.permission.FORCE_STOP"
         android:protectionLevel="signature" />
 
     <queries>

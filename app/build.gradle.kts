@@ -28,7 +28,7 @@ android {
     compileSdk = 37
     compileSdkMinor = 1
     defaultConfig {
-        applicationId = "app.spotxero"
+        applicationId = "io.github.s1ddhants1.spotxero"
         minSdk = 26
         targetSdk = 37
         versionCode = appVersionCode

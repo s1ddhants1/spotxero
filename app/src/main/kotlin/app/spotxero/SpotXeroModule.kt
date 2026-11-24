@@ -32,8 +32,8 @@ class SpotXeroModule : XposedModule() {
 
     companion object {
         const val TAG = "SpotXero"
-        const val ACTION_FORCE_STOP = "app.spotxero.FORCE_STOP"
-        const val FORCE_STOP_PERMISSION = "app.spotxero.permission.FORCE_STOP"
+        const val ACTION_FORCE_STOP = "io.github.s1ddhants1.spotxero.FORCE_STOP"
+        const val FORCE_STOP_PERMISSION = "io.github.s1ddhants1.spotxero.permission.FORCE_STOP"
     }
 
     @Volatile
