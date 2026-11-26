@@ -30,7 +30,10 @@ object ProductStateHook {
         "autoplay" to true,
         "player.autoplay" to true,
         "enable_has_lyrics_check_bypass" to true,
-        "has_lyrics" to true
+        "has_lyrics" to true,
+        "android-integrity:validation_enabled" to false,
+        "android-integrity:employee_validation_enabled" to false,
+        "android-integrity:time_tracking_enabled" to false
     )
 
     private fun typedSpoofs(): Map<String, Any> {
@@ -137,9 +140,6 @@ object ProductStateHook {
         } + EXTRA_LEGACY_SPOOFS
 
     fun install(module: XposedModule) {
-        if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-            return
-        }
         installMapSeam(module)
         installAttributeSeam(module)
         installUcsAttributeSeam(module)
@@ -243,7 +243,8 @@ object ProductStateHook {
                         attributeClass.getDeclaredConstructor().apply { isAccessible = true }
                     }.getOrNull()
                     val accessors = attributeAccessorsOf(attributeClass)
-                    for ((key, value) in typedSpoofs()) {
+                    val allSpoofs = typedSpoofs() + PLAYER_LOCAL_SPOOFS
+                    for ((key, value) in allSpoofs) {
                         val existing = mutableMap[key]
                         val target = existing ?: constructor?.newInstance() ?: continue
                         runCatching {
@@ -384,30 +385,30 @@ object ProductStateHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val snapshot = chain.proceed() ?: return@intercept null
-                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                    return@intercept snapshot
-                }
                 val origHeader = headerField.get(snapshot) ?: return@intercept snapshot
                 @Suppress("UNCHECKED_CAST")
                 val origMap = mapField.get(snapshot) as? Map<String, Any?> ?: return@intercept snapshot
-                val overrides = rcsScopedOverrides()
+                val applyPremium = PreferencesManager.isUserLoggedIn() && PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)
+                val overrides = if (applyPremium) rcsScopedOverrides() else RCS_INTEGRITY_OVERRIDES
                 val patched = HashMap<String, Any?>(origMap.size + overrides.size)
                 patched.putAll(origMap)
 
-                for ((fullKey, existing) in origMap) {
-                    val sep = fullKey.indexOf(':')
-                    if (sep <= 0 || existing == null) continue
-                    val scope = fullKey.substring(0, sep)
-                    val name = fullKey.substring(sep + 1)
-                    if (!MFT_FLAGS_TO_REMOVE.contains(name)) continue
-                    val overrideVal: Any? = when {
-                        boolField?.get(existing) != null -> false
-                        intField?.get(existing) != null -> RCS_INT_BY_NAME[name]
-                        stringFields.count { it.get(existing) != null } >= 3 -> RCS_ENUM_BY_NAME[name] ?: "Disabled"
-                        else -> null
-                    }
-                    if (overrideVal != null) {
-                        buildRcsValue(r27Ctor, name, scope, overrideVal)?.let { patched[fullKey] = it }
+                if (applyPremium) {
+                    for ((fullKey, existing) in origMap) {
+                        val sep = fullKey.indexOf(':')
+                        if (sep <= 0 || existing == null) continue
+                        val scope = fullKey.substring(0, sep)
+                        val name = fullKey.substring(sep + 1)
+                        if (!MFT_FLAGS_TO_REMOVE.contains(name)) continue
+                        val overrideVal: Any? = when {
+                            boolField?.get(existing) != null -> false
+                            intField?.get(existing) != null -> RCS_INT_BY_NAME[name]
+                            stringFields.count { it.get(existing) != null } >= 3 -> RCS_ENUM_BY_NAME[name] ?: "Disabled"
+                            else -> null
+                        }
+                        if (overrideVal != null) {
+                            buildRcsValue(r27Ctor, name, scope, overrideVal)?.let { patched[fullKey] = it }
+                        }
                     }
                 }
 
@@ -433,12 +434,17 @@ object ProductStateHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val result = chain.proceed()
-                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                    return@intercept result
-                }
                 val scope = chain.getArg(0) as? String ?: return@intercept result
                 val name = chain.getArg(1) as? String ?: return@intercept result
-                val overrideVal = rcsScopedOverrides()["$scope:$name"] ?: rcsScopedOverrides()[name] ?: return@intercept result
+                val scopedKey = "$scope:$name"
+                val overrideVal = RCS_INTEGRITY_OVERRIDES[scopedKey]
+                    ?: RCS_INTEGRITY_OVERRIDES[name]
+                    ?: if (PreferencesManager.isUserLoggedIn() && PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                        RCS_SCOPED_OVERRIDES[scopedKey] ?: RCS_SCOPED_OVERRIDES[name]
+                    } else {
+                        null
+                    }
+                    ?: return@intercept result
                 buildRcsValue(r27Ctor, name, scope, overrideVal) ?: result
             }
     }

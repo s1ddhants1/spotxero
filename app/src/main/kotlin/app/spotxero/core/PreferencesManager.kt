@@ -58,6 +58,7 @@ object PreferencesManager {
     var isHidePodcastsEnabled: Boolean = false
     var isHideAudiobooksEnabled: Boolean = false
     var isHidePremiumTabEnabled: Boolean = true
+    var isInAppSettingsInjectionEnabled: Boolean = false
     var isDoubleTapToSeekEnabled: Boolean = true
     var seekDurationSeconds: Int = 10
     var isSeekProgressive: Boolean = false
@@ -116,8 +117,8 @@ object PreferencesManager {
         runCatching {
             val tp = target.getSharedPreferences(TARGET_PREFS_NAME, Context.MODE_PRIVATE)
             targetPrefs = tp
-            if (tp.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
-                inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = tp.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
+            for (key in tp.all.keys) {
+                updateMemoryCache(tp, key)
             }
         }
     }
@@ -155,8 +156,8 @@ object PreferencesManager {
         return runCatching {
             val target = ctx.getSharedPreferences(TARGET_PREFS_NAME, Context.MODE_PRIVATE)
             targetPrefs = target
-            if (target.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
-                inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = target.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
+            for (key in target.all.keys) {
+                updateMemoryCache(target, key)
             }
             target
         }.getOrNull()
@@ -381,6 +382,14 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_HIDE_AUDIOBOOKS] = isHideAudiobooksEnabled
         isHidePremiumTabEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PREMIUM_TAB, true)
         inMemoryBooleans[PrefKeys.KEY_HIDE_PREMIUM_TAB] = isHidePremiumTabEnabled
+        val inAppSettingsDefault = if (!prefs.contains(PrefKeys.KEY_INJECT_IN_APP_SETTINGS)) {
+            val framework = SpotXeroApplication.service?.frameworkName.orEmpty()
+            !framework.contains("LSPatch", ignoreCase = true)
+        } else {
+            false
+        }
+        isInAppSettingsInjectionEnabled = prefs.getBoolean(PrefKeys.KEY_INJECT_IN_APP_SETTINGS, inAppSettingsDefault)
+        inMemoryBooleans[PrefKeys.KEY_INJECT_IN_APP_SETTINGS] = isInAppSettingsInjectionEnabled
         isDoubleTapToSeekEnabled = prefs.getBoolean(PrefKeys.KEY_DOUBLE_TAP_TO_SEEK, true)
         inMemoryBooleans[PrefKeys.KEY_DOUBLE_TAP_TO_SEEK] = isDoubleTapToSeekEnabled
         seekDurationSeconds = prefs.getInt(PrefKeys.KEY_SEEK_DURATION_SECONDS, 10)
@@ -390,8 +399,10 @@ object PreferencesManager {
         isLauncherIconHidden = prefs.getBoolean(KEY_HIDE_LAUNCHER_ICON, false)
         inMemoryBooleans[KEY_HIDE_LAUNCHER_ICON] = isLauncherIconHidden
         val tp = getTargetPrefs()
-        if (tp != null && tp.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
-            inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = tp.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
+        if (tp != null) {
+            for (key in tp.all.keys) {
+                updateMemoryCache(tp, key)
+            }
         } else if (prefs.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
             inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = prefs.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
         }
@@ -412,13 +423,13 @@ object PreferencesManager {
     }
 
     private fun isEnabledDirect(key: String, default: Boolean): Boolean {
-        inMemoryBooleans[key]?.let { return it }
         val tp = getTargetPrefs()
         if (tp != null && tp.contains(key)) {
             val v = tp.getBoolean(key, default)
             inMemoryBooleans[key] = v
             return v
         }
+        inMemoryBooleans[key]?.let { return it }
         val rp = remotePrefs
         if (rp != null && rp.contains(key)) {
             val v = rp.getBoolean(key, default)
@@ -440,7 +451,7 @@ object PreferencesManager {
         val tp = getTargetPrefs()
         if (tp != null) {
             runCatching {
-                tp.edit().putBoolean(key, value).apply()
+                tp.edit().putBoolean(key, value).commit()
             }
         }
         val rp = remotePrefs
@@ -458,13 +469,13 @@ object PreferencesManager {
     }
 
     fun getString(key: String, default: String): String {
-        inMemoryStrings[key]?.let { return it }
         val tp = getTargetPrefs()
         if (tp != null && tp.contains(key)) {
             val v = tp.getString(key, default) ?: default
             inMemoryStrings[key] = v
             return v
         }
+        inMemoryStrings[key]?.let { return it }
         val rp = remotePrefs
         if (rp != null && rp.contains(key)) {
             val v = rp.getString(key, default) ?: default
@@ -486,7 +497,7 @@ object PreferencesManager {
         val tp = getTargetPrefs()
         if (tp != null && key !in SECRET_KEYS) {
             runCatching {
-                tp.edit().putString(key, value).apply()
+                tp.edit().putString(key, value).commit()
             }
         }
         val rp = remotePrefs
@@ -504,13 +515,13 @@ object PreferencesManager {
     }
 
     fun getInt(key: String, default: Int): Int {
-        inMemoryInts[key]?.let { return it }
         val tp = getTargetPrefs()
         if (tp != null && tp.contains(key)) {
             val v = tp.getInt(key, default)
             inMemoryInts[key] = v
             return v
         }
+        inMemoryInts[key]?.let { return it }
         val rp = remotePrefs
         if (rp != null && rp.contains(key)) {
             val v = rp.getInt(key, default)
@@ -532,7 +543,7 @@ object PreferencesManager {
         val tp = getTargetPrefs()
         if (tp != null) {
             runCatching {
-                tp.edit().putInt(key, value).apply()
+                tp.edit().putInt(key, value).commit()
             }
         }
         val rp = remotePrefs
@@ -596,6 +607,7 @@ object PreferencesManager {
             PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = value
             PrefKeys.KEY_HIDE_AUDIOBOOKS -> isHideAudiobooksEnabled = value
             PrefKeys.KEY_HIDE_PREMIUM_TAB -> isHidePremiumTabEnabled = value
+            PrefKeys.KEY_INJECT_IN_APP_SETTINGS -> isInAppSettingsInjectionEnabled = value
             PrefKeys.KEY_DOUBLE_TAP_TO_SEEK -> isDoubleTapToSeekEnabled = value
             PrefKeys.KEY_SEEK_PROGRESSIVE -> isSeekProgressive = value
             KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = value

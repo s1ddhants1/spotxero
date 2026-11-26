@@ -136,6 +136,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        aidl = true
     }
 
     packaging {
@@ -161,7 +162,6 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
-    implementation(libs.compose.material.icons.core)
     implementation(libs.compose.animation)
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.compose)

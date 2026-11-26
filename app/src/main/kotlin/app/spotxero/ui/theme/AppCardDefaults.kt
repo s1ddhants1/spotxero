@@ -16,5 +16,5 @@ object AppCardDefaults {
     )
 
     val cardElevation: CardElevation
-        @Composable get() = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        @Composable get() = CardDefaults.cardElevation(defaultElevation = 1.dp)
 }

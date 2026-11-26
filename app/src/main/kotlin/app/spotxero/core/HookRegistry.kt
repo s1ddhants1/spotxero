@@ -8,7 +8,7 @@ import app.spotxero.hooks.ads.ContextMenuAdBlockHook
 import app.spotxero.hooks.ads.NetworkAdBlockHook
 import app.spotxero.hooks.ads.PendragonHook
 import app.spotxero.hooks.ads.PlayerAdCardsHook
-import app.spotxero.hooks.attestation.ClientTokenHook
+import app.spotxero.hooks.attestation.PackageSignatureHook
 import app.spotxero.hooks.content.ContentFilterHook
 import app.spotxero.hooks.lyrics.LyricsHook
 import app.spotxero.hooks.navigation.HidePremiumTabHook
@@ -18,6 +18,7 @@ import app.spotxero.hooks.player.OnDemandInFreeHook
 import app.spotxero.hooks.player.PlayerRestrictionsHook
 import app.spotxero.hooks.player.PlayerShuffleHook
 import app.spotxero.hooks.player.ProductStateHook
+import app.spotxero.hooks.settings.InAppSettingsHook
 import app.spotxero.hooks.sharing.CleanSharingHook
 import app.spotxero.hooks.theme.SpotifyAmoledHook
 import app.spotxero.hooks.theme.SpotifyMonetHook
@@ -148,24 +149,28 @@ object HookRegistry {
                 HookEntry("CleanSharing", { PreferencesManager.isEnabled(PrefKeys.KEY_CLEAN_SHARING, true) }) { CleanSharingHook.install(module) },
                 HookEntry("HidePremiumTab", { true }) { HidePremiumTabHook.install(module) },
                 HookEntry("AdResponse", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { AdResponseHook.install(module) },
-                HookEntry("NetworkAdBlock", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { NetworkAdBlockHook.install(module) },
+                HookEntry("NetworkAdBlock", { true }) { NetworkAdBlockHook.install(module, startupAppInfo, startupClassLoader) },
                 HookEntry("BrandAds", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { BrandAdsHook.install(module) },
                 HookEntry("PlayerAdCards", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PlayerAdCardsHook.install(module) },
                 HookEntry("ContextMenuAdBlock", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { ContextMenuAdBlockHook.install(module) },
                 HookEntry("Pendragon", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PendragonHook.install(module) },
                 HookEntry("ContentFilter", { true }) { ContentFilterHook.install(module) },
-                HookEntry("ClientToken", { true }) { ClientTokenHook.install(module) },
                 HookEntry("SpotifyAmoled", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_AMOLED, false) }) { SpotifyAmoledHook.install(module) },
                 HookEntry("SpotifyMonet", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_MONET, false) }) { SpotifyMonetHook.install(module) },
                 HookEntry("SpotifyRoundyUI", { PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_ROUNDY_UI, false) }) { SpotifyRoundyUIHook.install(module) },
                 HookEntry("DisableSmartShuffle", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { DisableSmartShuffleHook.install(module) },
-                HookEntry("ProductState", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { ProductStateHook.install(module) },
+                HookEntry("ProductState", { true }) { ProductStateHook.install(module) },
                 HookEntry("PlayerRestrictions", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PlayerRestrictionsHook.install(module) },
                 HookEntry("OnDemandInFree", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { OnDemandInFreeHook.install(module) },
                 HookEntry("PlayerShuffle", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PlayerShuffleHook.install(module) },
                 HookEntry("ForceLocalPlayback", { PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, true) }) { ForceLocalPlaybackHook.install(module) },
                 HookEntry("ArtworkSeek", { true }) { ArtworkSeekHook.install(module) },
                 HookEntry("Lyrics", { true }) { LyricsHook.install(module) },
+                HookEntry("InAppSettings", {
+                    ModuleStatus.isLspatchIntegrated(module, startupAppInfo, startupClassLoader) ||
+                        PreferencesManager.isEnabled(PrefKeys.KEY_INJECT_IN_APP_SETTINGS, false)
+                }) { InAppSettingsHook.install(module) },
+                HookEntry("PackageSignature", { true }) { PackageSignatureHook.install(module) },
             )
 
             val failures = mutableListOf<String>()

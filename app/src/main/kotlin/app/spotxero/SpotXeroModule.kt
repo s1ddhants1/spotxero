@@ -17,6 +17,8 @@ import android.util.Log
 import app.spotxero.core.HookRegistry
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
+import app.spotxero.hooks.attestation.PackageSignatureHook
+import app.spotxero.hooks.settings.InAppSettingsHook
 import app.spotxero.utils.core.CommonUtils
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
@@ -43,6 +45,21 @@ class SpotXeroModule : XposedModule() {
         Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap()))
     private val activeServices: MutableSet<Service> =
         Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap()))
+
+    private fun findMethodInHierarchy(
+        startClass: Class<*>,
+        name: String,
+        vararg paramTypes: Class<*>
+    ): java.lang.reflect.Method? {
+        var current: Class<*>? = startClass
+        while (current != null) {
+            runCatching {
+                return current.getDeclaredMethod(name, *paramTypes)
+            }
+            current = current.superclass
+        }
+        return null
+    }
 
     private fun resolveTargetContext(): Context? {
         return appContext ?: runCatching {
@@ -130,6 +147,40 @@ class SpotXeroModule : XposedModule() {
         appContext = null
     }
 
+    private val registeredApps = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<Application, Boolean>()))
+
+    private fun registerActivityLifecycleCallbacks(application: Application) {
+        if (!registeredApps.add(application)) return
+        application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                activeActivities.add(activity)
+                InAppSettingsHook.onActivityCreated(activity)
+            }
+
+            override fun onActivityStarted(activity: Activity) {
+                activeActivities.add(activity)
+            }
+
+            override fun onActivityResumed(activity: Activity) {
+                activeActivities.add(activity)
+                InAppSettingsHook.onActivityResumed(activity)
+            }
+
+            override fun onActivityPaused(activity: Activity) {
+                InAppSettingsHook.onActivityPaused(activity)
+            }
+
+            override fun onActivityStopped(activity: Activity) {}
+
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+
+            override fun onActivityDestroyed(activity: Activity) {
+                activeActivities.remove(activity)
+                InAppSettingsHook.onActivityDestroyed(activity)
+            }
+        })
+    }
+
     override fun onModuleLoaded(param: ModuleLoadedParam) {
     }
 
@@ -152,6 +203,8 @@ class SpotXeroModule : XposedModule() {
             val remotePrefs = getRemotePreferences(PrefKeys.PREFS_NAME)
             PreferencesManager.bindRemote(remotePrefs)
         }
+
+        PackageSignatureHook.install(this)
 
         param.oldHookHandles.forEach { handle ->
             val id = handle.id
@@ -193,66 +246,55 @@ class SpotXeroModule : XposedModule() {
             PreferencesManager.bindRemote(remotePrefs)
         }
 
+        val earlyContext = resolveTargetContext()
+        if (earlyContext != null) {
+            registerReceiverSafely(earlyContext)
+            PreferencesManager.initTarget(earlyContext)
+            (earlyContext as? Application)?.let(::registerActivityLifecycleCallbacks)
+        }
+        PackageSignatureHook.install(this, earlyContext)
+
         runCatching {
             val appClassName = param.applicationInfo.className ?: "android.app.Application"
             val appClass = runCatching { param.classLoader.loadClass(appClassName) }.getOrElse {
                 param.classLoader.loadClass("android.app.Application")
             }
-            val attachMethod = runCatching {
-                appClass.getDeclaredMethod("attachBaseContext", Context::class.java)
-            }.getOrElse {
-                param.classLoader.loadClass("android.app.Application")
-                    .getDeclaredMethod("attachBaseContext", Context::class.java)
-            }
-            deoptimize(attachMethod)
-            hook(attachMethod)
-                .setId("app_attach_base_context_target_prefs")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val ctx = chain.getArg(0) as? Context
-                    if (ctx != null) {
-                        registerReceiverSafely(ctx)
-                        PreferencesManager.initTarget(ctx)
+            val attachMethod = findMethodInHierarchy(appClass, "attachBaseContext", Context::class.java)
+            if (attachMethod != null) {
+                deoptimize(attachMethod)
+                hook(attachMethod)
+                    .setId("app_attach_base_context_target_prefs")
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        val ctx = chain.getArg(0) as? Context
+                        if (ctx != null) {
+                            registerReceiverSafely(ctx)
+                            PreferencesManager.initTarget(ctx)
+                            PackageSignatureHook.markBootstrapComplete()
+                            PackageSignatureHook.installPackageManagerProxy(ctx)
+                        }
+                        chain.proceed()
                     }
-                    chain.proceed()
-                }
+            }
 
-            val onCreateMethod = runCatching {
-                appClass.getDeclaredMethod("onCreate")
-            }.getOrElse {
-                param.classLoader.loadClass("android.app.Application")
-                    .getDeclaredMethod("onCreate")
-            }
-            deoptimize(onCreateMethod)
-            hook(onCreateMethod)
-                .setId("app_on_create_target_prefs")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val app = chain.getThisObject() as? Context
-                    if (app != null) {
-                        registerReceiverSafely(app)
-                        PreferencesManager.initTarget(app)
+            val onCreateMethod = findMethodInHierarchy(appClass, "onCreate")
+            if (onCreateMethod != null) {
+                deoptimize(onCreateMethod)
+                hook(onCreateMethod)
+                    .setId("app_on_create_target_prefs")
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        val app = chain.getThisObject() as? Context
+                        if (app != null) {
+                            registerReceiverSafely(app)
+                            PreferencesManager.initTarget(app)
+                            PackageSignatureHook.markBootstrapComplete()
+                            PackageSignatureHook.installPackageManagerProxy(app)
+                        }
+                        (chain.getThisObject() as? Application)?.let(::registerActivityLifecycleCallbacks)
+                        chain.proceed()
                     }
-                    val application = chain.getThisObject() as? Application
-                    application?.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-                        override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
-                            activeActivities.add(activity)
-                        }
-                        override fun onActivityStarted(activity: Activity) {
-                            activeActivities.add(activity)
-                        }
-                        override fun onActivityResumed(activity: Activity) {
-                            activeActivities.add(activity)
-                        }
-                        override fun onActivityPaused(activity: Activity) {}
-                        override fun onActivityStopped(activity: Activity) {}
-                        override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-                        override fun onActivityDestroyed(activity: Activity) {
-                            activeActivities.remove(activity)
-                        }
-                    })
-                    chain.proceed()
-                }
+            }
         }
 
         runCatching {

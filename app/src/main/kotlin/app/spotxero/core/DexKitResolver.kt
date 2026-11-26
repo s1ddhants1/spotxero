@@ -60,6 +60,8 @@ object DexKitResolver {
     const val KEY_OKHTTP_REQUEST_TO_STRING = "okhttp_request_to_string"
     const val KEY_OKHTTP_RESPONSE_BUILDER_BUILD = "okhttp_response_builder_build"
     const val KEY_OKHTTP_REAL_CALL_CHAIN = "okhttp_real_call_chain"
+    const val KEY_OKHTTP_HTTP2_WRITE_HEADERS = "okhttp_http2_write_headers"
+    const val KEY_OKHTTP_HTTP1_WRITE_HEADERS = "okhttp_http1_write_headers"
     const val KEY_RETROFIT_CREATE = "retrofit_create"
     const val KEY_CONTEXT_MENU_VIEW_MODEL_CTOR = "context_menu_view_model_ctor"
     const val KEY_LYRICS_CAP_STATUS_GETTER = "lyrics_cap_status_getter"
@@ -69,6 +71,37 @@ object DexKitResolver {
     const val KEY_SEARCH_RESPONSE_MAPPER = "search_response_mapper"
     const val KEY_ACTIVITY_VOLUME_KEY_HANDLER = "activity_volume_key_handler"
     const val KEY_VOLUME_KEY_HANDLER = "volume_key_handler"
+    const val KEY_SETTINGS_ROOT_FACTORY = "settings_root_factory"
+    const val KEY_SETTINGS_MODEL_CTOR = "settings_model_ctor"
+    const val KEY_SETTINGS_SECTION_CTOR = "settings_section_ctor"
+    const val KEY_SETTINGS_PERSISTENT_LIST_FACTORY = "settings_persistent_list_factory"
+    const val KEY_SETTINGS_TOGGLE_ITEM_CTOR = "settings_toggle_item_ctor"
+    const val KEY_SETTINGS_SUBTITLE_TEXT_CTOR = "settings_subtitle_text_ctor"
+    const val KEY_SETTINGS_TOGGLE_CONTROL_CTOR = "settings_toggle_control_ctor"
+    const val KEY_SETTINGS_TOGGLE_ID_CTOR = "settings_toggle_id_ctor"
+    const val KEY_SETTINGS_TOGGLE_ID_ARG = "settings_toggle_id_arg"
+    const val KEY_SETTINGS_REACTIVE_TOGGLE_CTOR = "settings_reactive_toggle_ctor"
+    const val KEY_SETTINGS_SUCCESS_RESULT_CTOR = "settings_success_result_ctor"
+    const val KEY_SETTINGS_STATE_FLOW_CTOR = "settings_state_flow_ctor"
+    const val KEY_SETTINGS_STATE_FLOW_EMIT = "settings_state_flow_emit"
+    const val KEY_SETTINGS_ACTION_URI_CTOR = "settings_action_uri_ctor"
+    const val KEY_SETTINGS_ACTION_CONTROL_CTOR = "settings_action_control_ctor"
+    const val KEY_SETTINGS_EXTERNAL_URL_CTOR = "settings_external_url_ctor"
+    const val KEY_SETTINGS_ACTION_ID_CLASS = "settings_action_id_class"
+    const val KEY_SETTINGS_ROUTER_NAVIGATE = "settings_router_navigate"
+    const val KEY_SETTINGS_PAGE_HOST_CTOR = "settings_page_host_ctor"
+    const val KEY_SETTINGS_STRING_TITLE_CTOR = "settings_string_title_ctor"
+    const val KEY_SETTINGS_HEADER_PROP_CTOR = "settings_header_prop_ctor"
+    const val KEY_SETTINGS_TITLE_RESOLVER = "settings_title_resolver"
+    const val KEY_SETTINGS_ICON_LOGO_CLASS = "settings_icon_logo_class"
+    const val KEY_SETTINGS_VECTOR_BUILDER_CLASS = "settings_vector_builder_class"
+    const val KEY_SETTINGS_VECTOR_PATH_CTOR = "settings_vector_path_ctor"
+    const val KEY_SETTINGS_PATH_MOVETO_CTOR = "settings_path_moveto_ctor"
+    const val KEY_SETTINGS_PATH_CURVETO_CTOR = "settings_path_curveto_ctor"
+    const val KEY_SETTINGS_PATH_CLOSE_CLASS = "settings_path_close_class"
+    const val KEY_APP_SIGNATURES_METHOD = "app_signatures_method"
+    const val KEY_INSTALLER_PACKAGE_METHOD = "installer_package_method"
+    const val KEY_INSTALLER_ALLOWLIST_METHOD = "installer_allowlist_method"
 
     private const val CLIENT_BASE = "com.spotify.esperanto.esperanto.ClientBase"
     private const val COROUTINE_CLIENT_BASE = "com.spotify.esperanto.esperanto.CoroutineClientBase"
@@ -173,6 +206,10 @@ object DexKitResolver {
         resolveHomeChipsMapper(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveSearchChips(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveVolumeKeyHandlers(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveSettingsRootFactory(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveNativeSettingsContracts(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveAppSignaturesMethod(dexKit, classLoader, cachedSignatures, signatures, members)
+        resolveInstallerPackageMethod(dexKit, classLoader, cachedSignatures, signatures, members)
 
         resolved = members
         return signatures
@@ -1363,7 +1400,59 @@ object DexKitResolver {
                 .singleOrNull { isOkHttpRealCallChain(it, requestClass, responseClass) }
         }.getOrNull()?.takeIf { isOkHttpRealCallChain(it, requestClass, responseClass) }
         store(KEY_OKHTTP_REAL_CALL_CHAIN, realCallChain, sigs, members)
+
+        resolveOkHttpWriteHeaders(
+            dexKit,
+            classLoader,
+            cached,
+            sigs,
+            members,
+            KEY_OKHTTP_HTTP2_WRITE_HEADERS,
+            "Expected ':status' header not present",
+            requestClass
+        )
+        resolveOkHttpWriteHeaders(
+            dexKit,
+            classLoader,
+            cached,
+            sigs,
+            members,
+            KEY_OKHTTP_HTTP1_WRITE_HEADERS,
+            "Cannot stream a request body without chunked encoding",
+            requestClass
+        )
     }
+
+    private fun resolveOkHttpWriteHeaders(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>,
+        key: String,
+        anchorString: String,
+        requestClass: Class<*>
+    ) {
+        val method = cachedMethod(cached, key, classLoader) {
+            isOkHttpWriteHeadersMethod(it, requestClass)
+        } ?: runCatching {
+            val anchor = dexKit.findMethod {
+                matcher {
+                    usingStrings(listOf(anchorString), StringMatchType.Contains)
+                }
+            }.singleOrNull() ?: return@runCatching null
+            anchor.declaredClass?.methods?.mapNotNull { m ->
+                runCatching { m.getMethodInstance(classLoader) }.getOrNull()
+            }?.singleOrNull { isOkHttpWriteHeadersMethod(it, requestClass) }
+        }.getOrNull()?.takeIf { isOkHttpWriteHeadersMethod(it, requestClass) }
+        store(key, method, sigs, members)
+    }
+
+    private fun isOkHttpWriteHeadersMethod(method: Method, requestClass: Class<*>): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0] == requestClass &&
+            method.returnType == Void.TYPE
 
     private fun isOkHttpRequestToString(method: Method): Boolean =
         !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
@@ -1634,4 +1723,852 @@ object DexKitResolver {
             method.parameterTypes[0].name == "android.view.KeyEvent" &&
             method.parameterTypes[1] == String::class.java &&
             method.returnType == Boolean::class.javaPrimitiveType
+
+    private fun resolveSettingsRootFactory(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_SETTINGS_ROOT_FACTORY, classLoader, ::isSettingsRootFactory)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("accountPage", "aboutPage"), StringMatchType.Equals)
+                        paramCount(0)
+                    }
+                }.firstOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isSettingsRootFactory)
+        store(KEY_SETTINGS_ROOT_FACTORY, method, sigs, members)
+    }
+
+    private fun isSettingsRootFactory(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 0
+
+    private fun resolveNativeSettingsContracts(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val rootFactory = members[KEY_SETTINGS_ROOT_FACTORY] as? Method
+        val rootRecord = if (rootFactory != null && (cached?.get(KEY_SETTINGS_SECTION_CTOR) == null || cached[KEY_SETTINGS_PERSISTENT_LIST_FACTORY] == null)) {
+            runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        declaredClass(rootFactory.declaringClass)
+                        name(rootFactory.name)
+                        paramCount(0)
+                    }
+                }.firstOrNull()
+            }.getOrNull()
+        } else null
+
+        val modelCtor = cachedConstructor(cached, KEY_SETTINGS_MODEL_CTOR, classLoader, ::isSettingsModelCtor)
+            ?: rootFactory?.returnType?.declaredConstructors?.firstOrNull(::isSettingsModelCtor)
+        storeCtor(KEY_SETTINGS_MODEL_CTOR, modelCtor, sigs, members)
+
+        val sectionCtor = cachedConstructor(cached, KEY_SETTINGS_SECTION_CTOR, classLoader, ::isSettingsSectionCtor)
+            ?: rootRecord?.invokes
+                ?.filter { it.isConstructor && it.paramCount == 6 }
+                ?.mapNotNull { runCatching { it.getConstructorInstance(classLoader) }.getOrNull() }
+                ?.firstOrNull(::isSettingsSectionCtor)
+        storeCtor(KEY_SETTINGS_SECTION_CTOR, sectionCtor, sigs, members)
+
+        val se80Class = sectionCtor?.parameterTypes?.getOrNull(4)
+        val listFactory = cachedMethod(cached, KEY_SETTINGS_PERSISTENT_LIST_FACTORY, classLoader) { m ->
+            isPersistentListFactory(m, se80Class)
+        } ?: if (rootRecord != null && se80Class != null) {
+            rootRecord.invokes
+                .filter { !it.isConstructor && it.paramCount == 1 }
+                .mapNotNull { runCatching { it.getMethodInstance(classLoader) }.getOrNull() }
+                .firstOrNull { isPersistentListFactory(it, se80Class) }
+        } else null
+        store(KEY_SETTINGS_PERSISTENT_LIST_FACTORY, listFactory, sigs, members)
+
+        val localFilesItemClass = runCatching {
+            Class.forName("com.spotify.localfiles.settings.localfiles.impl.LocalFilesLibrarySettingsItemFactoryImpl", false, classLoader)
+        }.getOrNull()
+        val localFilesCreateMethod = localFilesItemClass?.declaredMethods?.firstOrNull {
+            !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                it.parameterCount == 0 &&
+                !it.returnType.isPrimitive &&
+                it.returnType != Any::class.java
+        }
+
+        val toggleItemCtor = cachedConstructor(cached, KEY_SETTINGS_TOGGLE_ITEM_CTOR, classLoader, ::isSettingsToggleItemCtor)
+            ?: localFilesCreateMethod?.returnType?.declaredConstructors?.firstOrNull(::isSettingsToggleItemCtor)
+        storeCtor(KEY_SETTINGS_TOGGLE_ITEM_CTOR, toggleItemCtor, sigs, members)
+
+        val controlInterface = toggleItemCtor?.parameterTypes?.getOrNull(10)
+        val flowInterface = toggleItemCtor?.parameterTypes?.getOrNull(7)
+
+        val subtitleTextCtor = cachedConstructor(cached, KEY_SETTINGS_SUBTITLE_TEXT_CTOR, classLoader, ::isSubtitleTextCtor)
+            ?: runCatching {
+                dexKit.findClass {
+                    matcher {
+                        usingStrings(listOf("Paragraph overlap not allowed, end "), StringMatchType.Contains)
+                    }
+                }.mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .firstOrNull { CharSequence::class.java.isAssignableFrom(it) }
+                    ?.declaredConstructors
+                    ?.firstOrNull(::isSubtitleTextCtor)
+            }.getOrNull()
+        storeCtor(KEY_SETTINGS_SUBTITLE_TEXT_CTOR, subtitleTextCtor, sigs, members)
+
+        val localFilesCreateRecords = if (localFilesItemClass != null && (cached?.get(KEY_SETTINGS_TOGGLE_CONTROL_CTOR) == null)) {
+            runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        declaredClass(localFilesItemClass)
+                        paramCount(0)
+                    }
+                }
+            }.getOrNull().orEmpty()
+        } else emptyList()
+
+        val toggleControlCtor = cachedConstructor(cached, KEY_SETTINGS_TOGGLE_CONTROL_CTOR, classLoader) { ctor ->
+            isToggleControlCtor(ctor, controlInterface)
+        } ?: localFilesCreateRecords
+            .flatMap { it.invokes }
+            .filter { it.isConstructor && it.paramCount == 2 }
+            .mapNotNull { runCatching { it.getConstructorInstance(classLoader) }.getOrNull() }
+            .firstOrNull { isToggleControlCtor(it, controlInterface) }
+        storeCtor(KEY_SETTINGS_TOGGLE_CONTROL_CTOR, toggleControlCtor, sigs, members)
+
+        val eyd1Interface = toggleControlCtor?.parameterTypes?.getOrNull(1)
+        val reactiveToggleCtor = cachedConstructor(cached, KEY_SETTINGS_REACTIVE_TOGGLE_CTOR, classLoader) { ctor ->
+            isReactiveToggleCtor(ctor, eyd1Interface, flowInterface)
+        } ?: if (eyd1Interface != null && flowInterface != null) {
+            runCatching {
+                dexKit.findClass {
+                    matcher {
+                        interfaces {
+                            add(eyd1Interface.name)
+                        }
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .flatMap { it.declaredConstructors.asSequence() }
+                    .firstOrNull { isReactiveToggleCtor(it, eyd1Interface, flowInterface) }
+            }.getOrNull()
+        } else null
+        storeCtor(KEY_SETTINGS_REACTIVE_TOGGLE_CTOR, reactiveToggleCtor, sigs, members)
+
+        val localFilesAccessorClass = runCatching {
+            Class.forName("com.spotify.localfiles.settings.localfiles.impl.LocalFilesSettingsValueAccessor", false, classLoader)
+        }.getOrNull()
+        val successResultCtor = cachedConstructor(cached, KEY_SETTINGS_SUCCESS_RESULT_CTOR, classLoader, ::isSuccessResultCtor)
+            ?: if (localFilesAccessorClass != null) {
+                runCatching {
+                    dexKit.findMethod {
+                        matcher {
+                            declaredClass(localFilesAccessorClass)
+                            name("setValue")
+                            paramCount(4)
+                        }
+                    }.flatMap { it.invokes }
+                        .filter { it.isConstructor && it.paramCount == 1 }
+                        .mapNotNull { runCatching { it.getConstructorInstance(classLoader) }.getOrNull() }
+                        .firstOrNull(::isSuccessResultCtor)
+                }.getOrNull()
+            } else null
+        storeCtor(KEY_SETTINGS_SUCCESS_RESULT_CTOR, successResultCtor, sigs, members)
+
+        val stateFlowCtor = cachedConstructor(cached, KEY_SETTINGS_STATE_FLOW_CTOR, classLoader, ::isStateFlowCtor)
+            ?: runCatching {
+                dexKit.findClass {
+                    matcher {
+                        usingStrings(listOf("MutableStateFlow.resetReplayCache is not supported"), StringMatchType.Equals)
+                    }
+                }.mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .firstOrNull { flowInterface == null || flowInterface.isAssignableFrom(it) }
+                    ?.declaredConstructors
+                    ?.firstOrNull(::isStateFlowCtor)
+            }.getOrNull()
+        storeCtor(KEY_SETTINGS_STATE_FLOW_CTOR, stateFlowCtor, sigs, members)
+
+        val stateFlowEmit = cachedMethod(cached, KEY_SETTINGS_STATE_FLOW_EMIT, classLoader) { m ->
+            isStateFlowEmit(m, stateFlowCtor?.declaringClass)
+        } ?: stateFlowCtor?.declaringClass?.declaredMethods?.firstOrNull { m ->
+            isStateFlowEmit(m, stateFlowCtor.declaringClass)
+        }
+        store(KEY_SETTINGS_STATE_FLOW_EMIT, stateFlowEmit, sigs, members)
+
+        val actionUriCtor = cachedConstructor(cached, KEY_SETTINGS_ACTION_URI_CTOR, classLoader, ::isActionUriCtor)
+            ?: runCatching {
+                dexKit.findClass {
+                    matcher {
+                        usingStrings(listOf("A non-empty URI must be provided."), StringMatchType.Equals)
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .flatMap { it.declaredConstructors.asSequence() }
+                    .firstOrNull(::isActionUriCtor)
+            }.getOrNull()
+        storeCtor(KEY_SETTINGS_ACTION_URI_CTOR, actionUriCtor, sigs, members)
+
+        val externalUrlCtor = cachedConstructor(cached, KEY_SETTINGS_EXTERNAL_URL_CTOR, classLoader, ::isExternalUrlCtor)
+            ?: runCatching {
+                dexKit.findClass {
+                    matcher {
+                        usingStrings(listOf("A non-empty URL must be provided."), StringMatchType.Equals)
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .flatMap { it.declaredConstructors.asSequence() }
+                    .firstOrNull(::isExternalUrlCtor)
+            }.getOrNull()
+        storeCtor(KEY_SETTINGS_EXTERNAL_URL_CTOR, externalUrlCtor, sigs, members)
+
+        val peo0Interface = actionUriCtor?.declaringClass?.interfaces?.singleOrNull()
+        val actionControlCtor = cachedConstructor(cached, KEY_SETTINGS_ACTION_CONTROL_CTOR, classLoader) { ctor ->
+            isActionControlCtor(ctor, controlInterface, peo0Interface)
+        } ?: if (controlInterface != null && peo0Interface != null) {
+            runCatching {
+                dexKit.findClass {
+                    matcher {
+                        interfaces {
+                            add(controlInterface.name)
+                        }
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .flatMap { it.declaredConstructors.asSequence() }
+                    .firstOrNull { isActionControlCtor(it, controlInterface, peo0Interface) }
+            }.getOrNull()
+        } else null
+        storeCtor(KEY_SETTINGS_ACTION_CONTROL_CTOR, actionControlCtor, sigs, members)
+
+        val leo0Interface = actionControlCtor?.parameterTypes?.getOrNull(0)
+        val actionIdClass = cached?.get(KEY_SETTINGS_ACTION_ID_CLASS)?.let { clsName ->
+            runCatching { Class.forName(clsName, false, classLoader) }.getOrNull()
+                ?.takeIf { isZeroFieldMarkerImplClass(it, leo0Interface) }
+        } ?: if (leo0Interface != null) {
+            runCatching {
+                dexKit.findClass {
+                    matcher {
+                        interfaces {
+                            add(leo0Interface.name)
+                        }
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .firstOrNull { isZeroFieldMarkerImplClass(it, leo0Interface) }
+            }.getOrNull()
+        } else null
+        if (actionIdClass != null) {
+            members[KEY_SETTINGS_ACTION_ID_CLASS] = actionIdClass
+            sigs[KEY_SETTINGS_ACTION_ID_CLASS] = actionIdClass.name
+        } else {
+            Log.w(TAG, "$KEY_SETTINGS_ACTION_ID_CLASS: no validated match")
+        }
+
+        val noLogMarker = actionIdClass?.interfaces?.firstOrNull { it != leo0Interface }
+        val wxd1Interface = toggleControlCtor?.parameterTypes?.getOrNull(0)
+        val toggleIdCtor = cachedConstructor(cached, KEY_SETTINGS_TOGGLE_ID_CTOR, classLoader) { ctor ->
+            isNoLogToggleIdCtor(ctor, wxd1Interface, noLogMarker)
+        } ?: if (wxd1Interface != null && noLogMarker != null) {
+            runCatching {
+                dexKit.findClass {
+                    matcher {
+                        interfaces {
+                            add(wxd1Interface.name)
+                        }
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .flatMap { it.declaredConstructors.asSequence() }
+                    .firstOrNull { isNoLogToggleIdCtor(it, wxd1Interface, noLogMarker) }
+            }.getOrNull()
+        } else null
+        storeCtor(KEY_SETTINGS_TOGGLE_ID_CTOR, toggleIdCtor, sigs, members)
+
+        val toggleIdArgBase = toggleIdCtor?.parameterTypes?.getOrNull(0)
+        val toggleIdArg = cached?.get(KEY_SETTINGS_TOGGLE_ID_ARG)?.let { clsName ->
+            runCatching {
+                val cls = Class.forName(clsName, false, classLoader)
+                extractSingletonField(cls, toggleIdArgBase)
+            }.getOrNull()
+        } ?: if (toggleIdArgBase != null) {
+            runCatching {
+                val candidates = if (toggleIdArgBase.isInterface) {
+                    dexKit.findClass { matcher { interfaces { add(toggleIdArgBase.name) } } }
+                } else {
+                    dexKit.findClass { matcher { superClass(toggleIdArgBase.name) } }
+                }
+                candidates.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .firstNotNullOfOrNull { extractSingletonField(it, toggleIdArgBase) }
+            }.getOrNull()
+        } else null
+        if (toggleIdArg != null) {
+            members[KEY_SETTINGS_TOGGLE_ID_ARG] = toggleIdArg
+            sigs[KEY_SETTINGS_TOGGLE_ID_ARG] = toggleIdArg.javaClass.name
+        } else {
+            Log.w(TAG, "$KEY_SETTINGS_TOGGLE_ID_ARG: no validated match")
+        }
+
+        val routerNavigate = cachedMethod(cached, KEY_SETTINGS_ROUTER_NAVIGATE, classLoader, ::isRouterNavigateMethod)
+            ?: runCatching {
+                dexKit.findClass {
+                    matcher {
+                        usingStrings(
+                            listOf("com.spotify.mobile.android.ui.action.view.SPOTIFY_URI", "is_internal_navigation"),
+                            StringMatchType.Equals
+                        )
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .flatMap { it.declaredMethods.asSequence() }
+                    .firstOrNull(::isRouterNavigateMethod)
+            }.getOrNull()
+        store(KEY_SETTINGS_ROUTER_NAVIGATE, routerNavigate, sigs, members)
+
+        val argsClass = runCatching {
+            val cachedHost = cached?.get(KEY_SETTINGS_PAGE_HOST_CTOR)?.let {
+                cachedConstructor(cached, KEY_SETTINGS_PAGE_HOST_CTOR, classLoader) { c -> c.parameterCount == 4 }
+            }
+            if (cachedHost != null) {
+                cachedHost.parameterTypes[0]
+            } else {
+                dexKit.findMethod {
+                    matcher {
+                        name("writeToParcel")
+                        usingStrings(listOf("SEARCH"), StringMatchType.Equals)
+                        paramCount(2)
+                    }
+                }.mapNotNull { runCatching { it.getClassInstance(classLoader) }.getOrNull() }
+                    .firstOrNull { isSettingsPageArgsClass(it) }
+            }
+        }.getOrNull()
+
+        val pageHostCtor = cachedConstructor(cached, KEY_SETTINGS_PAGE_HOST_CTOR, classLoader) { ctor ->
+            isSettingsPageHostCtor(ctor, argsClass)
+        } ?: if (argsClass != null) {
+            runCatching {
+                dexKit.findClass {
+                    matcher {
+                        addFieldForType(argsClass)
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .flatMap { it.declaredConstructors.asSequence() }
+                    .firstOrNull { isSettingsPageHostCtor(it, argsClass) }
+            }.getOrNull()
+        } else null
+        storeCtor(KEY_SETTINGS_PAGE_HOST_CTOR, pageHostCtor, sigs, members)
+
+        val baseTitleClass = modelCtor?.parameterTypes?.getOrNull(1)?.superclass
+        val stringTitleCtor = cachedConstructor(cached, KEY_SETTINGS_STRING_TITLE_CTOR, classLoader) { ctor ->
+            isStringTitleCtor(ctor, baseTitleClass)
+        } ?: if (baseTitleClass != null) {
+            runCatching {
+                dexKit.findClass {
+                    matcher {
+                        superClass(baseTitleClass.name)
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .flatMap { it.declaredConstructors.asSequence() }
+                    .firstOrNull { isStringTitleCtor(it, baseTitleClass) }
+            }.getOrNull()
+        } else null
+        storeCtor(KEY_SETTINGS_STRING_TITLE_CTOR, stringTitleCtor, sigs, members)
+
+        val headerPropCtor = cachedConstructor(cached, KEY_SETTINGS_HEADER_PROP_CTOR, classLoader) { ctor ->
+            isHeaderPropCtor(ctor, baseTitleClass)
+        } ?: if (pageHostCtor != null && baseTitleClass != null) {
+            runCatching {
+                val hostInitRecord = dexKit.findMethod {
+                    matcher {
+                        declaredClass(pageHostCtor.declaringClass)
+                        name("<init>")
+                        paramCount(4)
+                    }
+                }.firstOrNull()
+                hostInitRecord?.invokes
+                    ?.filter { it.isConstructor && it.paramCount == 1 }
+                    ?.mapNotNull { runCatching { it.getConstructorInstance(classLoader) }.getOrNull() }
+                    ?.firstOrNull { isHeaderPropCtor(it, baseTitleClass) }
+            }.getOrNull()
+        } else null
+        storeCtor(KEY_SETTINGS_HEADER_PROP_CTOR, headerPropCtor, sigs, members)
+
+        val nd71Class = sectionCtor?.declaringClass
+        val titleResolver = cachedMethod(cached, KEY_SETTINGS_TITLE_RESOLVER, classLoader, ::isSettingsTitleResolver)
+            ?: if (nd71Class != null) {
+                runCatching {
+                    val candidates = dexKit.findMethod {
+                        matcher {
+                            paramTypes(
+                                android.content.Context::class.java,
+                                Integer::class.java,
+                                String::class.java
+                            )
+                            returnType(String::class.java)
+                        }
+                    }
+                    val matched = candidates.firstOrNull { data ->
+                        java.lang.reflect.Modifier.isStatic(data.modifiers) &&
+                            data.callers.any { caller ->
+                                caller.usingFields.any { it.field.declaredClassName == nd71Class.name }
+                            }
+                    } ?: candidates.singleOrNull { java.lang.reflect.Modifier.isStatic(it.modifiers) }
+                    matched?.getMethodInstance(classLoader)
+                }.getOrNull()?.takeIf(::isSettingsTitleResolver)
+            } else null
+        store(KEY_SETTINGS_TITLE_RESOLVER, titleResolver, sigs, members)
+
+        val r2yClass = modelCtor?.parameterTypes?.getOrNull(0)
+        val iconLogoClass = cached?.get(KEY_SETTINGS_ICON_LOGO_CLASS)?.let { clsName ->
+            runCatching { Class.forName(clsName, false, classLoader) }.getOrNull()
+                ?.takeIf { isIconSubclass(it, r2yClass) }
+        } ?: if (r2yClass != null) {
+            runCatching {
+                dexKit.findClass {
+                    matcher {
+                        superClass(r2yClass.name)
+                        usingStrings(listOf("Encore.Vector.SpotifyLogo24"), StringMatchType.Equals)
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .firstOrNull { isIconSubclass(it, r2yClass) }
+            }.getOrNull()
+        } else null
+        storeClass(KEY_SETTINGS_ICON_LOGO_CLASS, iconLogoClass, sigs, members)
+
+        val vectorBuilderClass = cached?.get(KEY_SETTINGS_VECTOR_BUILDER_CLASS)?.let { clsName ->
+            runCatching { Class.forName(clsName, false, classLoader) }.getOrNull()
+                ?.takeIf(::isVectorBuilderClass)
+        } ?: runCatching {
+            dexKit.findClass {
+                matcher {
+                    usingStrings(
+                        listOf("ImageVector.Builder is single use, create a new instance to create a new ImageVector"),
+                        StringMatchType.Equals
+                    )
+                }
+            }.asSequence()
+                .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                .firstOrNull(::isVectorBuilderClass)
+        }.getOrNull()
+        storeClass(KEY_SETTINGS_VECTOR_BUILDER_CLASS, vectorBuilderClass, sigs, members)
+
+        val vectorPathCtor = cachedConstructor(cached, KEY_SETTINGS_VECTOR_PATH_CTOR, classLoader, ::isVectorPathCtor)
+            ?: if (vectorBuilderClass != null) {
+                runCatching {
+                    val addMethod = vectorBuilderClass.declaredMethods.firstOrNull { m ->
+                        java.lang.reflect.Modifier.isStatic(m.modifiers) &&
+                            m.parameterCount == 6 &&
+                            m.parameterTypes[0] == vectorBuilderClass &&
+                            List::class.java.isAssignableFrom(m.parameterTypes[1])
+                    } ?: return@runCatching null
+                    dexKit.findMethod {
+                        matcher {
+                            declaredClass(vectorBuilderClass)
+                            name(addMethod.name)
+                            paramCount(6)
+                        }
+                    }.flatMap { it.invokes }
+                        .filter { it.isConstructor && it.paramCount == 14 }
+                        .mapNotNull { runCatching { it.getConstructorInstance(classLoader) }.getOrNull() }
+                        .firstOrNull(::isVectorPathCtor)
+                }.getOrNull()
+            } else null
+        storeCtor(KEY_SETTINGS_VECTOR_PATH_CTOR, vectorPathCtor, sigs, members)
+
+        val moveToCtor = cachedConstructor(cached, KEY_SETTINGS_PATH_MOVETO_CTOR, classLoader, ::isMoveToCtor)
+            ?: runCatching {
+                dexKit.findClass {
+                    matcher {
+                        usingStrings(listOf("MoveTo(x="), StringMatchType.Equals)
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .flatMap { it.declaredConstructors.asSequence() }
+                    .firstOrNull(::isMoveToCtor)
+            }.getOrNull()
+        storeCtor(KEY_SETTINGS_PATH_MOVETO_CTOR, moveToCtor, sigs, members)
+
+        val curveToCtor = cachedConstructor(cached, KEY_SETTINGS_PATH_CURVETO_CTOR, classLoader, ::isCurveToCtor)
+            ?: runCatching {
+                dexKit.findClass {
+                    matcher {
+                        usingStrings(listOf("CurveTo(x1="), StringMatchType.Equals)
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .flatMap { it.declaredConstructors.asSequence() }
+                    .firstOrNull(::isCurveToCtor)
+            }.getOrNull()
+        storeCtor(KEY_SETTINGS_PATH_CURVETO_CTOR, curveToCtor, sigs, members)
+
+        val pathNodeBase = moveToCtor?.declaringClass?.superclass
+        val pathCloseClass = cached?.get(KEY_SETTINGS_PATH_CLOSE_CLASS)?.let { clsName ->
+            runCatching { Class.forName(clsName, false, classLoader) }.getOrNull()
+                ?.takeIf { isPathCloseClass(it, pathNodeBase) }
+        } ?: if (pathNodeBase != null) {
+            runCatching {
+                dexKit.findClass {
+                    matcher {
+                        superClass(pathNodeBase.name)
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                    .firstOrNull { isPathCloseClass(it, pathNodeBase) }
+            }.getOrNull()
+        } else null
+        storeClass(KEY_SETTINGS_PATH_CLOSE_CLASS, pathCloseClass, sigs, members)
+    }
+
+    private fun storeClass(
+        key: String,
+        cls: Class<*>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        if (cls == null) {
+            Log.w(TAG, "$key: no validated match")
+            return
+        }
+        members[key] = cls
+        sigs[key] = cls.name
+    }
+
+    private fun storeCtor(
+        key: String,
+        ctor: Constructor<*>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        if (ctor == null) {
+            Log.w(TAG, "$key: no validated match")
+            return
+        }
+        members[key] = ctor
+        sigs[key] = signatureOf(ctor)
+    }
+
+    private fun isSettingsModelCtor(ctor: Constructor<*>): Boolean {
+        val p = ctor.parameterTypes
+        return ctor.parameterCount == 5 &&
+            !p[0].isPrimitive &&
+            !p[1].isInterface &&
+            !p[1].isPrimitive &&
+            List::class.java.isAssignableFrom(p[3]) &&
+            List::class.java.isAssignableFrom(p[4])
+    }
+
+    private fun isSettingsSectionCtor(ctor: Constructor<*>): Boolean {
+        val p = ctor.parameterTypes
+        return ctor.parameterCount == 6 &&
+            !p[0].isPrimitive &&
+            p[1] == Integer::class.java &&
+            p[2] == Integer::class.java &&
+            p[3].isInterface &&
+            p[4].isInterface &&
+            p[5] == Int::class.javaPrimitiveType
+    }
+
+    private fun isPersistentListFactory(method: Method, se80Class: Class<*>?): Boolean =
+        se80Class != null &&
+            java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0] == Array<Any>::class.java &&
+            se80Class.isAssignableFrom(method.returnType)
+
+    private fun isSettingsToggleItemCtor(ctor: Constructor<*>): Boolean {
+        val p = ctor.parameterTypes
+        return ctor.parameterCount == 13 &&
+            p[0] == String::class.java &&
+            p[1] == Integer::class.java &&
+            p[2] == String::class.java &&
+            p[3] == Integer::class.java &&
+            p[5] == Integer::class.java &&
+            p[7].isInterface &&
+            p[8].isInterface &&
+            p[10].isInterface &&
+            p[11] == Map::class.java &&
+            p[12] == Int::class.javaPrimitiveType
+    }
+
+    private fun isSubtitleTextCtor(ctor: Constructor<*>): Boolean =
+        ctor.parameterCount == 1 &&
+            ctor.parameterTypes[0] == String::class.java &&
+            CharSequence::class.java.isAssignableFrom(ctor.declaringClass)
+
+    private fun isToggleControlCtor(ctor: Constructor<*>, controlInterface: Class<*>?): Boolean {
+        val p = ctor.parameterTypes
+        return controlInterface != null &&
+            controlInterface.isAssignableFrom(ctor.declaringClass) &&
+            ctor.parameterCount == 2 &&
+            p[0].isInterface &&
+            p[1].isInterface
+    }
+
+    private fun isZeroFieldMarkerImplClass(cls: Class<*>, targetInterface: Class<*>?): Boolean {
+        if (targetInterface == null || !targetInterface.isAssignableFrom(cls)) return false
+        if (cls.interfaces.size != 2) return false
+        if (cls.declaredFields.any { !java.lang.reflect.Modifier.isStatic(it.modifiers) }) return false
+        val marker = cls.interfaces.first { it != targetInterface }
+        return marker.methods.none { !java.lang.reflect.Modifier.isStatic(it.modifiers) }
+    }
+
+    private fun isNoLogToggleIdCtor(
+        ctor: Constructor<*>,
+        wxd1Interface: Class<*>?,
+        noLogMarker: Class<*>?
+    ): Boolean =
+        wxd1Interface != null &&
+            noLogMarker != null &&
+            wxd1Interface.isAssignableFrom(ctor.declaringClass) &&
+            noLogMarker.isAssignableFrom(ctor.declaringClass) &&
+            ctor.parameterCount == 1 &&
+            !ctor.parameterTypes[0].isPrimitive
+
+    private fun extractSingletonField(cls: Class<*>, baseType: Class<*>?): Any? {
+        if (baseType == null || !baseType.isAssignableFrom(cls)) return null
+        val enumVal = cls.enumConstants?.firstOrNull()
+        if (enumVal != null) return enumVal
+        return cls.declaredFields.firstOrNull { f ->
+            java.lang.reflect.Modifier.isStatic(f.modifiers) && cls.isAssignableFrom(f.type)
+        }?.apply { isAccessible = true }?.get(null)
+    }
+
+    private fun isReactiveToggleCtor(
+        ctor: Constructor<*>,
+        eyd1Interface: Class<*>?,
+        flowInterface: Class<*>?
+    ): Boolean {
+        if (eyd1Interface == null || flowInterface == null) return false
+        if (!eyd1Interface.isAssignableFrom(ctor.declaringClass)) return false
+        if (ctor.parameterCount != 2) return false
+        val p = ctor.parameterTypes
+        if (p[0] != flowInterface || !p[1].isInterface) return false
+        return p[1].methods.any { m ->
+            !java.lang.reflect.Modifier.isStatic(m.modifiers) &&
+                m.parameterCount == 3 &&
+                m.parameterTypes.all { it == Any::class.java } &&
+                m.returnType == Any::class.java
+        }
+    }
+
+    private fun isSuccessResultCtor(ctor: Constructor<*>): Boolean {
+        val cls = ctor.declaringClass
+        if (ctor.parameterCount != 1 || ctor.parameterTypes[0] != Any::class.java) return false
+        if (cls.interfaces.size != 1) return false
+        return cls.interfaces[0].methods.any {
+            !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                it.parameterCount == 0 &&
+                it.returnType == Any::class.java
+        }
+    }
+
+    private fun isStateFlowCtor(ctor: Constructor<*>): Boolean =
+        ctor.parameterCount == 1 && ctor.parameterTypes[0] == Any::class.java
+
+    private fun isStateFlowEmit(method: Method, flowClass: Class<*>?): Boolean =
+        flowClass != null &&
+            method.declaringClass == flowClass &&
+            !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.name != "equals" &&
+            method.parameterCount == 1 &&
+            method.parameterTypes[0] == Any::class.java &&
+            method.returnType == Boolean::class.javaPrimitiveType
+
+    private fun isActionUriCtor(ctor: Constructor<*>): Boolean =
+        ctor.parameterCount == 2 &&
+            ctor.parameterTypes[0] == String::class.java &&
+            ctor.parameterTypes[1] == android.os.Bundle::class.java &&
+            ctor.declaringClass.interfaces.size == 1
+
+    private fun isExternalUrlCtor(ctor: Constructor<*>): Boolean =
+        ctor.parameterCount == 2 &&
+            ctor.parameterTypes[0] == String::class.java &&
+            ctor.parameterTypes[1] == java.lang.Boolean.TYPE &&
+            ctor.declaringClass.interfaces.size == 1
+
+    private fun isActionControlCtor(
+        ctor: Constructor<*>,
+        controlInterface: Class<*>?,
+        peo0Interface: Class<*>?
+    ): Boolean =
+        controlInterface != null &&
+            peo0Interface != null &&
+            controlInterface.isAssignableFrom(ctor.declaringClass) &&
+            ctor.parameterCount == 2 &&
+            ctor.parameterTypes[0].isInterface &&
+            ctor.parameterTypes[1] == peo0Interface
+
+    private fun isRouterNavigateMethod(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 3 &&
+            method.parameterTypes[0] == String::class.java &&
+            !method.parameterTypes[1].isPrimitive &&
+            android.os.Parcelable::class.java.isAssignableFrom(method.parameterTypes[1]) &&
+            method.parameterTypes[2] == android.os.Bundle::class.java &&
+            method.returnType == Void.TYPE
+
+    private fun isSettingsPageArgsClass(cls: Class<*>): Boolean {
+        if (!android.os.Parcelable::class.java.isAssignableFrom(cls)) return false
+        val fields = cls.declaredFields.filter { !java.lang.reflect.Modifier.isStatic(it.modifiers) }
+        return fields.size == 4 &&
+            fields.any { !it.type.isPrimitive && java.io.Serializable::class.java.isAssignableFrom(it.type) && Comparable::class.java.isAssignableFrom(it.type) } &&
+            fields.any { android.os.Parcelable::class.java.isAssignableFrom(it.type) } &&
+            fields.any { it.type == String::class.java } &&
+            fields.any { it.type == Int::class.javaPrimitiveType }
+    }
+
+    private fun isSettingsPageHostCtor(ctor: Constructor<*>, argsClass: Class<*>?): Boolean {
+        val p = ctor.parameterTypes
+        return ctor.parameterCount == 4 &&
+            (argsClass == null || p[0] == argsClass) &&
+            p[1].isInterface &&
+            !java.lang.reflect.Modifier.isAbstract(ctor.declaringClass.modifiers)
+    }
+
+    private fun isStringTitleCtor(ctor: Constructor<*>, baseTitleClass: Class<*>?): Boolean =
+        baseTitleClass != null &&
+            ctor.declaringClass != baseTitleClass &&
+            baseTitleClass.isAssignableFrom(ctor.declaringClass) &&
+            ctor.parameterCount == 1 &&
+            ctor.parameterTypes[0] == String::class.java
+
+    private fun isHeaderPropCtor(ctor: Constructor<*>, baseTitleClass: Class<*>?): Boolean =
+        baseTitleClass != null &&
+            ctor.parameterCount == 1 &&
+            ctor.parameterTypes[0] == baseTitleClass &&
+            ctor.declaringClass.interfaces.size == 1
+
+    private fun isSettingsTitleResolver(method: Method): Boolean =
+        java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 3 &&
+            method.parameterTypes[0] == android.content.Context::class.java &&
+            method.parameterTypes[1] == Integer::class.java &&
+            method.parameterTypes[2] == String::class.java &&
+            method.returnType == String::class.java
+
+    private fun isIconSubclass(cls: Class<*>, r2yClass: Class<*>?): Boolean =
+        r2yClass != null &&
+            cls != r2yClass &&
+            r2yClass.isAssignableFrom(cls) &&
+            cls.declaredFields.any { f ->
+                java.lang.reflect.Modifier.isStatic(f.modifiers) && f.type == cls
+            }
+
+    private fun isVectorBuilderClass(cls: Class<*>): Boolean =
+        cls.declaredConstructors.any { c ->
+            val p = c.parameterTypes
+            p.size == 9 &&
+                p[0] == String::class.java &&
+                p[1] == Float::class.javaPrimitiveType &&
+                p[5] == Long::class.javaPrimitiveType &&
+                p[6] == Int::class.javaPrimitiveType &&
+                p[7] == Boolean::class.javaPrimitiveType &&
+                p[8] == Int::class.javaPrimitiveType
+        }
+
+    private fun isVectorPathCtor(ctor: Constructor<*>): Boolean {
+        val p = ctor.parameterTypes
+        return p.size == 14 &&
+            p[0] == String::class.java &&
+            List::class.java.isAssignableFrom(p[1]) &&
+            p[2] == Int::class.javaPrimitiveType &&
+            p[3] == p[5] &&
+            !p[3].isPrimitive &&
+            p[4] == Float::class.javaPrimitiveType &&
+            p[7] == Float::class.javaPrimitiveType &&
+            p[8] == Int::class.javaPrimitiveType &&
+            p[9] == Int::class.javaPrimitiveType &&
+            p[10] == Float::class.javaPrimitiveType
+    }
+
+    private fun isMoveToCtor(ctor: Constructor<*>): Boolean =
+        ctor.parameterCount == 2 &&
+            ctor.parameterTypes[0] == Float::class.javaPrimitiveType &&
+            ctor.parameterTypes[1] == Float::class.javaPrimitiveType
+
+    private fun isCurveToCtor(ctor: Constructor<*>): Boolean =
+        ctor.parameterCount == 6 &&
+            ctor.parameterTypes.all { it == Float::class.javaPrimitiveType }
+
+    private fun isPathCloseClass(cls: Class<*>, baseClass: Class<*>?): Boolean =
+        baseClass != null &&
+            cls.superclass == baseClass &&
+            cls.declaredFields.none { !java.lang.reflect.Modifier.isStatic(it.modifiers) } &&
+            cls.declaredFields.any { f ->
+                java.lang.reflect.Modifier.isStatic(f.modifiers) && f.type == cls
+            }
+
+    private fun resolveAppSignaturesMethod(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val method = cachedMethod(cached, KEY_APP_SIGNATURES_METHOD, classLoader, ::isAppSignaturesMethod)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("Failed to get the application signatures"), StringMatchType.Equals)
+                        paramCount(0)
+                    }
+                }.firstOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isAppSignaturesMethod)
+        store(KEY_APP_SIGNATURES_METHOD, method, sigs, members)
+    }
+
+    private fun isAppSignaturesMethod(method: Method): Boolean =
+        !java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.parameterCount == 0
+
+    private fun resolveInstallerPackageMethod(
+        dexKit: DexKitBridge,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>
+    ) {
+        val allowlistMethod = cachedMethod(cached, KEY_INSTALLER_ALLOWLIST_METHOD, classLoader, ::isInstallerAllowlistMethod)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("com.android.vending", "com.amazon.venezia"), StringMatchType.Contains)
+                        paramCount(1)
+                        returnType("boolean")
+                    }
+                }.firstOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isInstallerAllowlistMethod)
+        store(KEY_INSTALLER_ALLOWLIST_METHOD, allowlistMethod, sigs, members)
+
+        val declaringClass = allowlistMethod?.declaringClass
+        val nameMethod = cachedMethod(cached, KEY_INSTALLER_PACKAGE_METHOD, classLoader, ::isInstallerPackageMethod)
+            ?: declaringClass?.declaredMethods?.firstOrNull(::isInstallerPackageMethod)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        usingStrings(listOf("Failed to get installer package"), StringMatchType.Equals)
+                        paramCount(2)
+                        returnType("java.lang.String")
+                    }
+                }.firstOrNull()?.getMethodInstance(classLoader)
+            }.getOrNull()?.takeIf(::isInstallerPackageMethod)
+        store(KEY_INSTALLER_PACKAGE_METHOD, nameMethod, sigs, members)
+    }
+
+    private fun isInstallerAllowlistMethod(method: Method): Boolean =
+        java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.returnType == Boolean::class.javaPrimitiveType &&
+            method.parameterCount == 1
+
+    private fun isInstallerPackageMethod(method: Method): Boolean =
+        java.lang.reflect.Modifier.isStatic(method.modifiers) &&
+            method.returnType == String::class.java &&
+            (method.parameterCount == 1 || method.parameterCount == 2)
+
 }

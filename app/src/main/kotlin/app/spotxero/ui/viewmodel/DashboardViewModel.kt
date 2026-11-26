@@ -1,11 +1,13 @@
 package app.spotxero.ui.viewmodel
 
 import android.app.Application
+import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.spotxero.R
 import app.spotxero.SpotXeroApplication
+import app.spotxero.core.LSPatchHelper
 import app.spotxero.core.ModuleStatus
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -37,6 +39,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     init {
+        LSPatchHelper.requestServicePush(application)
         PreferencesManager.init(application)
         ModuleStatus.checkStatus()
 
@@ -60,6 +63,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun refreshStatus() {
+        LSPatchHelper.requestServicePush(getApplication())
         ModuleStatus.checkStatus()
         PreferencesManager.loadAll(getApplication())
         detectSpotifyStatus()
@@ -69,76 +73,34 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun refreshState() {
         val app = getApplication<Application>()
         val isModuleActive = ModuleStatus.isModuleActive.value
-        val frameworkName = ModuleStatus.frameworkName.value ?: "LSPosed"
         val service = SpotXeroApplication.service
-        val name = service?.frameworkName?.takeIf { it.isNotBlank() } ?: frameworkName
-        val version = service?.frameworkVersion.orEmpty()
-        val isFrameworkConnected = isModuleActive || service != null
-        val isInstalled = _uiState.value.installedSpotifyVariants.isNotEmpty()
+        val targetPackages = _uiState.value.installedSpotifyVariants.map { it.packageName }.ifEmpty { CommonUtils.SUPPORTED_PACKAGES }
+        val targetStatus = LSPatchHelper.inspectTargetApp(app, targetPackages)
 
-        val eval = when {
-            !isInstalled -> {
-                BannerEvaluationData(
-                    titleRes = R.string.framework_spotify_not_installed_title,
-                    titleArgs = emptyList(),
-                    descRes = R.string.framework_spotify_not_installed_desc,
-                    descArgs = emptyList(),
-                    isInjectable = false
-                )
-            }
-            service != null -> {
-                val currentScope = service.scope.orEmpty()
-                val isLSPosed = name.contains("LSPosed", ignoreCase = true)
-                val isInScope = if (isLSPosed) {
-                    currentScope.any { it in CommonUtils.SUPPORTED_PACKAGES }
-                } else {
-                    currentScope.isEmpty() || currentScope.any { it in CommonUtils.SUPPORTED_PACKAGES }
-                }
-
-                if (!isInScope) {
-                    BannerEvaluationData(
-                        titleRes = R.string.framework_lsposed_not_in_scope_title,
-                        titleArgs = emptyList(),
-                        descRes = R.string.framework_lsposed_not_in_scope_desc,
-                        descArgs = emptyList(),
-                        isInjectable = false,
-                        canRequestScope = true
-                    )
-                } else {
-                    BannerEvaluationData(
-                        titleRes = R.string.framework_active_title_dynamic,
-                        titleArgs = listOf(name),
-                        descRes = R.string.framework_active_desc,
-                        descArgs = listOf(name, version),
-                        isInjectable = true
-                    )
-                }
-            }
-            isModuleActive -> {
-                BannerEvaluationData(
-                    titleRes = R.string.framework_active_title_dynamic,
-                    titleArgs = listOf(frameworkName),
-                    descRes = R.string.framework_active_desc,
-                    descArgs = listOf(frameworkName, "API 102"),
-                    isInjectable = true
-                )
-            }
-            else -> {
-                BannerEvaluationData(
-                    titleRes = R.string.framework_inactive_title,
-                    titleArgs = emptyList(),
-                    descRes = R.string.framework_inactive_desc,
-                    descArgs = emptyList(),
-                    isInjectable = false
-                )
-            }
+        val eval = if (service != null) {
+            LSPatchHelper.evaluateFrameworkStatus(
+                frameworkName = service.frameworkName,
+                frameworkVersion = service.frameworkVersion,
+                scope = service.scope,
+                isServiceBound = true,
+                targetStatus = targetStatus,
+                packageNames = targetPackages
+            )
+        } else {
+            LSPatchHelper.evaluateFrameworkStatus(
+                isModuleActive = isModuleActive,
+                targetStatus = targetStatus
+            )
         }
 
         _uiState.update { current ->
             current.copy(
-                isFrameworkConnected = isFrameworkConnected,
+                isFrameworkConnected = eval.isConnected,
                 isInjectable = eval.isInjectable,
                 canRequestScope = eval.canRequestScope,
+                isIntegrated = eval.isIntegrated,
+                frameworkName = eval.frameworkName,
+                frameworkVersion = eval.frameworkVersion,
                 titleRes = eval.titleRes,
                 titleArgs = eval.titleArgs,
                 descRes = eval.descRes,
@@ -180,6 +142,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled,
                 isHideAudiobooksEnabled = PreferencesManager.isHideAudiobooksEnabled,
                 isHidePremiumTabEnabled = PreferencesManager.isHidePremiumTabEnabled,
+                isInAppSettingsInjectionEnabled = PreferencesManager.isInAppSettingsInjectionEnabled,
                 isDoubleTapToSeekEnabled = PreferencesManager.isDoubleTapToSeekEnabled,
                 seekDurationSeconds = PreferencesManager.seekDurationSeconds,
                 isSeekProgressive = PreferencesManager.isSeekProgressive,
@@ -316,6 +279,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun setHidePremiumTab(enabled: Boolean) {
         PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_HIDE_PREMIUM_TAB, enabled)
         _uiState.update { it.copy(isHidePremiumTabEnabled = enabled) }
+    }
+
+    fun setInAppSettingsInjection(enabled: Boolean) {
+        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_INJECT_IN_APP_SETTINGS, enabled)
+        _uiState.update { it.copy(isInAppSettingsInjectionEnabled = enabled) }
     }
 
 
@@ -510,23 +478,23 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun requestScope(packageName: String? = null) {
         val target = packageName ?: _uiState.value.activeSpotify?.packageName ?: CommonUtils.SPOTIFY_PACKAGE_NAME
         val service = SpotXeroApplication.service ?: return
+        val isLSPatch = service.frameworkName.contains("LSPatch", ignoreCase = true)
         service.requestScope(listOf(target), object : XposedService.OnScopeEventListener {
             override fun onScopeRequestApproved(approved: List<String>) {
                 refreshState()
             }
 
             override fun onScopeRequestFailed(message: String) {
+                if (isLSPatch) {
+                    val pm = getApplication<Application>().packageManager
+                    val intent = pm.getLaunchIntentForPackage("org.lsposed.lspatch")
+                    if (intent != null) {
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        getApplication<Application>().startActivity(intent)
+                    }
+                }
                 refreshState()
             }
         })
     }
 }
-
-private data class BannerEvaluationData(
-    val titleRes: Int,
-    val titleArgs: List<String>,
-    val descRes: Int,
-    val descArgs: List<String>,
-    val isInjectable: Boolean,
-    val canRequestScope: Boolean = false
-)

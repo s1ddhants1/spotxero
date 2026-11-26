@@ -29,6 +29,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import app.spotxero.ui.component.settings.SettingsGroup
+import app.spotxero.ui.component.settings.SettingsItem
+import app.spotxero.ui.component.settings.SettingsSection
+import app.spotxero.ui.component.settings.SettingsSwitchItem
+import app.spotxero.ui.component.settings.SurfaceCard
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -42,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -58,7 +64,6 @@ import app.spotxero.hooks.lyrics.AiProviderPreset
 import app.spotxero.hooks.lyrics.AiProviderPresets
 import app.spotxero.hooks.lyrics.LyricsTranslationException
 import app.spotxero.hooks.lyrics.LyricsTranslationFailure
-import app.spotxero.ui.theme.AppIcons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -303,34 +308,36 @@ fun AiLyricsTranslationScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp)
             .padding(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        MetrolistSettingsGroup(
-            title = stringResource(R.string.ai_setup_title),
-            topPadding = 8.dp,
-            items = listOf(
-                MetrolistSettingsItem(
+        SettingsSection(
+            title = stringResource(R.string.ai_setup_title)
+        ) {
+            SettingsGroup {
+                SettingsItem(
                     title = stringResource(R.string.ai_setup_title),
-                    description = stringResource(R.string.ai_setup_description),
+                    subtitle = stringResource(R.string.ai_setup_description),
                     showChevron = true,
                     onClick = { showSetupWizardDialog = true }
                 )
-            )
-        )
+            }
+        }
 
-        MetrolistSettingsGroup(
-            title = stringResource(R.string.ai_runtime),
-            items = listOf(
-                MetrolistSettingsItem(
+        SettingsSection(
+            title = stringResource(R.string.ai_runtime)
+        ) {
+            SettingsGroup {
+                SettingsSwitchItem(
                     title = stringResource(R.string.ai_translation_enable),
-                    description = stringResource(R.string.ai_translation_enable_description),
-                    isSwitch = true,
+                    subtitle = stringResource(R.string.ai_translation_enable_description),
                     checked = isAiTranslationEnabled,
                     onCheckedChange = onAiTranslationEnabledChange
-                ),
-                MetrolistSettingsItem(
+                )
+                SettingsItem(
                     title = stringResource(R.string.mode),
-                    description = stringResource(R.string.settings_translation_mode_summary),
+                    subtitle = stringResource(R.string.settings_translation_mode_summary),
                     valueLabel = when (translateMode) {
                         LITERAL_MODE -> stringResource(R.string.ai_translation_literal)
                         TRANSCRIBED_MODE -> stringResource(R.string.ai_translation_transcribed)
@@ -339,150 +346,144 @@ fun AiLyricsTranslationScreen(
                     enabled = !directProvider,
                     showChevron = true,
                     onClick = { if (!directProvider) showTranslateModeDialog = true }
-                ),
-                MetrolistSettingsItem(
+                )
+                SettingsItem(
                     title = stringResource(R.string.ai_target_language),
                     valueLabel = PrefKeys.LanguageCodeToName[translateLanguage] ?: translateLanguage,
                     showChevron = true,
                     onClick = { showLanguageDialog = true }
                 )
-            )
-        )
+            }
+        }
 
-        MetrolistSettingsGroup(
-            title = stringResource(R.string.ai_provider),
-            items = listOf(
-                MetrolistSettingsItem(
+        SettingsSection(
+            title = stringResource(R.string.ai_provider)
+        ) {
+            SettingsGroup {
+                SettingsItem(
                     title = stringResource(R.string.ai_provider),
-                    description = stringResource(R.string.settings_translation_provider_summary),
+                    subtitle = stringResource(R.string.settings_translation_provider_summary),
                     valueLabel = lyricsAiProviderLabel(provider),
                     showChevron = true,
                     onClick = { showProviderDialog = true }
                 )
-            )
-        )
+            }
+        }
 
         if (!directProvider) {
-            MetrolistSettingsGroup(
-                title = stringResource(R.string.ai_connection),
-                items = buildList {
+            SettingsSection(
+                title = stringResource(R.string.ai_connection)
+            ) {
+                SettingsGroup {
                     if (provider == "OpenRouter") {
-                        add(
-                            MetrolistSettingsItem(
-                                title = stringResource(R.string.openrouter_sign_in_title),
-                                customContent = {
-                                    val uriHandler = LocalUriHandler.current
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                if (openRouterApiKey.isNotBlank()) {
-                                                    onOpenRouterApiKeyChange("")
-                                                } else {
-                                                    runCatching { uriHandler.openUri("https://openrouter.ai/settings/keys") }
-                                                }
-                                            }
-                                            .padding(horizontal = 16.dp, vertical = 16.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.weight(1f),
-                                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                                        ) {
-                                            Text(
-                                                text = stringResource(R.string.openrouter_sign_in_title),
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.Bold,
-                                            )
-                                            Text(
-                                                text = stringResource(
-                                                    if (openRouterApiKey.isNotBlank()) R.string.openrouter_signed_in_description
-                                                    else R.string.openrouter_sign_in_description
-                                                ),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                        Text(
-                                            text = stringResource(
-                                                if (openRouterApiKey.isNotBlank()) R.string.disconnect_cast else R.string.sign_in
-                                            ),
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(horizontal = 12.dp),
-                                        )
-                                    }
+                        val uriHandler = LocalUriHandler.current
+                        SurfaceCard(
+                            onClick = {
+                                if (openRouterApiKey.isNotBlank()) {
+                                    onOpenRouterApiKeyChange("")
+                                } else {
+                                    runCatching { uriHandler.openUri("https://openrouter.ai/settings/keys") }
                                 }
-                            )
-                        )
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.openrouter_sign_in_title),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        text = stringResource(
+                                            if (openRouterApiKey.isNotBlank()) R.string.openrouter_signed_in_description
+                                            else R.string.openrouter_sign_in_description
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(
+                                    text = stringResource(
+                                        if (openRouterApiKey.isNotBlank()) R.string.disconnect_cast else R.string.sign_in
+                                    ),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 12.dp),
+                                )
+                            }
+                        }
                     }
 
-                    add(
-                        MetrolistSettingsItem(
-                            title = stringResource(if (provider == DEEPL_PROVIDER) R.string.ai_deepl_api_key else R.string.ai_api_key_label),
-                            description = stringResource(if (currentKey.isBlank()) R.string.required else R.string.configured),
-                            valueLabel = if (currentKey.isNotBlank()) "••••••••" else "",
-                            showChevron = true,
-                            onClick = { showApiKeyDialog = true }
-                        )
+                    SettingsItem(
+                        title = stringResource(if (provider == DEEPL_PROVIDER) R.string.ai_deepl_api_key else R.string.ai_api_key_label),
+                        subtitle = stringResource(if (currentKey.isBlank()) R.string.required else R.string.configured),
+                        valueLabel = if (currentKey.isNotBlank()) "••••••••" else "",
+                        showChevron = true,
+                        onClick = { showApiKeyDialog = true }
                     )
 
                     if (currentPreset.editableEndpoint) {
-                        add(
-                            MetrolistSettingsItem(
-                                title = stringResource(R.string.ai_base_url),
-                                description = openRouterBaseUrl.ifBlank { currentPreset.endpoint },
-                                valueLabel = openRouterBaseUrl.ifBlank { currentPreset.endpoint },
-                                showChevron = true,
-                                onClick = { showBaseUrlDialog = true }
-                            )
+                        SettingsItem(
+                            title = stringResource(R.string.ai_base_url),
+                            subtitle = openRouterBaseUrl.ifBlank { currentPreset.endpoint },
+                            valueLabel = openRouterBaseUrl.ifBlank { currentPreset.endpoint },
+                            showChevron = true,
+                            onClick = { showBaseUrlDialog = true }
                         )
                     }
 
                     if (provider == DEEPL_PROVIDER) {
-                        add(
-                            MetrolistSettingsItem(
-                                title = stringResource(R.string.ai_deepl_formality),
-                                description = stringResource(R.string.settings_translation_formality_summary),
-                                valueLabel = when (deeplFormality) {
-                                    "default" -> stringResource(R.string.ai_deepl_formality_default)
-                                    "more" -> stringResource(R.string.ai_deepl_formality_more)
-                                    "less" -> stringResource(R.string.ai_deepl_formality_less)
-                                    else -> deeplFormality
-                                },
-                                showChevron = true,
-                                onClick = { showDeeplFormalityDialog = true }
-                            )
+                        SettingsItem(
+                            title = stringResource(R.string.ai_deepl_formality),
+                            subtitle = stringResource(R.string.settings_translation_formality_summary),
+                            valueLabel = when (deeplFormality) {
+                                "default" -> stringResource(R.string.ai_deepl_formality_default)
+                                "more" -> stringResource(R.string.ai_deepl_formality_more)
+                                "less" -> stringResource(R.string.ai_deepl_formality_less)
+                                else -> deeplFormality
+                            },
+                            showChevron = true,
+                            onClick = { showDeeplFormalityDialog = true }
                         )
                     }
                 }
-            )
+            }
         }
 
         if (currentPreset.isAi && !directProvider) {
-            MetrolistSettingsGroup(
-                title = stringResource(R.string.ai_models),
-                items = listOf(
-                    MetrolistSettingsItem(
+            SettingsSection(
+                title = stringResource(R.string.ai_models)
+            ) {
+                SettingsGroup {
+                    SettingsItem(
                         title = stringResource(R.string.ai_translation_model),
-                        description = stringResource(R.string.settings_translation_model_summary),
+                        subtitle = stringResource(R.string.settings_translation_model_summary),
                         valueLabel = openRouterModel.ifBlank { stringResource(R.string.ai_provider_default) },
                         enabled = modelsReady,
                         showChevron = true,
                         onClick = { if (modelsReady) showModelDialog = true }
                     )
-                )
-            )
+                }
+            }
         }
 
         val canEditPrompt = currentPreset.isAi && !directProvider && (openRouterApiKey.isNotBlank() || currentPreset.publicModelList || isCustomEndpoint)
-        MetrolistSettingsGroup(
-            title = stringResource(R.string.ai_prompt),
-            description = stringResource(R.string.ai_prompt_line_count_description),
-            items = listOf(
-                MetrolistSettingsItem(
+        SettingsSection(
+            title = stringResource(R.string.ai_prompt)
+        ) {
+            SettingsGroup {
+                SettingsItem(
                     title = stringResource(R.string.ai_system_prompt_label),
-                    description = stringResource(
+                    subtitle = stringResource(
                         if (aiSystemPrompt.isBlank()) R.string.ai_default_json_array_prompt else R.string.configured
                     ),
                     valueLabel = if (aiSystemPrompt.isNotBlank()) stringResource(R.string.configured) else "",
@@ -494,146 +495,142 @@ fun AiLyricsTranslationScreen(
                         }
                     }
                 )
-            )
-        )
+            }
+        }
 
         if (!directProvider) {
-            MetrolistSettingsGroup(
-                title = stringResource(R.string.ai_test_connection),
-                items = listOf(
-                    MetrolistSettingsItem(
-                        title = stringResource(R.string.ai_test_connection),
-                        customContent = {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.ai_test_connection_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+            SettingsSection(
+                title = stringResource(R.string.ai_test_connection)
+            ) {
+                SurfaceCard {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.ai_test_connection_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
 
-                                TextButton(
-                                    onClick = {
-                                        val canRun = when (provider) {
-                                            DEEPL_PROVIDER -> deeplApiKey.isNotBlank()
-                                            DEEPL_KEYLESS_PROVIDER, GOOGLE_TRANSLATE_PROVIDER -> true
-                                            "Custom", "OpenAI-compatible", "Anthropic-compatible", "Gemini-compatible" -> true
-                                            else -> openRouterApiKey.isNotBlank() || currentPreset.publicModelList || isCustomEndpoint
-                                        }
+                        TextButton(
+                            onClick = {
+                                val canRun = when (provider) {
+                                    DEEPL_PROVIDER -> deeplApiKey.isNotBlank()
+                                    DEEPL_KEYLESS_PROVIDER, GOOGLE_TRANSLATE_PROVIDER -> true
+                                    "Custom", "OpenAI-compatible", "Anthropic-compatible", "Gemini-compatible" -> true
+                                    else -> openRouterApiKey.isNotBlank() || currentPreset.publicModelList || isCustomEndpoint
+                                }
 
-                                        if (!canRun) {
-                                            testState = ConnectionTestState.MissingCredentials
-                                            return@TextButton
-                                        }
+                                if (!canRun) {
+                                    testState = ConnectionTestState.MissingCredentials
+                                    return@TextButton
+                                }
 
-                                        testState = ConnectionTestState.Testing
-                                        coroutineScope.launch {
-                                            val result = withContext(Dispatchers.IO) {
-                                                AiLyricsTranslator.translate(
-                                                    lines = listOf("Hello"),
-                                                    targetLanguage = translateLanguage,
-                                                    apiKey = if (provider == DEEPL_PROVIDER) deeplApiKey else openRouterApiKey,
-                                                    baseUrl = openRouterBaseUrl.ifBlank { currentPreset.endpoint },
-                                                    model = openRouterModel,
-                                                    mode = translateMode,
-                                                    provider = provider,
-                                                    deeplFormality = deeplFormality,
-                                                    customSystemPrompt = aiSystemPrompt,
-                                                    maxRetries = 1
-                                                )
-                                            }
-
-                                            result.fold(
-                                                onSuccess = { translatedLines ->
-                                                    val sample = translatedLines.firstOrNull().orEmpty().trim()
-                                                    testState = ConnectionTestState.Success(sample)
-                                                },
-                                                onFailure = { error ->
-                                                    val failure = (error as? LyricsTranslationException)?.failure
-                                                    testState = ConnectionTestState.Failed(failure, error.message ?: "Unknown error")
-                                                }
-                                            )
-                                        }
-                                    },
-                                    enabled = testState != ConnectionTestState.Testing
-                                ) {
-                                    Text(
-                                        stringResource(
-                                            if (testState == ConnectionTestState.Testing) R.string.ai_test_connection_running
-                                            else R.string.ai_test_connection
+                                testState = ConnectionTestState.Testing
+                                coroutineScope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        AiLyricsTranslator.translate(
+                                            lines = listOf("Hello"),
+                                            targetLanguage = translateLanguage,
+                                            apiKey = if (provider == DEEPL_PROVIDER) deeplApiKey else openRouterApiKey,
+                                            baseUrl = openRouterBaseUrl.ifBlank { currentPreset.endpoint },
+                                            model = openRouterModel,
+                                            mode = translateMode,
+                                            provider = provider,
+                                            deeplFormality = deeplFormality,
+                                            customSystemPrompt = aiSystemPrompt,
+                                            maxRetries = 1
                                         )
+                                    }
+
+                                    result.fold(
+                                        onSuccess = { translatedLines ->
+                                            val sample = translatedLines.firstOrNull().orEmpty().trim()
+                                            testState = ConnectionTestState.Success(sample)
+                                        },
+                                        onFailure = { error ->
+                                            val failure = (error as? LyricsTranslationException)?.failure
+                                            testState = ConnectionTestState.Failed(failure, error.message ?: "Unknown error")
+                                        }
                                     )
                                 }
+                            },
+                            enabled = testState != ConnectionTestState.Testing
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (testState == ConnectionTestState.Testing) R.string.ai_test_connection_running
+                                    else R.string.ai_test_connection
+                                )
+                            )
+                        }
 
-                                when (val state = testState) {
-                                    ConnectionTestState.Idle -> {}
-                                    ConnectionTestState.Testing -> {
-                                        Text(
-                                            stringResource(R.string.ai_test_connection_running),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    is ConnectionTestState.Success -> {
-                                        if (state.sample.isNotBlank()) {
-                                            Text(
-                                                stringResource(R.string.ai_test_translation_result, state.sample),
-                                                style = MaterialTheme.typography.bodySmall
-                                            )
-                                        } else {
-                                            Text(
-                                                stringResource(R.string.ai_test_connection_success),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    }
-                                    is ConnectionTestState.Failed -> {
-                                        val failureLabel = when (state.failure) {
-                                            LyricsTranslationFailure.AUTHENTICATION -> "Authentication failed: check your API key"
-                                            LyricsTranslationFailure.CREDIT_LIMIT -> "Credit limit reached: quota/balance exhausted"
-                                            LyricsTranslationFailure.RATE_LIMIT -> "Rate limit hit: please wait before retrying"
-                                            LyricsTranslationFailure.FREE_DAILY_LIMIT -> "Free model daily quota exceeded"
-                                            LyricsTranslationFailure.FREE_MINUTE_LIMIT -> "Free model minute rate limit hit"
-                                            LyricsTranslationFailure.MODEL_BUSY -> "Free model busy: provider overloaded"
-                                            LyricsTranslationFailure.MODEL_UNAVAILABLE -> "Model unavailable or decommissioned"
-                                            LyricsTranslationFailure.TIMEOUT -> "Request timed out"
-                                            LyricsTranslationFailure.NETWORK -> "Network error: cannot reach endpoint"
-                                            LyricsTranslationFailure.INVALID_RESPONSE -> "Invalid response from provider"
-                                            LyricsTranslationFailure.EMPTY_RESPONSE -> "Empty response received"
-                                            LyricsTranslationFailure.INCOMPLETE_RESPONSE -> "Incomplete response received"
-                                            LyricsTranslationFailure.DATA_POLICY -> "Data policy violation or content rejected"
-                                            LyricsTranslationFailure.REQUEST_FAILED -> "Request failed"
-                                            null -> null
-                                        }
-                                        val errorText = if (failureLabel != null) {
-                                            "$failureLabel (${state.message})"
-                                        } else {
-                                            state.message.ifBlank { stringResource(R.string.ai_test_connection_failed) }
-                                        }
-                                        Text(
-                                            text = errorText,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                    ConnectionTestState.MissingCredentials -> {
-                                        Text(
-                                            stringResource(R.string.ai_test_missing_credentials),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
+                        when (val state = testState) {
+                            ConnectionTestState.Idle -> {}
+                            ConnectionTestState.Testing -> {
+                                Text(
+                                    stringResource(R.string.ai_test_connection_running),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            is ConnectionTestState.Success -> {
+                                if (state.sample.isNotBlank()) {
+                                    Text(
+                                        stringResource(R.string.ai_test_translation_result, state.sample),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                } else {
+                                    Text(
+                                        stringResource(R.string.ai_test_connection_success),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
+                            is ConnectionTestState.Failed -> {
+                                val failureLabel = when (state.failure) {
+                                    LyricsTranslationFailure.AUTHENTICATION -> "Authentication failed: check your API key"
+                                    LyricsTranslationFailure.CREDIT_LIMIT -> "Credit limit reached: quota/balance exhausted"
+                                    LyricsTranslationFailure.RATE_LIMIT -> "Rate limit hit: please wait before retrying"
+                                    LyricsTranslationFailure.FREE_DAILY_LIMIT -> "Free model daily quota exceeded"
+                                    LyricsTranslationFailure.FREE_MINUTE_LIMIT -> "Free model minute rate limit hit"
+                                    LyricsTranslationFailure.MODEL_BUSY -> "Free model busy: provider overloaded"
+                                    LyricsTranslationFailure.MODEL_UNAVAILABLE -> "Model unavailable or decommissioned"
+                                    LyricsTranslationFailure.TIMEOUT -> "Request timed out"
+                                    LyricsTranslationFailure.NETWORK -> "Network error: cannot reach endpoint"
+                                    LyricsTranslationFailure.INVALID_RESPONSE -> "Invalid response from provider"
+                                    LyricsTranslationFailure.EMPTY_RESPONSE -> "Empty response received"
+                                    LyricsTranslationFailure.INCOMPLETE_RESPONSE -> "Incomplete response received"
+                                    LyricsTranslationFailure.DATA_POLICY -> "Data policy violation or content rejected"
+                                    LyricsTranslationFailure.REQUEST_FAILED -> "Request failed"
+                                    null -> null
+                                }
+                                val errorText = if (failureLabel != null) {
+                                    "$failureLabel (${state.message})"
+                                } else {
+                                    state.message.ifBlank { stringResource(R.string.ai_test_connection_failed) }
+                                }
+                                Text(
+                                    text = errorText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                            ConnectionTestState.MissingCredentials -> {
+                                Text(
+                                    stringResource(R.string.ai_test_missing_credentials),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
-                    )
-                )
-            )
+                    }
+                }
+            }
         }
     }
 }
@@ -677,7 +674,7 @@ private fun AiChoiceRow(
     ) {
         Box(Modifier.weight(1f)) { content() }
         if (selected) {
-            Icon(AppIcons.Check, null, tint = MaterialTheme.colorScheme.primary)
+            Icon(painter = painterResource(id = R.drawable.ic_check), null, tint = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -1190,7 +1187,7 @@ private fun TextSettingDialog(
                     {
                         IconButton(onClick = { secretVisible = !secretVisible }) {
                             Icon(
-                                imageVector = if (secretVisible) AppIcons.VisibilityOff else AppIcons.Visibility,
+                                painter = painterResource(id = if (secretVisible) R.drawable.ic_visibility_off else R.drawable.ic_visibility),
                                 contentDescription = null
                             )
                         }

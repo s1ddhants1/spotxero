@@ -244,7 +244,7 @@ object ArtworkSeekHook {
 
     private fun resourceEntryName(view: View): String {
         val id = view.id
-        if (id == View.NO_ID) return ""
+        if (id <= 0 || id == View.NO_ID) return ""
         return resourceNames.computeIfAbsent(id) {
             runCatching { view.resources.getResourceEntryName(id).lowercase() }.getOrDefault("")
         }

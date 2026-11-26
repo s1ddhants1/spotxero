@@ -1,5 +1,6 @@
 package app.spotxero.ui.component.dashboard
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -14,35 +15,34 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.spotxero.R
-import app.spotxero.ui.component.settings.CategoryHeader
-import app.spotxero.ui.component.settings.NavigationSettingCard
+import app.spotxero.ui.component.ExpressiveSwitch
+import app.spotxero.ui.component.settings.SettingsGroup
+import app.spotxero.ui.component.settings.SettingsItem
+import app.spotxero.ui.component.settings.SettingsSection
+import app.spotxero.ui.component.settings.SettingsSwitchItem
 import app.spotxero.ui.component.settings.SliderSettingCard
-import app.spotxero.ui.component.settings.SwitchSettingCard
 import app.spotxero.ui.haptics.HapticEvent
 import app.spotxero.ui.haptics.LocalAppHaptics
 import app.spotxero.ui.theme.AppCardDefaults
-import app.spotxero.ui.theme.AppIcons
 import app.spotxero.ui.theme.AppSpacing
 import app.spotxero.ui.viewmodel.DashboardUiState
 
@@ -58,6 +58,7 @@ fun HomeDashboard(
     onHidePodcastsToggle: (Boolean) -> Unit = {},
     onHideAudiobooksToggle: (Boolean) -> Unit = {},
     onHidePremiumTabToggle: (Boolean) -> Unit = {},
+    onInAppSettingsInjectionToggle: (Boolean) -> Unit = {},
     onLyricsToggle: (Boolean) -> Unit = {},
     onForceLocalPlaybackToggle: (Boolean) -> Unit = {},
     onDoubleTapToSeekToggle: (Boolean) -> Unit = {},
@@ -69,131 +70,170 @@ fun HomeDashboard(
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         FrameworkStatusBanner(uiState = uiState, onRequestScope = onRequestScope)
+
+        if (!uiState.isIntegrated) {
 
         MasterSwitchCard(
             checked = uiState.isMasterEnabled,
             onCheckedChange = onMasterToggle
         )
 
-        CategoryHeader(title = stringResource(R.string.category_playback))
-        SwitchSettingCard(
-            title = stringResource(R.string.pref_unrestricted_playback_title),
-            subtitle = stringResource(R.string.pref_unrestricted_playback_desc),
-            icon = AppIcons.PlayCircle,
-            checked = uiState.isPremiumEnabled,
-            onCheckedChange = onTogglePremium
-        )
-        SwitchSettingCard(
-            title = stringResource(R.string.feature_force_local_playback_title),
-            subtitle = stringResource(R.string.feature_force_local_playback_desc),
-            icon = AppIcons.VolumeUp,
-            checked = uiState.isForceLocalPlaybackEnabled,
-            onCheckedChange = onForceLocalPlaybackToggle
-        )
-        SwitchSettingCard(
-            title = stringResource(R.string.feature_double_tap_to_seek_title),
-            subtitle = stringResource(R.string.feature_double_tap_to_seek_desc),
-            icon = AppIcons.FastForward,
-            checked = uiState.isDoubleTapToSeekEnabled,
-            onCheckedChange = onDoubleTapToSeekToggle
-        )
-        if (uiState.isDoubleTapToSeekEnabled) {
-            SliderSettingCard(
-                title = stringResource(R.string.seek_duration),
-                description = stringResource(R.string.seek_duration_description),
-                value = uiState.seekDurationSeconds.toFloat(),
-                defaultValue = 10f,
-                range = 5f..30f,
-                steps = 4,
-                valueLabel = stringResource(R.string.settings_seconds_value, uiState.seekDurationSeconds),
-                onValueChange = onSeekDurationChange
-            )
-            SwitchSettingCard(
-                title = stringResource(R.string.seek_seconds_addup),
-                subtitle = stringResource(R.string.seek_seconds_addup_desc),
-                icon = AppIcons.ArrowForward,
-                checked = uiState.isSeekProgressive,
-                onCheckedChange = onSeekProgressiveToggle
-            )
+
+        SettingsSection(
+            title = stringResource(R.string.category_playback)
+        ) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    title = stringResource(R.string.pref_unrestricted_playback_title),
+                    subtitle = stringResource(R.string.pref_unrestricted_playback_desc),
+                    painter = painterResource(id = R.drawable.ic_play_circle),
+                    checked = uiState.isPremiumEnabled,
+                    onCheckedChange = onTogglePremium
+                )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.feature_force_local_playback_title),
+                    subtitle = stringResource(R.string.feature_force_local_playback_desc),
+                    painter = painterResource(id = R.drawable.ic_volume_up),
+                    checked = uiState.isForceLocalPlaybackEnabled,
+                    onCheckedChange = onForceLocalPlaybackToggle
+                )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.feature_double_tap_to_seek_title),
+                    subtitle = stringResource(R.string.feature_double_tap_to_seek_desc),
+                    painter = painterResource(id = R.drawable.ic_fast_forward),
+                    checked = uiState.isDoubleTapToSeekEnabled,
+                    onCheckedChange = onDoubleTapToSeekToggle
+                )
+                if (uiState.isDoubleTapToSeekEnabled) {
+                    SliderSettingCard(
+                        title = stringResource(R.string.seek_duration),
+                        description = stringResource(R.string.seek_duration_description),
+                        value = uiState.seekDurationSeconds.toFloat(),
+                        defaultValue = 10f,
+                        range = 5f..30f,
+                        steps = 4,
+                        valueLabel = stringResource(R.string.settings_seconds_value, uiState.seekDurationSeconds),
+                        onValueChange = onSeekDurationChange
+                    )
+                    SettingsSwitchItem(
+                        title = stringResource(R.string.seek_seconds_addup),
+                        subtitle = stringResource(R.string.seek_seconds_addup_desc),
+                        painter = painterResource(id = R.drawable.ic_arrow_forward),
+                        checked = uiState.isSeekProgressive,
+                        onCheckedChange = onSeekProgressiveToggle
+                    )
+                }
+            }
         }
 
-        CategoryHeader(title = stringResource(R.string.category_lyrics))
-        SwitchSettingCard(
-            title = stringResource(R.string.feature_uncapped_lyrics_title),
-            subtitle = stringResource(R.string.feature_uncapped_lyrics_desc),
-            icon = AppIcons.Lyrics,
-            checked = uiState.isLyricsEnabled,
-            onCheckedChange = onLyricsToggle
-        )
-        NavigationSettingCard(
-            title = stringResource(R.string.feature_external_lyrics_title),
-            subtitle = stringResource(R.string.feature_external_lyrics_desc),
-            icon = AppIcons.Lyrics,
-            onClick = onOpenLyricsSources
-        )
+        SettingsSection(
+            title = stringResource(R.string.category_lyrics)
+        ) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    title = stringResource(R.string.feature_uncapped_lyrics_title),
+                    subtitle = stringResource(R.string.feature_uncapped_lyrics_desc),
+                    painter = painterResource(id = R.drawable.ic_lyrics),
+                    checked = uiState.isLyricsEnabled,
+                    onCheckedChange = onLyricsToggle
+                )
+                SettingsItem(
+                    title = stringResource(R.string.feature_external_lyrics_title),
+                    subtitle = stringResource(R.string.feature_external_lyrics_desc),
+                    painter = painterResource(id = R.drawable.ic_lyrics),
+                    onClick = onOpenLyricsSources
+                )
+            }
+        }
 
-        CategoryHeader(title = stringResource(R.string.category_privacy))
-        SwitchSettingCard(
-            title = stringResource(R.string.feature_clean_sharing_title),
-            subtitle = stringResource(R.string.feature_clean_sharing_desc),
-            icon = AppIcons.LinkOff,
-            checked = uiState.isCleanSharingEnabled,
-            onCheckedChange = onCleanSharingToggle
-        )
+        SettingsSection(
+            title = stringResource(R.string.category_privacy)
+        ) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    title = stringResource(R.string.feature_clean_sharing_title),
+                    subtitle = stringResource(R.string.feature_clean_sharing_desc),
+                    painter = painterResource(id = R.drawable.ic_link_off),
+                    checked = uiState.isCleanSharingEnabled,
+                    onCheckedChange = onCleanSharingToggle
+                )
+            }
+        }
 
-        CategoryHeader(title = stringResource(R.string.category_content))
-        SwitchSettingCard(
-            title = stringResource(R.string.feature_hide_premium_tab_title),
-            subtitle = stringResource(R.string.feature_hide_premium_tab_desc),
-            icon = AppIcons.VisibilityOff,
-            checked = uiState.isHidePremiumTabEnabled,
-            onCheckedChange = onHidePremiumTabToggle
-        )
+        SettingsSection(
+            title = stringResource(R.string.category_content)
+        ) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    title = stringResource(R.string.feature_hide_premium_tab_title),
+                    subtitle = stringResource(R.string.feature_hide_premium_tab_desc),
+                    painter = painterResource(id = R.drawable.ic_visibility_off),
+                    checked = uiState.isHidePremiumTabEnabled,
+                    onCheckedChange = onHidePremiumTabToggle
+                )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.feature_hide_podcasts_title),
+                    subtitle = stringResource(R.string.feature_hide_podcasts_desc),
+                    painter = painterResource(id = R.drawable.ic_adaptive_audio_mic_off),
+                    checked = uiState.isHidePodcastsEnabled,
+                    onCheckedChange = onHidePodcastsToggle
+                )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.feature_hide_audiobooks_title),
+                    subtitle = stringResource(R.string.feature_hide_audiobooks_desc),
+                    painter = painterResource(id = R.drawable.ic_auto_stories_off),
+                    checked = uiState.isHideAudiobooksEnabled,
+                    onCheckedChange = onHideAudiobooksToggle
+                )
+            }
+        }
 
-        SwitchSettingCard(
-            title = stringResource(R.string.feature_hide_podcasts_title),
-            subtitle = stringResource(R.string.feature_hide_podcasts_desc),
-            icon = AppIcons.AdaptiveAudioMicOff,
-            checked = uiState.isHidePodcastsEnabled,
-            onCheckedChange = onHidePodcastsToggle
-        )
+        SettingsSection(
+            title = stringResource(R.string.category_integration)
+        ) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    title = stringResource(R.string.feature_in_app_settings_title),
+                    subtitle = stringResource(R.string.feature_in_app_settings_desc),
+                    painter = painterResource(id = R.drawable.ic_settings),
+                    checked = uiState.isInAppSettingsInjectionEnabled,
+                    onCheckedChange = onInAppSettingsInjectionToggle
+                )
+            }
+        }
 
-        SwitchSettingCard(
-            title = stringResource(R.string.feature_hide_audiobooks_title),
-            subtitle = stringResource(R.string.feature_hide_audiobooks_desc),
-            icon = AppIcons.AutoStoriesOff,
-            checked = uiState.isHideAudiobooksEnabled,
-            onCheckedChange = onHideAudiobooksToggle
-        )
+        SettingsSection(
+            title = stringResource(R.string.category_theme)
+        ) {
+            SettingsGroup {
+                SettingsSwitchItem(
+                    title = stringResource(R.string.feature_spotify_amoled_title),
+                    subtitle = stringResource(R.string.feature_spotify_amoled_desc),
+                    painter = painterResource(id = R.drawable.ic_dark_mode),
+                    checked = uiState.isSpotifyAmoledEnabled,
+                    onCheckedChange = onSpotifyAmoledToggle
+                )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.feature_spotify_monet_title),
+                    subtitle = stringResource(R.string.feature_spotify_monet_desc),
+                    painter = painterResource(id = R.drawable.ic_palette),
+                    checked = uiState.isSpotifyMonetEnabled,
+                    onCheckedChange = onSpotifyMonetToggle
+                )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.feature_spotify_roundy_ui_title),
+                    subtitle = stringResource(R.string.feature_spotify_roundy_ui_desc),
+                    painter = painterResource(id = R.drawable.ic_rounded_corner),
+                    checked = uiState.isSpotifyRoundyUiEnabled,
+                    onCheckedChange = onSpotifyRoundyUiToggle
+                )
+            }
+        }
 
-        CategoryHeader(title = stringResource(R.string.category_theme))
-        SwitchSettingCard(
-            title = stringResource(R.string.feature_spotify_amoled_title),
-            subtitle = stringResource(R.string.feature_spotify_amoled_desc),
-            icon = AppIcons.DarkMode,
-            checked = uiState.isSpotifyAmoledEnabled,
-            onCheckedChange = onSpotifyAmoledToggle
-        )
-
-        SwitchSettingCard(
-            title = stringResource(R.string.feature_spotify_monet_title),
-            subtitle = stringResource(R.string.feature_spotify_monet_desc),
-            icon = AppIcons.Palette,
-            checked = uiState.isSpotifyMonetEnabled,
-            onCheckedChange = onSpotifyMonetToggle
-        )
-
-        SwitchSettingCard(
-            title = stringResource(R.string.feature_spotify_roundy_ui_title),
-            subtitle = stringResource(R.string.feature_spotify_roundy_ui_desc),
-            icon = AppIcons.RoundedCorner,
-            checked = uiState.isSpotifyRoundyUiEnabled,
-            onCheckedChange = onSpotifyRoundyUiToggle
-        )
-
+        } // end !isIntegrated
     }
 }
 
@@ -209,8 +249,9 @@ private fun MasterSwitchCard(
         onCheckedChange(newVal)
     }
     val interactionSource = remember { MutableInteractionSource() }
+    val cardShape = RoundedCornerShape(20.dp)
     Card(
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = cardShape,
         colors = CardDefaults.cardColors(
             containerColor = if (checked) {
                 MaterialTheme.colorScheme.primaryContainer
@@ -224,9 +265,10 @@ private fun MasterSwitchCard(
             }
         ),
         elevation = AppCardDefaults.cardElevation,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         modifier = modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.extraLarge)
+            .clip(cardShape)
             .toggleable(
                 value = checked,
                 role = Role.Switch,
@@ -258,7 +300,7 @@ private fun MasterSwitchCard(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = AppIcons.PowerSettingsNew,
+                        painter = painterResource(id = R.drawable.ic_power_settings_new),
                         contentDescription = null,
                         modifier = Modifier.size(24.dp)
                     )
@@ -280,7 +322,7 @@ private fun MasterSwitchCard(
             )
 
             Spacer(Modifier.width(AppSpacing.xs))
-            app.spotxero.ui.component.ExpressiveSwitch(
+            ExpressiveSwitch(
                 checked = checked,
                 onCheckedChange = null,
             )
@@ -297,17 +339,18 @@ private fun FrameworkStatusBanner(
     val canRequestScope = uiState.canRequestScope
     val haptics = LocalAppHaptics.current
     val statusBg = if (isBannerActive) {
-        MaterialTheme.colorScheme.surfaceVariant
+        MaterialTheme.colorScheme.surfaceContainerHigh
     } else {
-        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
     }
     val badgeColor = if (isBannerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
     val iconTint = if (isBannerActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onError
+    val cardShape = RoundedCornerShape(20.dp)
 
     val cardModifier = if (canRequestScope) {
         Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.extraLarge)
+            .clip(cardShape)
             .clickable(onClick = {
                 haptics.perform(HapticEvent.PRESS)
                 onRequestScope()
@@ -318,8 +361,9 @@ private fun FrameworkStatusBanner(
 
     OutlinedCard(
         modifier = cardModifier,
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.outlinedCardColors(containerColor = statusBg)
+        shape = cardShape,
+        colors = CardDefaults.outlinedCardColors(containerColor = statusBg),
+        border = BorderStroke(1.dp, if (isBannerActive) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
     ) {
         Row(
             modifier = Modifier.padding(AppSpacing.md),
@@ -329,7 +373,7 @@ private fun FrameworkStatusBanner(
             Surface(shape = CircleShape, color = badgeColor, modifier = Modifier.size(38.dp)) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = if (isBannerActive) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                        painter = painterResource(id = if (isBannerActive) R.drawable.ic_check_circle else R.drawable.ic_warning),
                         contentDescription = null,
                         tint = iconTint,
                         modifier = Modifier.size(22.dp)
@@ -360,7 +404,7 @@ private fun FrameworkStatusBanner(
             }
             if (canRequestScope) {
                 Icon(
-                    imageVector = AppIcons.Launch,
+                    painter = painterResource(id = R.drawable.ic_launch),
                     contentDescription = null,
                     tint = badgeColor,
                     modifier = Modifier.size(20.dp)

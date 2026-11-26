@@ -314,9 +314,9 @@ object SpotifyMonetHook {
                     if (!isMonetEnabled()) return@intercept result
 
                     val view = chain.getThisObject() as? View ?: return@intercept result
-                    val resName = runCatching {
+                    val resName = if (view.id > 0) runCatching {
                         view.resources.getResourceEntryName(view.id).lowercase()
-                    }.getOrDefault("")
+                    }.getOrDefault("") else ""
 
                     val isShadowOrFade = resName.contains("shadow") ||
                         resName.contains("fade") ||

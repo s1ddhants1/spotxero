@@ -2,6 +2,7 @@ package app.spotxero.ui.component.lyrics
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -10,15 +11,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -40,18 +41,20 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import app.spotxero.R
-import app.spotxero.ui.component.settings.CategoryHeader
-import app.spotxero.ui.component.settings.NavigationSettingCard
-import app.spotxero.ui.component.settings.SwitchSettingCard
+import app.spotxero.ui.component.ExpressiveSwitch
+import app.spotxero.ui.component.settings.SettingsGroup
+import app.spotxero.ui.component.settings.SettingsItem
+import app.spotxero.ui.component.settings.SettingsSection
+import app.spotxero.ui.component.settings.SettingsSwitchItem
 import app.spotxero.ui.haptics.HapticEvent
 import app.spotxero.ui.haptics.LocalAppHaptics
 import app.spotxero.ui.theme.AppCardDefaults
-import app.spotxero.ui.theme.AppIcons
 import app.spotxero.ui.theme.AppSpacing
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -82,62 +85,57 @@ fun LyricsSourcesScreen(
             top = AppSpacing.xs,
             bottom = 88.dp
         ),
-        verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = modifier.fillMaxSize()
     ) {
-        item(key = "master_external_lyrics") {
-            SwitchSettingCard(
-                title = stringResource(R.string.pref_external_lyrics_title),
-                subtitle = stringResource(R.string.pref_external_lyrics_desc),
-                icon = AppIcons.Lyrics,
-                checked = isExternalLyricsEnabled,
-                onCheckedChange = onExternalLyricsToggle
-            )
+        item(key = "master_external_lyrics_section") {
+            SettingsSection(
+                title = stringResource(R.string.category_lyrics)
+            ) {
+                SettingsGroup {
+                    SettingsSwitchItem(
+                        title = stringResource(R.string.pref_external_lyrics_title),
+                        subtitle = stringResource(R.string.pref_external_lyrics_desc),
+                        painter = painterResource(id = R.drawable.ic_lyrics),
+                        checked = isExternalLyricsEnabled,
+                        onCheckedChange = onExternalLyricsToggle
+                    )
+                    SettingsSwitchItem(
+                        title = stringResource(R.string.pref_force_external_lyrics_title),
+                        subtitle = stringResource(R.string.pref_force_external_lyrics_desc),
+                        painter = painterResource(id = R.drawable.ic_rule),
+                        checked = isForceExternalLyricsEnabled,
+                        enabled = isExternalLyricsEnabled,
+                        onCheckedChange = { if (isExternalLyricsEnabled) onForceExternalLyricsToggle(it) }
+                    )
+                    SettingsItem(
+                        title = stringResource(R.string.title_ai_lyrics_translation),
+                        subtitle = stringResource(R.string.ai_lyrics_translation_desc),
+                        painter = painterResource(id = R.drawable.ic_translate),
+                        onClick = onOpenAiLyricsTranslation
+                    )
+                }
+            }
         }
 
-        item(key = "force_external_lyrics") {
-            val enabled = isExternalLyricsEnabled
-            SwitchSettingCard(
-                title = stringResource(R.string.pref_force_external_lyrics_title),
-                subtitle = stringResource(R.string.pref_force_external_lyrics_desc),
-                icon = AppIcons.Rule,
-                checked = isForceExternalLyricsEnabled,
-                enabled = enabled,
-                onCheckedChange = { if (enabled) onForceExternalLyricsToggle(it) }
-            )
-        }
-
-        item(key = "ai_lyrics_translation") {
-            NavigationSettingCard(
-                title = stringResource(R.string.title_ai_lyrics_translation),
-                subtitle = stringResource(R.string.ai_lyrics_translation_desc),
-                icon = AppIcons.Translate,
-                onClick = onOpenAiLyricsTranslation
-            )
-        }
-
-        item(key = "providers_header") {
-            Spacer(Modifier.height(AppSpacing.xxs))
-            CategoryHeader(
-                title = stringResource(R.string.lyrics_providers_header),
-                subtitle = stringResource(R.string.lyrics_providers_desc)
-            )
-        }
-
-        item(key = "providers_list") {
-            LyricsProviderOrderCard(
-                providersOrder = lyricsProvidersOrder,
-                isSpicylyricsEnabled = isSpicylyricsEnabled,
-                isBetterlyricsEnabled = isBetterlyricsEnabled,
-                isLrcredEnabled = isLrcredEnabled,
-                isLrclibEnabled = isLrclibEnabled,
-                isKugouEnabled = isKugouEnabled,
-                isNeteaseEnabled = isNeteaseEnabled,
-                isGeniusEnabled = isGeniusEnabled,
-                enabled = isExternalLyricsEnabled,
-                onProviderToggle = onProviderToggle,
-                onReorderProviders = onReorderProviders
-            )
+        item(key = "providers_section") {
+            SettingsSection(
+                title = stringResource(R.string.lyrics_providers_header)
+            ) {
+                LyricsProviderOrderCard(
+                    providersOrder = lyricsProvidersOrder,
+                    isSpicylyricsEnabled = isSpicylyricsEnabled,
+                    isBetterlyricsEnabled = isBetterlyricsEnabled,
+                    isLrcredEnabled = isLrcredEnabled,
+                    isLrclibEnabled = isLrclibEnabled,
+                    isKugouEnabled = isKugouEnabled,
+                    isNeteaseEnabled = isNeteaseEnabled,
+                    isGeniusEnabled = isGeniusEnabled,
+                    enabled = isExternalLyricsEnabled,
+                    onProviderToggle = onProviderToggle,
+                    onReorderProviders = onReorderProviders
+                )
+            }
         }
     }
 }
@@ -198,7 +196,7 @@ fun ReorderMenu(
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            imageVector = AppIcons.DragIndicator,
+            painter = painterResource(id = R.drawable.ic_drag_indicator),
             contentDescription = stringResource(R.string.cd_reorder_menu),
             tint = if (enabled) {
                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -273,6 +271,7 @@ private fun LyricsProviderOrderCard(
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var itemHeightPx by remember { mutableFloatStateOf(0f) }
     val haptics = LocalAppHaptics.current
+    val cardShape = RoundedCornerShape(20.dp)
 
     val onMove: (fromIndex: Int, toIndex: Int) -> Unit = { from, to ->
         if (from != to && from in currentList.indices && to in currentList.indices) {
@@ -285,12 +284,13 @@ private fun LyricsProviderOrderCard(
     }
 
     Card(
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = AppCardDefaults.cardColors(),
+        shape = cardShape,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         elevation = AppCardDefaults.cardElevation,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         modifier = modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.extraLarge)
+            .clip(cardShape)
             .alpha(if (enabled) 1f else 0.45f)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -350,7 +350,7 @@ private fun LyricsProviderOrderCard(
                             haptics.toggle(!isChecked)
                             onProviderToggle(providerId, !isChecked)
                         }
-                        .padding(horizontal = 14.dp, vertical = AppSpacing.sm),
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
                 ) {
@@ -396,11 +396,9 @@ private fun LyricsProviderOrderCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    app.spotxero.ui.component.ExpressiveSwitch(
+                    ExpressiveSwitch(
                         checked = isChecked,
-                        onCheckedChange = if (enabled) {
-                            { onProviderToggle(providerId, it) }
-                        } else null,
+                        onCheckedChange = { onProviderToggle(providerId, it) },
                         enabled = enabled,
                     )
                 }

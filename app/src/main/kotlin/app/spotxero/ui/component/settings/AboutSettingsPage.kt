@@ -66,54 +66,67 @@ fun AboutSettingsPage(
             .fillMaxSize()
             .padding(horizontal = AppSpacing.md)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Spacer(Modifier.height(AppSpacing.xxs))
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = AppSpacing.sm),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_logo),
-                contentDescription = stringResource(R.string.app_name),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(64.dp)
-            )
-
-            Text(
-                text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh
+        SectionCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = AppSpacing.lg, horizontal = AppSpacing.md),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
             ) {
-                Text(
-                    text = stringResource(R.string.about_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = AppSpacing.sm, vertical = AppSpacing.xxs)
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_logo),
+                    contentDescription = stringResource(R.string.app_name),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(64.dp)
                 )
+
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest
+                ) {
+                    Text(
+                        text = stringResource(R.string.about_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = AppSpacing.sm, vertical = AppSpacing.xxs)
+                    )
+                }
             }
         }
 
-        SettingsSectionCard(title = stringResource(R.string.about_developer)) {
-            CONTRIBUTORS.forEachIndexed { index, contributor ->
-                if (index > 0) {
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                        modifier = Modifier.padding(vertical = AppSpacing.xs)
-                    )
+        SettingsSection(
+            title = stringResource(R.string.about_developer)
+        ) {
+            SectionCard {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(AppSpacing.md),
+                    verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+                ) {
+                    CONTRIBUTORS.forEachIndexed { index, contributor ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                                modifier = Modifier.padding(vertical = AppSpacing.xs)
+                            )
+                        }
+                        ContributorItemRow(contributor = contributor, onOpenUrl = { uriHandler.openUri(it) })
+                    }
                 }
-                ContributorItemRow(contributor = contributor, onOpenUrl = { uriHandler.openUri(it) })
             }
         }
 

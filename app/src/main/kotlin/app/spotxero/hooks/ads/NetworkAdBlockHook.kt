@@ -1,6 +1,8 @@
 package app.spotxero.hooks.ads
 
+import android.content.pm.ApplicationInfo
 import android.net.Uri
+import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -61,13 +63,22 @@ object NetworkAdBlockHook {
     private const val APP_OPEN_AD_PATH = "/appopen/v1/getad"
     private const val HERMES_CAPPING_URI = "hm://common-capping/update"
 
-    fun install(module: XposedModule) {
+    fun install(
+        module: XposedModule,
+        appInfo: ApplicationInfo? = null,
+        classLoader: ClassLoader? = null
+    ) {
+        hookNativeHttpConnection(module)
         if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
             return
         }
-        hookNativeHttpConnection(module)
         hookOkHttpRealCall(module)
     }
+
+    private fun findRequestUrlField(requestClass: Class<*>): Field? =
+        requestClass.declaredFields.firstOrNull { f ->
+            !f.type.isPrimitive && f.type.declaredMethods.any { m -> m.returnType == URI::class.java }
+        }?.apply { isAccessible = true }
 
     private val AUTH_BYPASS_KEYWORDS = listOf(
         "/login",
@@ -114,15 +125,27 @@ object NetworkAdBlockHook {
     }
 
     private fun hookNativeHttpConnection(module: XposedModule) {
-        val cl = DexKitResolver.get<Method>(DexKitResolver.KEY_CLIENT_BASE_CALL_SINGLE)?.declaringClass?.classLoader ?: return
-        val connClass = runCatching { Class.forName(NATIVE_HTTP_CONNECTION, false, cl) }.getOrNull() ?: return
+        val cl = DexKitResolver.get<Method>(DexKitResolver.KEY_CLIENT_BASE_CALL_SINGLE)?.declaringClass?.classLoader
+        if (cl == null) {
+            Log.w("SpotXero.NetworkAdBlock", "Native HTTP hook: missing classloader")
+            return
+        }
+        val connClass = runCatching { Class.forName(NATIVE_HTTP_CONNECTION, false, cl) }.getOrNull()
+        if (connClass == null) {
+            Log.w("SpotXero.NetworkAdBlock", "Native HTTP hook: missing $NATIVE_HTTP_CONNECTION")
+            return
+        }
         val reqClass = runCatching { Class.forName(HTTP_REQUEST, false, cl) }.getOrNull() ?: return
         val optClass = runCatching { Class.forName(HTTP_OPTIONS, false, cl) }.getOrNull() ?: return
         val respClass = runCatching { Class.forName(HTTP_RESPONSE, false, cl) }.getOrNull() ?: return
 
         val sendMethod = runCatching {
             connClass.getDeclaredMethod("send", reqClass, optClass)
-        }.getOrNull() ?: return
+        }.getOrNull()
+        if (sendMethod == null) {
+            Log.w("SpotXero.NetworkAdBlock", "Native HTTP hook: missing send method")
+            return
+        }
         val getUrlMethod = runCatching { reqClass.getMethod("getUrl") }.getOrNull() ?: return
         val onHeadersMethod = runCatching { connClass.getMethod("onHeaders", respClass) }.getOrNull() ?: return
         val onCompleteMethod = runCatching { connClass.getMethod("onComplete", Boolean::class.javaPrimitiveType) }.getOrNull() ?: return
@@ -135,26 +158,24 @@ object NetworkAdBlockHook {
             .setId("native_http_ad_blocker")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
+                val req = chain.getArg(0)
+                val conn = chain.getThisObject()
+                val url = req?.let { runCatching { getUrlMethod.invoke(it) as? String }.getOrNull() }
                 if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                    val req = chain.getArg(0)
-                    val conn = chain.getThisObject()
-                    if (req != null && conn != null) {
-                        val url = runCatching { getUrlMethod.invoke(req) as? String }.getOrNull()
-                        val code = blockedStatusCode(url)
-                        if (code != null && url != null) {
-                            val response = respCtor.newInstance(
-                                code,
-                                url,
-                                "SPT-Protocol: http/1.1\r\nContent-Length: 0\r\n\r\n"
-                            )
-                            asyncExecutor.execute {
-                                runCatching {
-                                    onHeadersMethod.invoke(conn, response)
-                                    onCompleteMethod.invoke(conn, true)
-                                }
+                    val code = blockedStatusCode(url)
+                    if (code != null && url != null && conn != null) {
+                        val response = respCtor.newInstance(
+                            code,
+                            url,
+                            "SPT-Protocol: http/1.1\r\nContent-Length: 0\r\n\r\n"
+                        )
+                        asyncExecutor.execute {
+                            runCatching {
+                                onHeadersMethod.invoke(conn, response)
+                                onCompleteMethod.invoke(conn, true)
                             }
-                            return@intercept null
                         }
+                        return@intercept null
                     }
                 }
                 chain.proceed()
@@ -170,9 +191,7 @@ object NetworkAdBlockHook {
         val callRequestField = realCallChain.declaringClass.declaredFields.firstOrNull {
             it.type == requestClass
         }?.apply { isAccessible = true } ?: return
-        val urlField = requestClass.declaredFields.firstOrNull { f ->
-            !f.type.isPrimitive && f.type.declaredMethods.any { m -> m.returnType == URI::class.java }
-        }?.apply { isAccessible = true } ?: return
+        val urlField = findRequestUrlField(requestClass) ?: return
 
         val builderClass = respBuild.declaringClass
         val builderCtor = runCatching {
