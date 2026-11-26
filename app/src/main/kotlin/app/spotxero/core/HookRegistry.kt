@@ -96,6 +96,7 @@ object HookRegistry {
             isSettingsResolved = false
             installedHooks.clear()
             failedHooks.clear()
+            InAppSettingsHook.reset()
         }
     }
 
@@ -130,6 +131,9 @@ object HookRegistry {
 
         synchronized(lock) {
             inAppSettingsSupported = ModuleStatus.isLspatchIntegrated(module, appInfo, classLoader)
+            if (!inAppSettingsSupported) {
+                PreferencesManager.resolveTargetContext()?.let { InAppSettingsHook.removeLauncherShortcut(it) }
+            }
 
             if (!masterEnabled) {
                 if (!inAppSettingsSupported) {

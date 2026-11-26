@@ -297,7 +297,13 @@ object InAppSettingsHook {
     private var prefListenerRegistered = false
 
     @Volatile
+    private var isInstalled = false
+
+    @Volatile
     private var shortcutRegistered = false
+
+    @Volatile
+    private var shortcutRemoved = false
 
     @Volatile
     private var shortcutSyncing = false
@@ -354,7 +360,17 @@ object InAppSettingsHook {
     private var hostPropsField: Field? = null
     private var hostPropsUpdateMethod: Method? = null
 
+    fun reset() {
+        isInstalled = false
+        shortcutRegistered = false
+        shortcutRemoved = false
+        shortcutSyncing = false
+        pendingSpotXeroRouteAt.set(0L)
+    }
+
     fun install(module: XposedModule) {
+        isInstalled = true
+        shortcutRemoved = false
         moduleRef = module
         hookedNewIntentClasses.clear()
         pendingSpotXeroRouteAt.set(0L)
@@ -505,6 +521,10 @@ object InAppSettingsHook {
     }
 
     fun onActivityCreated(activity: Activity) {
+        if (!isInstalled) {
+            removeLauncherShortcut(activity)
+            return
+        }
         currentActivity = WeakReference(activity)
         ensureModuleResources(activity)
         ensureLauncherShortcut(activity)
@@ -513,6 +533,7 @@ object InAppSettingsHook {
     }
 
     fun onActivityResumed(activity: Activity) {
+        if (!isInstalled) return
         currentActivity = WeakReference(activity)
         ensureModuleResources(activity)
     }
@@ -574,7 +595,7 @@ object InAppSettingsHook {
                 .setId("inapp_settings_shortcut_set_dynamic")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
-                    if (shortcutSyncing) return@intercept chain.proceed()
+                    if (!isInstalled || shortcutSyncing) return@intercept chain.proceed()
                     val sm = chain.thisObject as? ShortcutManager ?: return@intercept chain.proceed()
                     val incoming = (chain.args[0] as? List<*>)?.filterIsInstance<ShortcutInfo>() ?: return@intercept chain.proceed()
                     val ctx = currentActivity?.get() ?: PreferencesManager.resolveTargetContext()
@@ -594,6 +615,7 @@ object InAppSettingsHook {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     val result = chain.proceed()
+                    if (!isInstalled) return@intercept result
                     val ctx = currentActivity?.get() ?: PreferencesManager.resolveTargetContext()
                     if (ctx != null) {
                         shortcutRegistered = false
@@ -606,8 +628,21 @@ object InAppSettingsHook {
         }
     }
 
+    fun removeLauncherShortcut(context: Context) {
+        if (isInstalled || shortcutRemoved) return
+        val sm = context.getSystemService(ShortcutManager::class.java) ?: return
+        shortcutRemoved = true
+        runCatching {
+            if (sm.dynamicShortcuts.any { it.id == SHORTCUT_ID }) {
+                sm.removeDynamicShortcuts(listOf(SHORTCUT_ID))
+            }
+        }.onFailure {
+            Log.w(TAG, "Failed removing launcher shortcut", it)
+        }
+    }
+
     private fun ensureLauncherShortcut(context: Context) {
-        if (shortcutRegistered) return
+        if (!isInstalled || shortcutRegistered) return
         val sm = context.getSystemService(ShortcutManager::class.java) ?: return
         val maxDynamic = (sm.maxShortcutCountPerActivity - sm.manifestShortcuts.size).coerceAtLeast(0)
         if (maxDynamic == 0) return
