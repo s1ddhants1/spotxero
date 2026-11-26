@@ -1,10 +1,17 @@
 package app.spotxero.hooks.settings
 
 import android.app.Activity
-import android.app.Application
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageInfo
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.content.res.Resources
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Bundle
 import android.os.Process
@@ -12,10 +19,12 @@ import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import app.spotxero.BuildConfig
+import app.spotxero.R
 import app.spotxero.core.DexKitResolver
+import app.spotxero.core.HookRegistry
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
-import io.github.libxposed.api.XposedInterface
+import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
 import java.lang.ref.WeakReference
 import java.lang.reflect.Constructor
@@ -35,23 +44,44 @@ object InAppSettingsHook {
     private const val SPOTXERO_URI = "spotify:spotxero"
     private const val ABOUT_SETTINGS_URI = "spotify:settings:about"
     private const val PRIVATE_ROUTE_PREFIX = "spotify:spotxero:private:"
-    private const val PENDING_ROUTE_TIMEOUT_MS = 10_000L
+    private const val SHORTCUT_ID = "spotxero_settings"
+    private const val EXTRA_SHORTCUT = "spotxero_shortcut"
+    private const val PENDING_ROUTE_TIMEOUT_MS = 60_000L
     private val routeToken = UUID.randomUUID().toString()
     private const val L2C1_DEFAULT_MASK = 2 or 16 or 4096 or 16384 or 65536
-    private const val ND71_SECTION_DEFAULT_MASK = 253
+    private const val ND71_HEADERLESS_MASK = 253
+    private const val ND71_TITLED_MASK = 249
 
     private data class ToggleSpec(
         val id: String,
         val key: String,
-        val title: String,
-        val subtitle: String? = null,
-        val defaultValue: Boolean
+        val titleRes: Int,
+        val fallbackTitle: String,
+        val subtitleRes: Int? = null,
+        val fallbackSubtitle: String? = null,
+        val defaultValue: Boolean,
+        val dependsOnKey: String? = null,
+        val requiresRestart: Boolean = false
     )
 
     private data class SectionSpec(
         val syntheticTitleId: Int?,
+        val titleRes: Int? = null,
+        val fallbackTitle: String? = null,
         val toggles: List<ToggleSpec> = emptyList(),
-        val seekDurationAfterToggleId: String? = null
+        val seekDurationAfterToggleId: String? = null,
+        val includeLyricsDialogs: Boolean = false
+    )
+
+    private data class ToggleBinding(
+        val spec: ToggleSpec,
+        val valueFlow: Any,
+        val visibilityFlow: Any
+    )
+
+    private data class VisibilityBinding(
+        val visibilityFlow: Any,
+        val isVisible: () -> Boolean
     )
 
     private const val SECTION_PLAYBACK = -0x70010001
@@ -60,14 +90,6 @@ object InAppSettingsHook {
     private const val SECTION_CONTENT = -0x70010004
     private const val SECTION_APPEARANCE = -0x70010005
 
-    private val SECTION_TITLE_MAP = mapOf(
-        SECTION_PLAYBACK to "Playback",
-        SECTION_LYRICS to "Lyrics",
-        SECTION_PRIVACY to "Privacy",
-        SECTION_CONTENT to "Content",
-        SECTION_APPEARANCE to "Theme & Appearance"
-    )
-
     private val SPOTXERO_SECTIONS = listOf(
         SectionSpec(
             syntheticTitleId = null,
@@ -75,143 +97,195 @@ object InAppSettingsHook {
                 ToggleSpec(
                     id = "spotxero_master",
                     key = PrefKeys.KEY_MASTER_ENABLED,
-                    title = "Enable Module",
-                    defaultValue = true
+                    titleRes = R.string.feature_master_switch_title,
+                    fallbackTitle = "Enable Module",
+                    defaultValue = true,
+                    requiresRestart = true
                 )
             )
         ),
         SectionSpec(
             syntheticTitleId = SECTION_PLAYBACK,
+            titleRes = R.string.category_playback,
+            fallbackTitle = "Playback",
             toggles = listOf(
                 ToggleSpec(
                     id = "spotxero_premium",
                     key = PrefKeys.KEY_ENABLE_PREMIUM,
-                    title = "Unrestricted Playback",
-                    subtitle = "Block ads and unlock shuffle",
-                    defaultValue = true
+                    titleRes = R.string.pref_unrestricted_playback_title,
+                    fallbackTitle = "Unrestricted Playback",
+                    subtitleRes = R.string.pref_unrestricted_playback_desc,
+                    fallbackSubtitle = "Block ads and unlock shuffle",
+                    defaultValue = true,
+                    requiresRestart = true
                 ),
                 ToggleSpec(
                     id = "spotxero_local_volume",
                     key = PrefKeys.KEY_FORCE_LOCAL_PLAYBACK,
-                    title = "Force Local Volume",
-                    subtitle = "Lock media volume to device controls",
+                    titleRes = R.string.feature_force_local_playback_title,
+                    fallbackTitle = "Force Local Volume",
+                    subtitleRes = R.string.feature_force_local_playback_desc,
+                    fallbackSubtitle = "Lock media volume to device controls",
                     defaultValue = true
                 ),
                 ToggleSpec(
                     id = "spotxero_double_tap_seek",
                     key = PrefKeys.KEY_DOUBLE_TAP_TO_SEEK,
-                    title = "Double-Tap Artwork to Seek",
-                    subtitle = "Double-tap album art edges to seek",
+                    titleRes = R.string.feature_double_tap_to_seek_title,
+                    fallbackTitle = "Double-Tap Artwork to Seek",
+                    subtitleRes = R.string.feature_double_tap_to_seek_desc,
+                    fallbackSubtitle = "Double-tap album art edges to seek",
                     defaultValue = true
                 ),
                 ToggleSpec(
                     id = "spotxero_progressive_seek",
                     key = PrefKeys.KEY_SEEK_PROGRESSIVE,
-                    title = "Progressive seek",
-                    subtitle = "Increase skip interval on rapid taps",
-                    defaultValue = false
+                    titleRes = R.string.seek_seconds_addup,
+                    fallbackTitle = "Progressive seek",
+                    subtitleRes = R.string.seek_seconds_addup_desc,
+                    fallbackSubtitle = "Increase skip interval on rapid taps",
+                    defaultValue = false,
+                    dependsOnKey = PrefKeys.KEY_DOUBLE_TAP_TO_SEEK
                 )
             ),
             seekDurationAfterToggleId = "spotxero_double_tap_seek"
         ),
         SectionSpec(
             syntheticTitleId = SECTION_LYRICS,
+            titleRes = R.string.category_lyrics,
+            fallbackTitle = "Lyrics",
             toggles = listOf(
                 ToggleSpec(
                     id = "spotxero_uncapped_lyrics",
                     key = PrefKeys.KEY_UNCAPPED_LYRICS,
-                    title = "Unlimited Lyrics",
-                    subtitle = "Remove monthly lyrics viewing limit",
+                    titleRes = R.string.feature_uncapped_lyrics_title,
+                    fallbackTitle = "Unlimited Lyrics",
+                    subtitleRes = R.string.feature_uncapped_lyrics_desc,
+                    fallbackSubtitle = "Remove monthly lyrics viewing limit",
                     defaultValue = true
                 ),
                 ToggleSpec(
                     id = "spotxero_external_lyrics",
                     key = PrefKeys.KEY_EXTERNAL_LYRICS,
-                    title = "Enable Third-Party Lyrics",
-                    subtitle = "Fetch third-party lyrics when missing",
+                    titleRes = R.string.pref_external_lyrics_title,
+                    fallbackTitle = "Enable Third-Party Lyrics",
+                    subtitleRes = R.string.pref_external_lyrics_desc,
+                    fallbackSubtitle = "Fetch third-party lyrics when missing",
                     defaultValue = false
                 ),
                 ToggleSpec(
                     id = "spotxero_force_external_lyrics",
                     key = PrefKeys.KEY_FORCE_EXTERNAL_LYRICS,
-                    title = "Force Third-Party Lyrics",
-                    subtitle = "Prefer third-party lyrics over Spotify",
-                    defaultValue = false
+                    titleRes = R.string.pref_force_external_lyrics_title,
+                    fallbackTitle = "Force Third-Party Lyrics",
+                    subtitleRes = R.string.pref_force_external_lyrics_desc,
+                    fallbackSubtitle = "Prefer third-party lyrics over Spotify",
+                    defaultValue = false,
+                    dependsOnKey = PrefKeys.KEY_EXTERNAL_LYRICS
                 )
-            )
+            ),
+            includeLyricsDialogs = true
         ),
         SectionSpec(
             syntheticTitleId = SECTION_PRIVACY,
+            titleRes = R.string.category_privacy,
+            fallbackTitle = "Privacy",
             toggles = listOf(
                 ToggleSpec(
                     id = "spotxero_clean_sharing",
                     key = PrefKeys.KEY_CLEAN_SHARING,
-                    title = "Clean Sharing Links",
-                    subtitle = "Remove tracking parameters from shared links",
+                    titleRes = R.string.feature_clean_sharing_title,
+                    fallbackTitle = "Clean Sharing Links",
+                    subtitleRes = R.string.feature_clean_sharing_desc,
+                    fallbackSubtitle = "Remove tracking parameters from shared links",
                     defaultValue = true
                 )
             )
         ),
         SectionSpec(
             syntheticTitleId = SECTION_CONTENT,
+            titleRes = R.string.category_content,
+            fallbackTitle = "Content",
             toggles = listOf(
                 ToggleSpec(
                     id = "spotxero_hide_premium_tab",
                     key = PrefKeys.KEY_HIDE_PREMIUM_TAB,
-                    title = "Hide Premium Tab",
-                    subtitle = "Remove Premium from bottom navigation",
-                    defaultValue = true
+                    titleRes = R.string.feature_hide_premium_tab_title,
+                    fallbackTitle = "Hide Premium Tab",
+                    subtitleRes = R.string.feature_hide_premium_tab_desc,
+                    fallbackSubtitle = "Remove Premium from bottom navigation",
+                    defaultValue = true,
+                    requiresRestart = true
                 ),
                 ToggleSpec(
                     id = "spotxero_hide_podcasts",
                     key = PrefKeys.KEY_HIDE_PODCASTS,
-                    title = "Hide Podcasts",
-                    subtitle = "Remove podcasts from Home and Search",
+                    titleRes = R.string.feature_hide_podcasts_title,
+                    fallbackTitle = "Hide Podcasts",
+                    subtitleRes = R.string.feature_hide_podcasts_desc,
+                    fallbackSubtitle = "Remove podcasts from Home and Search",
                     defaultValue = false
                 ),
                 ToggleSpec(
                     id = "spotxero_hide_audiobooks",
                     key = PrefKeys.KEY_HIDE_AUDIOBOOKS,
-                    title = "Hide Audiobooks",
-                    subtitle = "Remove audiobooks from Home and Search",
+                    titleRes = R.string.feature_hide_audiobooks_title,
+                    fallbackTitle = "Hide Audiobooks",
+                    subtitleRes = R.string.feature_hide_audiobooks_desc,
+                    fallbackSubtitle = "Remove audiobooks from Home and Search",
                     defaultValue = false
                 )
             )
         ),
         SectionSpec(
             syntheticTitleId = SECTION_APPEARANCE,
+            titleRes = R.string.category_theme,
+            fallbackTitle = "Theme & Appearance",
             toggles = listOf(
                 ToggleSpec(
                     id = "spotxero_amoled",
                     key = PrefKeys.KEY_SPOTIFY_AMOLED,
-                    title = "Spotify Pure Black (AMOLED)",
-                    subtitle = "Pure black background for dark theme",
-                    defaultValue = false
+                    titleRes = R.string.feature_spotify_amoled_title,
+                    fallbackTitle = "Spotify Pure Black (AMOLED)",
+                    subtitleRes = R.string.feature_spotify_amoled_desc,
+                    fallbackSubtitle = "Pure black background for dark theme",
+                    defaultValue = false,
+                    requiresRestart = true
                 ),
                 ToggleSpec(
                     id = "spotxero_monet",
                     key = PrefKeys.KEY_SPOTIFY_MONET,
-                    title = "Monet Dynamic Theme",
-                    subtitle = "Match accent colors to system theme",
-                    defaultValue = false
+                    titleRes = R.string.feature_spotify_monet_title,
+                    fallbackTitle = "Monet Dynamic Theme",
+                    subtitleRes = R.string.feature_spotify_monet_desc,
+                    fallbackSubtitle = "Match accent colors to system theme",
+                    defaultValue = false,
+                    requiresRestart = true
                 ),
                 ToggleSpec(
                     id = "spotxero_roundy_ui",
                     key = PrefKeys.KEY_SPOTIFY_ROUNDY_UI,
-                    title = "RoundyUI",
-                    subtitle = "Round artwork, buttons, and cards",
-                    defaultValue = false
+                    titleRes = R.string.feature_spotify_roundy_ui_title,
+                    fallbackTitle = "RoundyUI",
+                    subtitleRes = R.string.feature_spotify_roundy_ui_desc,
+                    fallbackSubtitle = "Round artwork, buttons, and cards",
+                    defaultValue = false,
+                    requiresRestart = true
                 )
             )
         )
     )
 
     private val pendingSpotXeroRouteAt = AtomicLong(0L)
-    private val activeToggleFlows = CopyOnWriteArrayList<Pair<ToggleSpec, Any>>()
+    private val activeToggleBindings = CopyOnWriteArrayList<ToggleBinding>()
+    private val activeVisibilityBindings = CopyOnWriteArrayList<VisibilityBinding>()
     private val hookedNewIntentClasses: MutableSet<Class<*>> = ConcurrentHashMap.newKeySet()
 
     @Volatile
     private var moduleRef: XposedModule? = null
+
+    @Volatile
+    private var moduleResources: Resources? = null
 
     @Volatile
     private var currentActivity: WeakReference<Activity>? = null
@@ -221,6 +295,12 @@ object InAppSettingsHook {
 
     @Volatile
     private var prefListenerRegistered = false
+
+    @Volatile
+    private var shortcutRegistered = false
+
+    @Volatile
+    private var shortcutSyncing = false
 
     private lateinit var rootFactory: Method
     private lateinit var modelCtor: Constructor<*>
@@ -241,17 +321,17 @@ object InAppSettingsHook {
     private lateinit var actionIdClass: Class<*>
     private lateinit var routerNavigate: Method
     private lateinit var pageHostCtor: Constructor<*>
-    private lateinit var stringTitleCtor: Constructor<*>
-    private lateinit var headerPropCtor: Constructor<*>
     private lateinit var titleResolver: Method
-    private lateinit var iconLogoClass: Class<*>
-    private lateinit var vectorBuilderClass: Class<*>
-    private lateinit var vectorPathCtor: Constructor<*>
-    private lateinit var moveToCtor: Constructor<*>
-    private lateinit var curveToCtor: Constructor<*>
-    private lateinit var pathCloseInstance: Any
-    private var spotxeroIconCache: Any? = null
 
+    private var stringTitleCtor: Constructor<*>? = null
+    private var headerPropCtor: Constructor<*>? = null
+    private var iconLogoClass: Class<*>? = null
+    private var vectorBuilderClass: Class<*>? = null
+    private var vectorPathCtor: Constructor<*>? = null
+    private var moveToCtor: Constructor<*>? = null
+    private var curveToCtor: Constructor<*>? = null
+    private var pathCloseInstance: Any? = null
+    private var spotxeroIconCache: Any? = null
 
     private lateinit var modelGroupField: Field
     private lateinit var modelHeaderField: Field
@@ -271,8 +351,8 @@ object InAppSettingsHook {
     private lateinit var sb71Interface: Class<*>
     private lateinit var sb71CreateMethod: Method
     private lateinit var viewUriField: Field
-    private lateinit var hostPropsField: Field
-    private lateinit var hostPropsUpdateMethod: Method
+    private var hostPropsField: Field? = null
+    private var hostPropsUpdateMethod: Method? = null
 
     fun install(module: XposedModule) {
         moduleRef = module
@@ -282,105 +362,162 @@ object InAppSettingsHook {
         registerPreferenceSync()
 
         module.deoptimize(titleResolver)
-        module.hook(titleResolver).intercept { chain ->
-            val id = chain.args[1] as? Int
-            val mapped = if (id != null) SECTION_TITLE_MAP[id] else null
-            mapped ?: chain.proceed()
-        }
+        module.hook(titleResolver)
+            .setId("inapp_settings_title_resolver")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val id = chain.args[1] as? Int
+                val section = if (id != null) SPOTXERO_SECTIONS.firstOrNull { it.syntheticTitleId == id } else null
+                if (section != null && section.fallbackTitle != null) {
+                    str(section.titleRes, section.fallbackTitle)
+                } else {
+                    chain.proceed()
+                }
+            }
 
         val routeIndex = routerNavigate.parameterTypes.indexOfFirst { it == String::class.java }
         if (routeIndex >= 0) {
             val restartRoute = privateRoute("restart")
             val seekRoute = privateRoute("seek-duration")
+            val lyricsProvidersRoute = privateRoute("lyrics-providers")
+            val aiTranslationRoute = privateRoute("ai-translation")
+            val diagnosticsRoute = privateRoute("diagnostics")
+
             module.deoptimize(routerNavigate)
-            module.hook(routerNavigate).intercept { chain ->
-                when (val uri = chain.args[routeIndex] as? String) {
-                    restartRoute -> {
-                        restartSpotify()
-                        null
-                    }
-                    seekRoute -> {
-                        showSeekDurationBottomSheet()
-                        null
-                    }
-                    else -> {
-                        if (uri == SPOTXERO_URI || uri?.startsWith("$SPOTXERO_URI?") == true) {
-                            markPendingSpotXeroRoute()
-                            val modifiedArgs = chain.args.toTypedArray()
-                            modifiedArgs[routeIndex] = ABOUT_SETTINGS_URI
-                            chain.proceed(modifiedArgs)
-                        } else {
+            module.hook(routerNavigate)
+                .setId("inapp_settings_router_navigate")
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    when (val uri = chain.args[routeIndex] as? String) {
+                        restartRoute -> {
+                            restartSpotify()
+                            null
+                        }
+                        seekRoute -> {
+                            withActiveActivity(
+                                onActive = { InAppSettingsSheets.showSeekDurationBottomSheet(it) },
+                                onMissing = { cycleSeekDuration() }
+                            )
+                            null
+                        }
+                        lyricsProvidersRoute -> {
+                            withActiveActivity(
+                                onActive = { InAppSettingsSheets.showLyricsProvidersBottomSheet(it) }
+                            )
+                            null
+                        }
+                        aiTranslationRoute -> {
+                            withActiveActivity(
+                                onActive = { InAppSettingsSheets.showAiTranslationBottomSheet(it) }
+                            )
+                            null
+                        }
+                        diagnosticsRoute -> {
+                            withActiveActivity(
+                                onActive = { InAppSettingsSheets.showDiagnosticsBottomSheet(it, ::restartSpotify) }
+                            )
+                            null
+                        }
+                        ABOUT_SETTINGS_URI -> {
+                            pendingSpotXeroRouteAt.set(0L)
                             chain.proceed()
+                        }
+                        else -> {
+                            if (uri == SPOTXERO_URI || uri?.startsWith("$SPOTXERO_URI?") == true) {
+                                markPendingSpotXeroRoute()
+                                val modifiedArgs = chain.args.toTypedArray()
+                                modifiedArgs[routeIndex] = ABOUT_SETTINGS_URI
+                                chain.proceed(modifiedArgs)
+                            } else {
+                                chain.proceed()
+                            }
                         }
                     }
                 }
-            }
         } else {
             Log.w(TAG, "Router navigate has no string route argument")
         }
 
         val onNewIntent = Activity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
         module.deoptimize(onNewIntent)
-        module.hook(onNewIntent).intercept { chain ->
-            rewriteDeepLinkIfNeeded(chain.args[0] as? Intent)
-            chain.proceed()
-        }
-
-        module.deoptimize(pageHostCtor)
-        module.hook(pageHostCtor).intercept { chain ->
-            val pageDef = chain.args[1]
-            val viewUriObj = runCatching { kc71ViewUriMethod.invoke(pageDef) }.getOrNull()
-            val viewUriStr = runCatching {
-                viewUriField.get(viewUriObj) as? String ?: viewUriObj?.toString()
-            }.getOrNull()
-            val isSpotXero = viewUriStr == ABOUT_SETTINGS_URI && consumePendingSpotXeroRoute()
-
-            val result = if (isSpotXero && pageDef != null) {
-                val modifiedArgs = chain.args.toTypedArray()
-                modifiedArgs[1] = wrapSpotXeroPageDefinition(pageDef)
-                chain.proceed(modifiedArgs)
-            } else {
+        module.hook(onNewIntent)
+            .setId("inapp_settings_activity_new_intent")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                rewriteDeepLinkIfNeeded(chain.args[0] as? Intent)
                 chain.proceed()
             }
 
-            if (isSpotXero) {
-                runCatching {
-                    val host = chain.thisObject
-                    val props = hostPropsField.get(host)
-                    val titleProp = headerPropCtor.newInstance(stringTitleCtor.newInstance("SpotXero"))
-                    hostPropsUpdateMethod.invoke(props, titleProp)
-                }.onFailure {
-                    Log.w(TAG, "Failed applying SpotXero settings title", it)
+        module.deoptimize(pageHostCtor)
+        module.hook(pageHostCtor)
+            .setId("inapp_settings_page_host_ctor")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val pageDef = chain.args[1]
+                val viewUriObj = runCatching { kc71ViewUriMethod.invoke(pageDef) }.getOrNull()
+                val viewUriStr = runCatching {
+                    viewUriField.get(viewUriObj) as? String ?: viewUriObj?.toString()
+                }.getOrNull()
+                val isSpotXero = viewUriStr == ABOUT_SETTINGS_URI && consumePendingSpotXeroRoute()
+
+                val result = if (isSpotXero && pageDef != null) {
+                    val modifiedArgs = chain.args.toTypedArray()
+                    modifiedArgs[1] = wrapSpotXeroPageDefinition(pageDef)
+                    chain.proceed(modifiedArgs)
+                } else {
+                    chain.proceed()
                 }
+
+                if (isSpotXero) {
+                    val hField = hostPropsField
+                    val hMethod = hostPropsUpdateMethod
+                    val hPropCtor = headerPropCtor
+                    val sTitleCtor = stringTitleCtor
+                    if (hField != null && hMethod != null && hPropCtor != null && sTitleCtor != null) {
+                        runCatching {
+                            val host = chain.thisObject
+                            val props = hField.get(host)
+                            val titleProp = hPropCtor.newInstance(sTitleCtor.newInstance("SpotXero"))
+                            hMethod.invoke(props, titleProp)
+                        }.onFailure {
+                            Log.w(TAG, "Failed applying SpotXero settings title", it)
+                        }
+                    }
+                }
+                result
             }
-            result
-        }
 
         module.deoptimize(rootFactory)
-        module.hook(rootFactory).intercept { chain ->
-            val result = chain.proceed() ?: return@intercept null
-            runCatching { injectRootEntry(result) }
-                .onFailure { Log.e(TAG, "Failed injecting SpotXero settings entry", it) }
-            result
-        }
+        module.hook(rootFactory)
+            .setId("inapp_settings_root_factory")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val result = chain.proceed() ?: return@intercept null
+                runCatching { injectRootEntry(result) }
+                    .onFailure { Log.e(TAG, "Failed injecting SpotXero settings entry", it) }
+                result
+            }
+
+        installShortcutHooks(module)
+        PreferencesManager.resolveTargetContext()?.let { ensureLauncherShortcut(it) }
 
         Log.i(TAG, "Installed native InAppSettingsHook")
     }
 
     fun onActivityCreated(activity: Activity) {
         currentActivity = WeakReference(activity)
+        ensureModuleResources(activity)
+        ensureLauncherShortcut(activity)
         hookNewIntentOverride(activity.javaClass)
         rewriteDeepLinkIfNeeded(activity.intent)
     }
 
     fun onActivityResumed(activity: Activity) {
         currentActivity = WeakReference(activity)
+        ensureModuleResources(activity)
     }
 
     fun onActivityPaused(activity: Activity) {
-        if (currentActivity?.get() == activity) {
-            currentActivity = null
-        }
     }
 
     fun onActivityDestroyed(activity: Activity) {
@@ -389,12 +526,178 @@ object InAppSettingsHook {
         }
     }
 
+    private fun ensureModuleResources(context: Context) {
+        if (moduleResources != null) return
+        val modInfo = runCatching { moduleRef?.moduleApplicationInfo }.getOrNull() ?: return
+        moduleResources = runCatching {
+            context.packageManager.getResourcesForApplication(modInfo)
+        }.getOrNull()
+    }
+
+    private fun str(resId: Int?, fallback: String, vararg args: Any): String {
+        if (resId != null) {
+            val res = moduleResources
+            if (res != null) {
+                runCatching {
+                    return if (args.isEmpty()) res.getString(resId) else res.getString(resId, *args)
+                }
+            }
+        }
+        return fallback
+    }
+
+    private fun withActiveActivity(onActive: (Activity) -> Unit, onMissing: () -> Unit = {}) {
+        val activity = currentActivity?.get()
+        if (activity == null || activity.isFinishing || activity.isDestroyed) {
+            onMissing()
+            return
+        }
+        onActive(activity)
+    }
+
     private fun rewriteDeepLinkIfNeeded(intent: Intent?) {
-        val data = intent?.dataString ?: return
-        if (data == SPOTXERO_URI || data.startsWith("$SPOTXERO_URI?")) {
+        if (intent == null) return
+        val data = intent.dataString
+        val isShortcutIntent = runCatching { intent.getStringExtra(EXTRA_SHORTCUT) == SHORTCUT_ID }.getOrDefault(false)
+        if (isShortcutIntent || data == SPOTXERO_URI || data?.startsWith("$SPOTXERO_URI?") == true) {
             markPendingSpotXeroRoute()
+            intent.removeExtra(EXTRA_SHORTCUT)
             intent.data = Uri.parse(ABOUT_SETTINGS_URI)
         }
+    }
+
+    private fun installShortcutHooks(module: XposedModule) {
+        runCatching {
+            val setDynamic = ShortcutManager::class.java.getDeclaredMethod("setDynamicShortcuts", List::class.java)
+            module.deoptimize(setDynamic)
+            module.hook(setDynamic)
+                .setId("inapp_settings_shortcut_set_dynamic")
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    if (shortcutSyncing) return@intercept chain.proceed()
+                    val sm = chain.thisObject as? ShortcutManager ?: return@intercept chain.proceed()
+                    val incoming = (chain.args[0] as? List<*>)?.filterIsInstance<ShortcutInfo>() ?: return@intercept chain.proceed()
+                    val ctx = currentActivity?.get() ?: PreferencesManager.resolveTargetContext()
+                    val ours = ctx?.let { buildLauncherShortcut(it) } ?: return@intercept chain.proceed()
+                    val maxDynamic = (sm.maxShortcutCountPerActivity - sm.manifestShortcuts.size).coerceAtLeast(0)
+                    if (maxDynamic == 0) return@intercept chain.proceed()
+                    val filtered = incoming.filter { it.id != SHORTCUT_ID }.take(maxDynamic - 1)
+                    val modifiedArgs = chain.args.toTypedArray()
+                    modifiedArgs[0] = listOf(ours) + filtered
+                    chain.proceed(modifiedArgs)
+                }
+
+            val removeAll = ShortcutManager::class.java.getDeclaredMethod("removeAllDynamicShortcuts")
+            module.deoptimize(removeAll)
+            module.hook(removeAll)
+                .setId("inapp_settings_shortcut_remove_all")
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    val result = chain.proceed()
+                    val ctx = currentActivity?.get() ?: PreferencesManager.resolveTargetContext()
+                    if (ctx != null) {
+                        shortcutRegistered = false
+                        ensureLauncherShortcut(ctx)
+                    }
+                    result
+                }
+        }.onFailure {
+            Log.w(TAG, "Failed installing ShortcutManager hooks", it)
+        }
+    }
+
+    private fun ensureLauncherShortcut(context: Context) {
+        if (shortcutRegistered) return
+        val sm = context.getSystemService(ShortcutManager::class.java) ?: return
+        val maxDynamic = (sm.maxShortcutCountPerActivity - sm.manifestShortcuts.size).coerceAtLeast(0)
+        if (maxDynamic == 0) return
+        val shortcut = buildLauncherShortcut(context) ?: return
+        shortcutSyncing = true
+        try {
+            val currentDynamic = sm.dynamicShortcuts
+            val hasOurs = currentDynamic.any { it.id == SHORTCUT_ID }
+            if (hasOurs) {
+                sm.updateShortcuts(listOf(shortcut))
+            } else if (currentDynamic.size < maxDynamic) {
+                sm.addDynamicShortcuts(listOf(shortcut))
+            } else {
+                sm.setDynamicShortcuts(listOf(shortcut) + currentDynamic.take(maxDynamic - 1))
+            }
+            shortcutRegistered = true
+        } catch (t: Throwable) {
+            Log.w(TAG, "Failed registering SpotXero launcher shortcut", t)
+        } finally {
+            shortcutSyncing = false
+        }
+    }
+
+    private fun buildLauncherShortcut(context: Context): ShortcutInfo? {
+        val launcherComponent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.component
+            ?: return null
+        val launchIntent = Intent(Intent.ACTION_VIEW, Uri.parse(SPOTXERO_URI)).apply {
+            setPackage(context.packageName)
+            addCategory(Intent.CATEGORY_DEFAULT)
+            putExtra(EXTRA_SHORTCUT, SHORTCUT_ID)
+        }
+        return ShortcutInfo.Builder(context, SHORTCUT_ID)
+            .setActivity(launcherComponent)
+            .setRank(0)
+            .setShortLabel(str(R.string.app_name, "SpotXero"))
+            .setLongLabel("SpotXero Settings")
+            .setIcon(buildShortcutIcon(context))
+            .setIntent(launchIntent)
+            .build()
+    }
+
+    private fun buildShortcutIcon(context: Context): Icon {
+        val sizePx = (108f * context.resources.displayMetrics.density).toInt().coerceAtLeast(108)
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val modRes = moduleResources
+        val drawable = modRes?.let { runCatching { it.getDrawable(R.drawable.ic_spotxero, null) }.getOrNull() }
+        if (drawable != null) {
+            drawable.setBounds(0, 0, sizePx, sizePx)
+            drawable.draw(canvas)
+        } else {
+            canvas.drawColor(Color.parseColor("#121212"))
+            val scale = sizePx / 108f
+            canvas.save()
+            canvas.translate(54f * scale, 54f * scale)
+            canvas.rotate(8f)
+            canvas.scale(0.49f * scale, 0.49f * scale)
+            canvas.translate(-54f, -54f)
+            val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor("#1ED760")
+                style = Paint.Style.STROKE
+                strokeWidth = 7.5f
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+            }
+            val p1 = Path().apply {
+                moveTo(28f, 35f)
+                cubicTo(42f, 42f, 66f, 50f, 80f, 57f)
+            }
+            val p2 = Path().apply {
+                moveTo(28f, 57f)
+                cubicTo(42f, 50f, 66f, 42f, 80f, 35f)
+            }
+            val dotPaint = Paint(strokePaint).apply {
+                strokeWidth = 6f
+            }
+            val p3 = Path().apply {
+                moveTo(41f, 75.5f)
+                cubicTo(41f, 70.53f, 46.82f, 66.5f, 54f, 66.5f)
+                cubicTo(61.18f, 66.5f, 67f, 70.53f, 67f, 75.5f)
+                cubicTo(67f, 80.47f, 61.18f, 84.5f, 54f, 84.5f)
+                cubicTo(46.82f, 84.5f, 41f, 80.47f, 41f, 75.5f)
+                close()
+            }
+            canvas.drawPath(p1, strokePaint)
+            canvas.drawPath(p2, strokePaint)
+            canvas.drawPath(p3, dotPaint)
+            canvas.restore()
+        }
+        return Icon.createWithAdaptiveBitmap(bitmap)
     }
 
     private fun hookNewIntentOverride(activityClass: Class<*>) {
@@ -407,10 +710,13 @@ object InAppSettingsHook {
                 if (method != null) {
                     runCatching {
                         module.deoptimize(method)
-                        module.hook(method).intercept { chain ->
-                            rewriteDeepLinkIfNeeded(chain.args[0] as? Intent)
-                            chain.proceed()
-                        }
+                        module.hook(method)
+                            .setId("inapp_settings_new_intent_${type.name}")
+                            .setExceptionMode(ExceptionMode.PROTECTIVE)
+                            .intercept { chain ->
+                                rewriteDeepLinkIfNeeded(chain.args[0] as? Intent)
+                                chain.proceed()
+                            }
                     }.onFailure {
                         hookedNewIntentClasses.remove(type)
                         Log.w(TAG, "Failed hooking ${type.name}.onNewIntent", it)
@@ -476,28 +782,21 @@ object InAppSettingsHook {
             ?: error("Missing settings router navigate resolver")
         pageHostCtor = DexKitResolver.get<Constructor<*>>(DexKitResolver.KEY_SETTINGS_PAGE_HOST_CTOR)
             ?: error("Missing settings page host constructor resolver")
-        stringTitleCtor = DexKitResolver.get<Constructor<*>>(DexKitResolver.KEY_SETTINGS_STRING_TITLE_CTOR)
-            ?: error("Missing settings string title constructor resolver")
-        headerPropCtor = DexKitResolver.get<Constructor<*>>(DexKitResolver.KEY_SETTINGS_HEADER_PROP_CTOR)
-            ?: error("Missing settings header prop constructor resolver")
         titleResolver = DexKitResolver.get<Method>(DexKitResolver.KEY_SETTINGS_TITLE_RESOLVER)
             ?: error("Missing settings title resolver")
+
+        stringTitleCtor = DexKitResolver.get<Constructor<*>>(DexKitResolver.KEY_SETTINGS_STRING_TITLE_CTOR)
+        headerPropCtor = DexKitResolver.get<Constructor<*>>(DexKitResolver.KEY_SETTINGS_HEADER_PROP_CTOR)
         iconLogoClass = DexKitResolver.get<Class<*>>(DexKitResolver.KEY_SETTINGS_ICON_LOGO_CLASS)
-            ?: error("Missing settings icon logo class resolver")
         vectorBuilderClass = DexKitResolver.get<Class<*>>(DexKitResolver.KEY_SETTINGS_VECTOR_BUILDER_CLASS)
-            ?: error("Missing settings vector builder class resolver")
         vectorPathCtor = DexKitResolver.get<Constructor<*>>(DexKitResolver.KEY_SETTINGS_VECTOR_PATH_CTOR)
-            ?: error("Missing settings vector path constructor resolver")
         moveToCtor = DexKitResolver.get<Constructor<*>>(DexKitResolver.KEY_SETTINGS_PATH_MOVETO_CTOR)
-            ?: error("Missing settings path moveto constructor resolver")
         curveToCtor = DexKitResolver.get<Constructor<*>>(DexKitResolver.KEY_SETTINGS_PATH_CURVETO_CTOR)
-            ?: error("Missing settings path curveto constructor resolver")
-        val pathCloseClass = DexKitResolver.get<Class<*>>(DexKitResolver.KEY_SETTINGS_PATH_CLOSE_CLASS)
-            ?: error("Missing settings path close class resolver")
-        pathCloseInstance = pathCloseClass.declaredFields.first {
-            Modifier.isStatic(it.modifiers) && it.type == pathCloseClass
-        }.apply { isAccessible = true }.get(null)
-            ?: error("Missing path close singleton")
+        pathCloseInstance = DexKitResolver.get<Class<*>>(DexKitResolver.KEY_SETTINGS_PATH_CLOSE_CLASS)
+            ?.declaredFields
+            ?.firstOrNull { Modifier.isStatic(it.modifiers) && it.type == it.declaringClass }
+            ?.apply { isAccessible = true }
+            ?.get(null)
 
         val modelClass = modelCtor.declaringClass
         val r2yClass = modelCtor.parameterTypes[0]
@@ -569,20 +868,20 @@ object InAppSettingsHook {
         viewUriField = q5l1Class.declaredFields.first { !Modifier.isStatic(it.modifiers) && it.type == String::class.java }
             .apply { isAccessible = true }
 
-        val propInterface = headerPropCtor.declaringClass.interfaces.single()
-        val pageHostClass = pageHostCtor.declaringClass
-        val propsClass = pageHostClass.declaredFields.first { field ->
-            !Modifier.isStatic(field.modifiers) &&
-                field.declaredAnnotations.isEmpty() &&
-                field.type.declaredMethods.any { m ->
-                    !Modifier.isStatic(m.modifiers) && m.parameterCount == 1 && m.parameterTypes[0] == propInterface && m.returnType == Void.TYPE
-                }
-        }.also { it.isAccessible = true }.let { field ->
-            hostPropsField = field
-            field.type
-        }
-        hostPropsUpdateMethod = propsClass.declaredMethods.first { m ->
-            !Modifier.isStatic(m.modifiers) && m.parameterCount == 1 && m.parameterTypes[0] == propInterface && m.returnType == Void.TYPE
+        val propInterface = headerPropCtor?.declaringClass?.interfaces?.singleOrNull()
+        if (propInterface != null) {
+            val pageHostClass = pageHostCtor.declaringClass
+            val propsField = pageHostClass.declaredFields.firstOrNull { field ->
+                !Modifier.isStatic(field.modifiers) &&
+                    field.declaredAnnotations.isEmpty() &&
+                    field.type.declaredMethods.any { m ->
+                        !Modifier.isStatic(m.modifiers) && m.parameterCount == 1 && m.parameterTypes[0] == propInterface && m.returnType == Void.TYPE
+                    }
+            }?.apply { isAccessible = true }
+            hostPropsField = propsField
+            hostPropsUpdateMethod = propsField?.type?.declaredMethods?.firstOrNull { m ->
+                !Modifier.isStatic(m.modifiers) && m.parameterCount == 1 && m.parameterTypes[0] == propInterface && m.returnType == Void.TYPE
+            }
         }
     }
 
@@ -640,6 +939,41 @@ object InAppSettingsHook {
         }
     }
 
+    private fun extractLiveSectionMask(templateModel: Any, headerless: Boolean): Int {
+        val sections = modelSectionsField.get(templateModel) as? List<*> ?: emptyList<Any>()
+        val sectionClass = sectionCtor.declaringClass
+        val titleField = sectionClass.declaredFields.firstOrNull { !Modifier.isStatic(it.modifiers) && it.type == Integer::class.java }
+            ?.apply { isAccessible = true }
+        val maskField = sectionClass.declaredFields.lastOrNull { !Modifier.isStatic(it.modifiers) && it.type == Int::class.javaPrimitiveType }
+            ?.apply { isAccessible = true }
+        if (titleField != null && maskField != null) {
+            val match = sections.filterNotNull().firstOrNull { sec ->
+                val hasNoTitle = titleField.get(sec) == null
+                hasNoTitle == headerless
+            }
+            if (match != null) {
+                return runCatching { maskField.getInt(match) }.getOrElse {
+                    if (headerless) ND71_HEADERLESS_MASK else ND71_TITLED_MASK
+                }
+            }
+        }
+        return if (headerless) ND71_HEADERLESS_MASK else ND71_TITLED_MASK
+    }
+
+    private fun extractLiveItemMask(templateModel: Any): Int {
+        val sections = modelSectionsField.get(templateModel) as? List<*> ?: emptyList<Any>()
+        val toggleClass = toggleItemCtor.declaringClass
+        val maskField = toggleClass.declaredFields.lastOrNull { !Modifier.isStatic(it.modifiers) && it.type == Int::class.javaPrimitiveType }
+            ?.apply { isAccessible = true } ?: return L2C1_DEFAULT_MASK
+        for (section in sections) {
+            if (section == null) continue
+            val items = sectionItemsField.get(section) as? List<*> ?: continue
+            val sample = items.firstOrNull { toggleClass.isInstance(it) } ?: continue
+            return runCatching { maskField.getInt(sample) }.getOrDefault(L2C1_DEFAULT_MASK)
+        }
+        return L2C1_DEFAULT_MASK
+    }
+
     private fun buildSpotXeroPageModel(templateModel: Any): Any {
         val pageGroup = modelGroupField.get(templateModel)
         val headerPlaceholder = modelHeaderField.get(templateModel)
@@ -647,14 +981,24 @@ object InAppSettingsHook {
             ?: error("Unable to resolve native settings item group")
         cachedItemGroup = itemGroup
 
-        activeToggleFlows.clear()
+        val headerlessMask = extractLiveSectionMask(templateModel, headerless = true)
+        val titledMask = extractLiveSectionMask(templateModel, headerless = false)
+        val itemMask = extractLiveItemMask(templateModel)
+
+        activeToggleBindings.clear()
+        activeVisibilityBindings.clear()
+
         val standardSections = SPOTXERO_SECTIONS.map { section ->
             val rows = buildList {
                 for (toggle in section.toggles) {
-                    add(createToggleItem(toggle, itemGroup))
+                    add(createToggleItem(toggle, itemGroup, itemMask))
                     if (toggle.id == section.seekDurationAfterToggleId) {
-                        add(createSeekDurationItem(itemGroup))
+                        add(createSeekDurationItem(itemGroup, itemMask))
                     }
+                }
+                if (section.includeLyricsDialogs) {
+                    add(createLyricsProvidersItem(itemGroup, itemMask))
+                    add(createAiTranslationItem(itemGroup, itemMask))
                 }
             }
             val persistentItems = listFactory.invoke(null, rows.toTypedArray())
@@ -664,38 +1008,60 @@ object InAppSettingsHook {
                 null,
                 null,
                 persistentItems,
-                if (section.syntheticTitleId == null) ND71_SECTION_DEFAULT_MASK else 249
+                if (section.syntheticTitleId == null) headerlessMask else titledMask
             )
         }
 
         val allSections = buildList {
             addAll(standardSections)
             val footerRows = buildList {
-                val versionItem = runCatching { createVersionItem(templateModel, itemGroup) }
-                    .onFailure { Log.w(TAG, "Failed composing native version row", it) }
-                    .getOrNull()
+                val installedCount = HookRegistry.installedHookNames().size
+                val failedCount = HookRegistry.failedHookNames().size
+                val versionSubtitle = if (failedCount == 0) {
+                    "${BuildConfig.VERSION_NAME} • $installedCount hooks active"
+                } else {
+                    "${BuildConfig.VERSION_NAME} • $failedCount failed"
+                }
                 add(
-                    versionItem
-                        ?: createActionItem("spotxero_version", "SpotXero Version", BuildConfig.VERSION_NAME, SPOTXERO_URI, itemGroup)
+                    createActionItem(
+                        id = "spotxero_version",
+                        title = "SpotXero Diagnostics",
+                        subtitle = versionSubtitle,
+                        uri = privateRoute("diagnostics"),
+                        itemGroup = itemGroup,
+                        itemMask = itemMask
+                    )
                 )
-                add(createExternalLinkItem("spotxero_github", "GitHub", "https://github.com/s1ddhants1/SpotXero", itemGroup))
-                add(createExternalLinkItem("spotxero_telegram", "Telegram Group", "https://t.me/SpotXero", itemGroup))
-                add(createActionItem("spotxero_restart", "Restart Spotify", "Apply changes that need a fresh session", privateRoute("restart"), itemGroup))
+                add(createExternalLinkItem("spotxero_github", "GitHub", "https://github.com/s1ddhants1/SpotXero", itemGroup, itemMask))
+                add(createExternalLinkItem("spotxero_telegram", "Telegram Group", "https://t.me/SpotXero", itemGroup, itemMask))
+                add(createActionItem("spotxero_restart", "Restart Spotify", "Apply changes that need a fresh session", privateRoute("restart"), itemGroup, itemMask))
             }
             val footerItems = listFactory.invoke(null, footerRows.toTypedArray())
-            add(sectionCtor.newInstance(pageGroup, null, null, null, footerItems, ND71_SECTION_DEFAULT_MASK))
+            add(sectionCtor.newInstance(pageGroup, null, null, null, footerItems, headerlessMask))
         }
         Log.i(TAG, "Built SpotXero page model with ${allSections.size} sections")
 
         return modelCtor.newInstance(pageGroup, headerPlaceholder, null, allSections, emptyList<Any>())
     }
 
-    private fun createToggleItem(spec: ToggleSpec, itemGroup: Any): Any {
+    private fun isRowVisible(dependsOnKey: String?, isMaster: Boolean = false): Boolean {
+        if (isMaster) return true
+        if (!PreferencesManager.isStoredEnabled(PrefKeys.KEY_MASTER_ENABLED, true)) return false
+        return when (dependsOnKey) {
+            null -> true
+            PrefKeys.KEY_DOUBLE_TAP_TO_SEEK -> PreferencesManager.isStoredEnabled(PrefKeys.KEY_DOUBLE_TAP_TO_SEEK, true)
+            PrefKeys.KEY_EXTERNAL_LYRICS -> PreferencesManager.isStoredEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false)
+            else -> PreferencesManager.isStoredEnabled(dependsOnKey, false)
+        }
+    }
+
+    private fun createToggleItem(spec: ToggleSpec, itemGroup: Any, itemMask: Int): Any {
         val initial = PreferencesManager.isStoredEnabled(spec.key, spec.defaultValue)
         val stateFlow = stateFlowCtor.newInstance(initial)
-        activeToggleFlows.add(spec to stateFlow)
+        val isMaster = spec.key == PrefKeys.KEY_MASTER_ENABLED
+        val visibilityFlow = stateFlowCtor.newInstance(isRowVisible(spec.dependsOnKey, isMaster))
+        activeToggleBindings.add(ToggleBinding(spec, stateFlow, visibilityFlow))
 
-        val visibilityFlow = stateFlowCtor.newInstance(java.lang.Boolean.TRUE)
         val callbackProxy = Proxy.newProxyInstance(
             toggleCallbackInterface.classLoader,
             arrayOf(toggleCallbackInterface)
@@ -704,10 +1070,14 @@ object InAppSettingsHook {
                 method.parameterCount == 3 -> {
                     val newValue = args?.get(1) as? Boolean
                     if (newValue != null) {
-                        PreferencesManager.setBoolean(currentActivity?.get(), spec.key, newValue)
+                        val activity = currentActivity?.get()
+                        PreferencesManager.setBoolean(activity, spec.key, newValue)
                         stateFlowEmit.invoke(stateFlow, newValue)
-                        if (spec.key == PrefKeys.KEY_MASTER_ENABLED) {
-                            syncToggleFlows()
+                        syncToggleFlows()
+                        if (spec.requiresRestart && activity != null) {
+                            activity.runOnUiThread {
+                                Toast.makeText(activity, "Restart Spotify to apply changes", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                     successResultCtor.newInstance(Unit)
@@ -725,7 +1095,7 @@ object InAppSettingsHook {
         val item = toggleItemCtor.newInstance(
             spec.id,
             null,
-            spec.title,
+            str(spec.titleRes, spec.fallbackTitle),
             null,
             null,
             null,
@@ -735,9 +1105,10 @@ object InAppSettingsHook {
             null,
             control,
             emptyMap<Any, Any>(),
-            L2C1_DEFAULT_MASK
+            itemMask
         )
-        spec.subtitle?.let { toggleItemSubtitleField.set(item, createSubtitleProvider(it)) }
+        val subtitle = spec.fallbackSubtitle?.let { str(spec.subtitleRes, it) }
+        subtitle?.let { text -> toggleItemSubtitleField.set(item, createSubtitleProvider { text }) }
         return item
     }
 
@@ -746,9 +1117,20 @@ object InAppSettingsHook {
         title: String,
         subtitle: String,
         uri: String,
-        itemGroup: Any
+        itemGroup: Any,
+        itemMask: Int,
+        visibilityFlow: Any = stateFlowCtor.newInstance(java.lang.Boolean.TRUE)
+    ): Any = createActionItemWithSupplier(id, title, { subtitle }, uri, itemGroup, itemMask, visibilityFlow)
+
+    private fun createActionItemWithSupplier(
+        id: String,
+        title: String,
+        subtitleSupplier: () -> String,
+        uri: String,
+        itemGroup: Any,
+        itemMask: Int,
+        visibilityFlow: Any = stateFlowCtor.newInstance(java.lang.Boolean.TRUE)
     ): Any {
-        val visibilityFlow = stateFlowCtor.newInstance(java.lang.Boolean.TRUE)
         val actionId = allocateActionId()
         val actionUri = actionUriCtor.newInstance(uri, null)
         val control = actionControlCtor.newInstance(actionId, actionUri)
@@ -765,41 +1147,69 @@ object InAppSettingsHook {
             null,
             control,
             emptyMap<Any, Any>(),
-            L2C1_DEFAULT_MASK
+            itemMask
         )
-        toggleItemSubtitleField.set(item, createSubtitleProvider(subtitle))
+        toggleItemSubtitleField.set(item, createSubtitleProvider(subtitleSupplier))
         return item
     }
 
-    private fun createSeekDurationItem(itemGroup: Any): Any {
-        val visibilityFlow = stateFlowCtor.newInstance(java.lang.Boolean.TRUE)
-        val actionId = allocateActionId()
-        val actionUri = actionUriCtor.newInstance(privateRoute("seek-duration"), null)
-        val control = actionControlCtor.newInstance(actionId, actionUri)
-        val item = toggleItemCtor.newInstance(
-            "spotxero_seek_duration",
-            null,
-            "Seek duration",
-            null,
-            null,
-            null,
-            null,
-            visibilityFlow,
-            itemGroup,
-            null,
-            control,
-            emptyMap<Any, Any>(),
-            L2C1_DEFAULT_MASK
+    private fun createSeekDurationItem(itemGroup: Any, itemMask: Int): Any {
+        val visibilityFlow = stateFlowCtor.newInstance(isRowVisible(PrefKeys.KEY_DOUBLE_TAP_TO_SEEK))
+        activeVisibilityBindings.add(
+            VisibilityBinding(visibilityFlow) { isRowVisible(PrefKeys.KEY_DOUBLE_TAP_TO_SEEK) }
         )
-        toggleItemSubtitleField.set(item, createSubtitleProvider("Seconds to skip when seeking"))
-        return item
+        return createActionItemWithSupplier(
+            id = "spotxero_seek_duration",
+            title = str(R.string.seek_duration, "Seek duration"),
+            subtitleSupplier = {
+                val secs = InAppSettingsSheets.seekDurationSeconds()
+                str(R.string.settings_seconds_value, "$secs seconds", secs)
+            },
+            uri = privateRoute("seek-duration"),
+            itemGroup = itemGroup,
+            itemMask = itemMask,
+            visibilityFlow = visibilityFlow
+        )
+    }
+
+    private fun createLyricsProvidersItem(itemGroup: Any, itemMask: Int): Any {
+        val visibilityFlow = stateFlowCtor.newInstance(isRowVisible(PrefKeys.KEY_EXTERNAL_LYRICS))
+        activeVisibilityBindings.add(
+            VisibilityBinding(visibilityFlow) { isRowVisible(PrefKeys.KEY_EXTERNAL_LYRICS) }
+        )
+        return createActionItem(
+            id = "spotxero_lyrics_providers",
+            title = str(R.string.feature_external_lyrics_title, "Third-Party Lyrics"),
+            subtitle = str(R.string.feature_external_lyrics_desc, "Providers and fallback priority"),
+            uri = privateRoute("lyrics-providers"),
+            itemGroup = itemGroup,
+            itemMask = itemMask,
+            visibilityFlow = visibilityFlow
+        )
+    }
+
+    private fun createAiTranslationItem(itemGroup: Any, itemMask: Int): Any {
+        val visibilityFlow = stateFlowCtor.newInstance(isRowVisible(null))
+        activeVisibilityBindings.add(
+            VisibilityBinding(visibilityFlow) { isRowVisible(null) }
+        )
+        return createActionItem(
+            id = "spotxero_ai_translation",
+            title = str(R.string.title_ai_lyrics_translation, "AI Lyrics Translation"),
+            subtitle = str(R.string.ai_lyrics_translation_desc, "Translation languages, providers and models"),
+            uri = privateRoute("ai-translation"),
+            itemGroup = itemGroup,
+            itemMask = itemMask,
+            visibilityFlow = visibilityFlow
+        )
     }
 
     private fun createExternalLinkItem(
         id: String,
         title: String,
         url: String,
-        itemGroup: Any
+        itemGroup: Any,
+        itemMask: Int
     ): Any {
         val visibilityFlow = stateFlowCtor.newInstance(java.lang.Boolean.TRUE)
         val actionId = allocateActionId()
@@ -818,358 +1228,12 @@ object InAppSettingsHook {
             null,
             control,
             emptyMap<Any, Any>(),
-            L2C1_DEFAULT_MASK
+            itemMask
         )
     }
 
-    private fun createVersionItem(templateModel: Any, itemGroup: Any): Any? {
-        val sections = modelSectionsField.get(templateModel) as? List<*> ?: return null
-        val nativeVersionItem = sections.asSequence()
-            .filterNotNull()
-            .flatMap { (sectionItemsField.get(it) as? List<*> ?: emptyList<Any>()).asSequence() }
-            .filterNotNull()
-            .firstOrNull { runCatching { it.javaClass.getMethod("getId").invoke(it) == "version" }.getOrDefault(false) }
-            ?: return null
-
-        val itemClass = nativeVersionItem.javaClass
-        val fields = itemClass.declaredFields.filter { !Modifier.isStatic(it.modifiers) }.onEach { it.isAccessible = true }
-        val nativeProvider = fields.firstOrNull { p3z0Interface.isAssignableFrom(it.type) }?.get(nativeVersionItem) ?: return null
-        val nativePresenter = p3z0GetMethod.invoke(nativeProvider) ?: return null
-
-        val orj1Class = nativePresenter.javaClass
-        val orj1Ctor = orj1Class.declaredConstructors.firstOrNull {
-            it.parameterCount == 2 && Context::class.java.isAssignableFrom(it.parameterTypes[0]) && it.parameterTypes[1].isInterface
-        } ?: return null
-        val nativeContext = orj1Class.declaredFields.firstNotNullOfOrNull {
-            if (Context::class.java.isAssignableFrom(it.type)) it.apply { isAccessible = true }.get(nativePresenter) as? Context else null
-        }
-        val context = currentActivity?.get() ?: nativeContext ?: PreferencesManager.resolveTargetContext() ?: return null
-        val versionProvider = createVersionProvider(orj1Ctor, nativePresenter, context) ?: return null
-        val customPresenter = orj1Ctor.newInstance(context, versionProvider)
-        val customProvider = Proxy.newProxyInstance(
-            p3z0Interface.classLoader,
-            arrayOf(p3z0Interface)
-        ) { proxy, method, args ->
-            when {
-                method == p3z0GetMethod -> customPresenter
-                method.name == "equals" -> args?.get(0) === proxy
-                method.name == "hashCode" -> System.identityHashCode(proxy)
-                method.name == "toString" -> "SpotXeroVersionProvider"
-                else -> null
-            }
-        }
-
-        val jwoField = fields.firstOrNull {
-            it.type != String::class.java &&
-                !p3z0Interface.isAssignableFrom(it.type) &&
-                it.type.declaredConstructors.any { c -> c.parameterCount == 5 && c.parameterTypes[1] == String::class.java }
-        } ?: return null
-        val jwoCtor = jwoField.type.declaredConstructors.firstOrNull {
-            it.parameterCount == 5 && it.parameterTypes[1] == String::class.java && it.parameterTypes[4] == Int::class.javaPrimitiveType
-        } ?: return null
-        val spotxeroJwo = jwoCtor.newInstance(null, "SpotXero Version", null, null, 29)
-
-        val kwoCtor = itemClass.declaredConstructors.firstOrNull { it.parameterCount == 6 } ?: return null
-        val visibilityFlow = stateFlowCtor.newInstance(java.lang.Boolean.TRUE)
-        val visibility = if (kwoCtor.parameterTypes[2].isInstance(visibilityFlow)) {
-            visibilityFlow
-        } else {
-            fields.first { kwoCtor.parameterTypes[2].isAssignableFrom(it.type) }.get(nativeVersionItem)
-        }
-        val presenterFactory = fields.first { kwoCtor.parameterTypes[5].isAssignableFrom(it.type) }.get(nativeVersionItem)
-        return kwoCtor.newInstance("spotxero_version", spotxeroJwo, visibility, itemGroup, customProvider, presenterFactory)
-    }
-
-    private fun createVersionProvider(presenterCtor: Constructor<*>, nativePresenter: Any, context: Context): Any? {
-        val providerType = presenterCtor.parameterTypes[1]
-        val providerField = presenterCtor.declaringClass.declaredFields.firstOrNull {
-            !Modifier.isStatic(it.modifiers) && it.type == providerType
-        }?.apply { isAccessible = true } ?: return null
-        val nativeProvider = providerField.get(nativePresenter) ?: return null
-        val providerClass = nativeProvider.javaClass
-        val app = context.applicationContext as? Application ?: return null
-        val sourceStringFields = providerClass.declaredFields
-            .filter { !Modifier.isStatic(it.modifiers) && it.type == String::class.java }
-            .onEach { it.isAccessible = true }
-        val sourceStrings = sourceStringFields.map { it.get(nativeProvider) }
-        val providerCtor = providerClass.declaredConstructors.firstOrNull {
-            it.parameterCount == 3 &&
-                it.parameterTypes[0] == Application::class.java &&
-                it.parameterTypes[1] == String::class.java &&
-                it.parameterTypes[2] == String::class.java
-        } ?: return null
-        val provider = providerCtor.newInstance(app, sourceStrings.getOrNull(0), sourceStrings.getOrNull(1))
-        providerClass.declaredFields
-            .filter { !Modifier.isStatic(it.modifiers) && it.type == String::class.java }
-            .onEach { it.isAccessible = true }
-            .zip(sourceStrings)
-            .forEach { (field, value) -> field.set(provider, value) }
-        val packageInfo = PackageInfo().apply { versionName = BuildConfig.VERSION_NAME }
-        val versionField = providerClass.declaredFields.firstOrNull { field ->
-            if (Modifier.isStatic(field.modifiers)) return@firstOrNull false
-            val cached = runCatching { field.apply { isAccessible = true }.get(provider) }.getOrNull() ?: return@firstOrNull false
-            runCatching { cached.javaClass.getMethod("getValue").invoke(cached) is PackageInfo }.getOrDefault(false)
-        }?.apply { isAccessible = true } ?: return null
-        val lazyCtor = versionField.type.declaredConstructors.firstOrNull { it.parameterCount == 1 } ?: return null
-        val valueFactoryType = lazyCtor.parameterTypes[0]
-        val valueFactory = Proxy.newProxyInstance(
-            valueFactoryType.classLoader,
-            arrayOf(valueFactoryType)
-        ) { proxy, method, args ->
-            when {
-                method.name == "invoke" && method.parameterCount == 0 -> packageInfo
-                method.name == "equals" -> args?.get(0) === proxy
-                method.name == "hashCode" -> System.identityHashCode(proxy)
-                method.name == "toString" -> BuildConfig.VERSION_NAME
-                else -> null
-            }
-        }
-        versionField.set(provider, lazyCtor.newInstance(valueFactory))
-        return provider
-    }
-
-    private fun seekDurationSeconds(): Int =
-        PreferencesManager.getInt(PrefKeys.KEY_SEEK_DURATION_SECONDS, 10).coerceIn(5, 30)
-
-    private fun showSeekDurationBottomSheet() {
-        val activity = currentActivity?.get()
-        if (activity == null || activity.isFinishing || activity.isDestroyed) {
-            cycleSeekDuration()
-            return
-        }
-        activity.runOnUiThread {
-            runCatching {
-                val durations = intArrayOf(5, 10, 15, 20, 25, 30)
-                var selectedDuration = seekDurationSeconds()
-                val isAmoled = PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_AMOLED, false)
-                val density = activity.resources.displayMetrics.density
-                fun dp(v: Int): Int = (v * density).toInt()
-
-                val dialog = android.app.Dialog(activity, android.R.style.Theme_Translucent_NoTitleBar)
-                dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
-
-                val window = dialog.window ?: return@runCatching
-                window.setLayout(
-                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
-                window.setDimAmount(0.6f)
-                window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                window.attributes.windowAnimations = 0
-
-                var isDismissing = false
-                val rootLayout = android.widget.FrameLayout(activity).apply {
-                    layoutParams = android.view.ViewGroup.LayoutParams(
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                }
-
-                val navBarBottom = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                    activity.window.decorView.rootWindowInsets?.getInsets(android.view.WindowInsets.Type.navigationBars())?.bottom ?: 0
-                } else {
-                    @Suppress("DEPRECATION")
-                    activity.window.decorView.rootWindowInsets?.systemWindowInsetBottom ?: 0
-                }
-
-                val sheetContainer = android.widget.LinearLayout(activity).apply {
-                    orientation = android.widget.LinearLayout.VERTICAL
-                    val bg = android.graphics.drawable.GradientDrawable().apply {
-                        cornerRadii = floatArrayOf(
-                            dp(28).toFloat(), dp(28).toFloat(),
-                            dp(28).toFloat(), dp(28).toFloat(),
-                            0f, 0f,
-                            0f, 0f
-                        )
-                        setColor(if (isAmoled) android.graphics.Color.BLACK else android.graphics.Color.parseColor("#242424"))
-                    }
-                    background = bg
-                    setPadding(0, dp(12), 0, dp(16) + navBarBottom)
-                    layoutParams = android.widget.FrameLayout.LayoutParams(
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-                        android.view.Gravity.BOTTOM
-                    )
-                    isClickable = true
-                }
-                rootLayout.addView(sheetContainer)
-
-                fun dismissWithAnimation() {
-                    if (isDismissing) return
-                    isDismissing = true
-                    val targetY = if (sheetContainer.height > 0) sheetContainer.height.toFloat() else dp(450).toFloat()
-                    sheetContainer.animate()
-                        .translationY(targetY)
-                        .setDuration(200)
-                        .setInterpolator(android.view.animation.AccelerateInterpolator(1.6f))
-                        .withEndAction {
-                            dialog.dismiss()
-                        }
-                        .start()
-                }
-
-                rootLayout.setOnClickListener {
-                    dismissWithAnimation()
-                }
-
-                dialog.setOnKeyListener { _, keyCode, event ->
-                    if (keyCode == android.view.KeyEvent.KEYCODE_BACK && event.action == android.view.KeyEvent.ACTION_UP) {
-                        dismissWithAnimation()
-                        true
-                    } else false
-                }
-
-                val handlePill = android.view.View(activity).apply {
-                    layoutParams = android.widget.LinearLayout.LayoutParams(dp(36), dp(4)).apply {
-                        gravity = android.view.Gravity.CENTER_HORIZONTAL
-                        bottomMargin = dp(16)
-                    }
-                    background = android.graphics.drawable.GradientDrawable().apply {
-                        cornerRadius = dp(2).toFloat()
-                        setColor(android.graphics.Color.parseColor("#5a5a5a"))
-                    }
-                }
-                sheetContainer.addView(handlePill)
-
-                val titleView = android.widget.TextView(activity).apply {
-                    text = "Seek duration"
-                    setTextColor(android.graphics.Color.WHITE)
-                    textSize = 18f
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                    gravity = android.view.Gravity.CENTER_HORIZONTAL
-                    layoutParams = android.widget.LinearLayout.LayoutParams(
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-                    ).apply {
-                        leftMargin = dp(24)
-                        rightMargin = dp(24)
-                        bottomMargin = dp(6)
-                    }
-                }
-                sheetContainer.addView(titleView)
-
-                val subtitleView = android.widget.TextView(activity).apply {
-                    text = "Seconds to skip when seeking"
-                    setTextColor(android.graphics.Color.parseColor("#a7a7a7"))
-                    textSize = 14f
-                    gravity = android.view.Gravity.CENTER_HORIZONTAL
-                    layoutParams = android.widget.LinearLayout.LayoutParams(
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-                    ).apply {
-                        leftMargin = dp(24)
-                        rightMargin = dp(24)
-                        bottomMargin = dp(16)
-                    }
-                }
-                sheetContainer.addView(subtitleView)
-
-                val spotifyGreen = android.graphics.Color.parseColor("#1ed760")
-                val unselectedGrey = android.graphics.Color.parseColor("#535353")
-                fun buildRadioDrawable(selected: Boolean): android.graphics.drawable.Drawable {
-                    return if (!selected) {
-                        android.graphics.drawable.GradientDrawable().apply {
-                            shape = android.graphics.drawable.GradientDrawable.OVAL
-                            setSize(dp(20), dp(20))
-                            setColor(android.graphics.Color.TRANSPARENT)
-                            setStroke(dp(2), unselectedGrey)
-                        }
-                    } else {
-                        val outer = android.graphics.drawable.GradientDrawable().apply {
-                            shape = android.graphics.drawable.GradientDrawable.OVAL
-                            setSize(dp(20), dp(20))
-                            setColor(android.graphics.Color.TRANSPARENT)
-                            setStroke(dp(2), spotifyGreen)
-                        }
-                        val inner = android.graphics.drawable.GradientDrawable().apply {
-                            shape = android.graphics.drawable.GradientDrawable.OVAL
-                            setSize(dp(10), dp(10))
-                            setColor(spotifyGreen)
-                        }
-                        android.graphics.drawable.LayerDrawable(arrayOf(outer, inner)).apply {
-                            setLayerGravity(1, android.view.Gravity.CENTER)
-                            val inset = dp(5)
-                            setLayerInset(1, inset, inset, inset, inset)
-                        }
-                    }
-                }
-
-                val radioIndicators = mutableMapOf<Int, android.widget.ImageView>()
-
-                fun commitSelection(duration: Int) {
-                    PreferencesManager.setInt(activity, PrefKeys.KEY_SEEK_DURATION_SECONDS, duration)
-                    dismissWithAnimation()
-                }
-
-                for (d in durations) {
-                    val row = android.widget.LinearLayout(activity).apply {
-                        orientation = android.widget.LinearLayout.HORIZONTAL
-                        gravity = android.view.Gravity.CENTER_VERTICAL
-                        layoutParams = android.widget.LinearLayout.LayoutParams(
-                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                            dp(52)
-                        )
-                        setPadding(dp(24), 0, dp(24), 0)
-                        val outValue = android.util.TypedValue()
-                        activity.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
-                        setBackgroundResource(outValue.resourceId)
-                        isClickable = true
-                    }
-
-                    val label = android.widget.TextView(activity).apply {
-                        text = "$d seconds"
-                        setTextColor(android.graphics.Color.WHITE)
-                        textSize = 16f
-                        layoutParams = android.widget.LinearLayout.LayoutParams(
-                            0,
-                            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-                            1f
-                        )
-                    }
-                    row.addView(label)
-
-                    val radioIndicator = android.widget.ImageView(activity).apply {
-                        layoutParams = android.widget.LinearLayout.LayoutParams(dp(20), dp(20))
-                        setImageDrawable(buildRadioDrawable(d == selectedDuration))
-                    }
-                    radioIndicators[d] = radioIndicator
-                    row.addView(radioIndicator)
-
-                    row.setOnClickListener {
-                        selectedDuration = d
-                        radioIndicators.forEach { (dur, indicator) ->
-                            indicator.setImageDrawable(buildRadioDrawable(dur == d))
-                        }
-                        commitSelection(d)
-                    }
-                    sheetContainer.addView(row)
-                }
-
-                sheetContainer.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
-                    override fun onPreDraw(): Boolean {
-                        sheetContainer.viewTreeObserver.removeOnPreDrawListener(this)
-                        val startY = if (sheetContainer.height > 0) sheetContainer.height.toFloat() else dp(450).toFloat()
-                        sheetContainer.translationY = startY
-                        sheetContainer.animate()
-                            .translationY(0f)
-                            .setDuration(280)
-                            .setInterpolator(android.view.animation.DecelerateInterpolator(2.0f))
-                            .start()
-                        return true
-                    }
-                })
-
-                dialog.setContentView(rootLayout)
-                dialog.show()
-            }.onFailure {
-                cycleSeekDuration()
-            }
-        }
-    }
-
     private fun cycleSeekDuration() {
-        val current = seekDurationSeconds()
+        val current = InAppSettingsSheets.seekDurationSeconds()
         val next = if (current >= 30) 5 else ((current / 5) + 1) * 5
         PreferencesManager.setInt(currentActivity?.get(), PrefKeys.KEY_SEEK_DURATION_SECONDS, next)
         currentActivity?.get()?.let { activity ->
@@ -1194,12 +1258,22 @@ object InAppSettingsHook {
         }
     }
 
-    private fun createSubtitleProvider(subtitle: String): Any = createSubtitleProvider { subtitle }
-
     private fun syncToggleFlows() {
-        for ((spec, flow) in activeToggleFlows) {
+        for (binding in activeToggleBindings) {
             runCatching {
-                stateFlowEmit.invoke(flow, PreferencesManager.isStoredEnabled(spec.key, spec.defaultValue))
+                stateFlowEmit.invoke(
+                    binding.valueFlow,
+                    PreferencesManager.isStoredEnabled(binding.spec.key, binding.spec.defaultValue)
+                )
+                stateFlowEmit.invoke(
+                    binding.visibilityFlow,
+                    isRowVisible(binding.spec.dependsOnKey, binding.spec.key == PrefKeys.KEY_MASTER_ENABLED)
+                )
+            }
+        }
+        for (binding in activeVisibilityBindings) {
+            runCatching {
+                stateFlowEmit.invoke(binding.visibilityFlow, binding.isVisible())
             }
         }
     }
@@ -1312,7 +1386,7 @@ object InAppSettingsHook {
         val fallbackIcon = descriptorClass.declaredFields.first { it.type == iconType }
             .apply { isAccessible = true }.get(refDesc)
         val spotxeroIcon = runCatching { buildSpotXeroRowIcon(iconType) }
-            .onFailure { Log.e(TAG, "Failed building SpotXero row icon: ${it.message}", it) }
+            .onFailure { Log.w(TAG, "Using fallback SpotXero row icon: ${it.message}") }
             .getOrNull() ?: fallbackIcon
         val uriClass = descriptorCtor.parameterTypes[1]
         val spotxeroUri = uriClass.getConstructor(String::class.java).newInstance(SPOTXERO_URI)
@@ -1369,8 +1443,14 @@ object InAppSettingsHook {
         sectionItemsField.set(mainSection, persistentList)
     }
 
-    private fun buildSpotXeroRowIcon(r2yClass: Class<*>): Any {
+    private fun buildSpotXeroRowIcon(r2yClass: Class<*>): Any? {
         spotxeroIconCache?.let { return it }
+        val logoClass = iconLogoClass ?: return null
+        val builderClass = vectorBuilderClass ?: return null
+        val pathCtor = vectorPathCtor ?: return null
+        val moveCtor = moveToCtor ?: return null
+        val curveCtor = curveToCtor ?: return null
+        val closeInstance = pathCloseInstance ?: return null
 
         val n0yFields = r2yClass.declaredFields.filter {
             !Modifier.isStatic(it.modifiers) && !it.type.isPrimitive
@@ -1381,8 +1461,8 @@ object InAppSettingsHook {
         }
         val oc80Class = n0yCtor.parameterTypes[0]
 
-        val templateLogo = iconLogoClass.declaredFields.first {
-            Modifier.isStatic(it.modifiers) && it.type == iconLogoClass
+        val templateLogo = logoClass.declaredFields.first {
+            Modifier.isStatic(it.modifiers) && it.type == logoClass
         }.apply { isAccessible = true }.get(null)!!
         val templatePair = n0yFields.first().get(templateLogo)!!
         val oc80Field = n0yClass.declaredFields.first { it.type == oc80Class }.apply { isAccessible = true }
@@ -1395,18 +1475,18 @@ object InAppSettingsHook {
             !Modifier.isStatic(f.modifiers) && List::class.java.isAssignableFrom(f.type) && f.type != List::class.java
         }.apply { isAccessible = true }
         val templatePath = (childrenField.get(templateRootGroup) as List<*>).first {
-            vectorPathCtor.declaringClass.isInstance(it)
+            pathCtor.declaringClass.isInstance(it)
         }!!
-        val brushType = vectorPathCtor.parameterTypes[3]
-        val blackBrush = vectorPathCtor.declaringClass.declaredFields.firstNotNullOf { f ->
+        val brushType = pathCtor.parameterTypes[3]
+        val blackBrush = pathCtor.declaringClass.declaredFields.firstNotNullOf { f ->
             if (f.type == brushType) f.apply { isAccessible = true }.get(templatePath) else null
         }
 
-        val vec16 = buildSpotXeroVector(16f, "SpotXero.Vector.Logo16", blackBrush, oc80Class)
-        val vec24 = buildSpotXeroVector(24f, "SpotXero.Vector.Logo24", blackBrush, oc80Class)
+        val vec16 = buildSpotXeroVector(16f, "SpotXero.Vector.Logo16", blackBrush, oc80Class, builderClass, pathCtor, moveCtor, curveCtor, closeInstance)
+        val vec24 = buildSpotXeroVector(24f, "SpotXero.Vector.Logo24", blackBrush, oc80Class, builderClass, pathCtor, moveCtor, curveCtor, closeInstance)
         val n0yPair = n0yCtor.newInstance(vec16, vec24)
 
-        val icon = allocateInstance(iconLogoClass)
+        val icon = allocateInstance(logoClass)
         for (f in n0yFields) {
             f.set(icon, n0yPair)
         }
@@ -1419,19 +1499,24 @@ object InAppSettingsHook {
         sizeDp: Float,
         name: String,
         strokeBrush: Any,
-        oc80Class: Class<*>
+        oc80Class: Class<*>,
+        builderClass: Class<*>,
+        pathCtor: Constructor<*>,
+        moveCtor: Constructor<*>,
+        curveCtor: Constructor<*>,
+        closeInstance: Any
     ): Any {
-        val builderCtor = vectorBuilderClass.declaredConstructors.first { c ->
+        val builderCtor = builderClass.declaredConstructors.first { c ->
             val p = c.parameterTypes
             p.size == 9 && p[0] == String::class.java && p[1] == Float::class.javaPrimitiveType
         }
-        val buildMethod = vectorBuilderClass.declaredMethods.first {
+        val buildMethod = builderClass.declaredMethods.first {
             !Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && it.returnType == oc80Class
         }
-        val stackField = vectorBuilderClass.declaredFields.first {
+        val stackField = builderClass.declaredFields.first {
             !Modifier.isStatic(it.modifiers) && ArrayList::class.java.isAssignableFrom(it.type)
         }.apply { isAccessible = true }
-        val groupClass = vectorBuilderClass.declaredFields.first { f ->
+        val groupClass = builderClass.declaredFields.first { f ->
             !Modifier.isStatic(f.modifiers) &&
                 !f.type.isPrimitive &&
                 f.type != String::class.java &&
@@ -1455,11 +1540,11 @@ object InAppSettingsHook {
 
         val paths = groupChildrenField.get(rotateGroup) as ArrayList<Any>
         paths.add(
-            vectorPathCtor.newInstance(
+            pathCtor.newInstance(
                 "",
                 arrayListOf(
-                    moveToCtor.newInstance(28f, 35f),
-                    curveToCtor.newInstance(42f, 42f, 66f, 50f, 80f, 57f)
+                    moveCtor.newInstance(28f, 35f),
+                    curveCtor.newInstance(42f, 42f, 66f, 50f, 80f, 57f)
                 ),
                 0,
                 null,
@@ -1476,11 +1561,11 @@ object InAppSettingsHook {
             )
         )
         paths.add(
-            vectorPathCtor.newInstance(
+            pathCtor.newInstance(
                 "",
                 arrayListOf(
-                    moveToCtor.newInstance(28f, 57f),
-                    curveToCtor.newInstance(42f, 50f, 66f, 42f, 80f, 35f)
+                    moveCtor.newInstance(28f, 57f),
+                    curveCtor.newInstance(42f, 50f, 66f, 42f, 80f, 35f)
                 ),
                 0,
                 null,
@@ -1497,15 +1582,15 @@ object InAppSettingsHook {
             )
         )
         paths.add(
-            vectorPathCtor.newInstance(
+            pathCtor.newInstance(
                 "",
                 arrayListOf(
-                    moveToCtor.newInstance(41f, 75.5f),
-                    curveToCtor.newInstance(41f, 70.53f, 46.82f, 66.5f, 54f, 66.5f),
-                    curveToCtor.newInstance(61.18f, 66.5f, 67f, 70.53f, 67f, 75.5f),
-                    curveToCtor.newInstance(67f, 80.47f, 61.18f, 84.5f, 54f, 84.5f),
-                    curveToCtor.newInstance(46.82f, 84.5f, 41f, 80.47f, 41f, 75.5f),
-                    pathCloseInstance
+                    moveCtor.newInstance(41f, 75.5f),
+                    curveCtor.newInstance(41f, 70.53f, 46.82f, 66.5f, 54f, 66.5f),
+                    curveCtor.newInstance(61.18f, 66.5f, 67f, 70.53f, 67f, 75.5f),
+                    curveCtor.newInstance(67f, 80.47f, 61.18f, 84.5f, 54f, 84.5f),
+                    curveCtor.newInstance(46.82f, 84.5f, 41f, 80.47f, 41f, 75.5f),
+                    closeInstance
                 ),
                 0,
                 null,

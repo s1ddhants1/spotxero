@@ -52,10 +52,20 @@ object HookRegistry {
     private var isResolved: Boolean = false
 
     @Volatile
+    private var isSettingsResolved: Boolean = false
+
+    @Volatile
     private var inAppSettingsSupported: Boolean = false
 
     private val installedHooks = Collections.synchronizedSet(mutableSetOf<String>())
+    private val failedHooks = Collections.synchronizedSet(mutableSetOf<String>())
     private val lock = Any()
+
+    fun installedHookNames(): Set<String> = synchronized(installedHooks) { installedHooks.toSet() }
+
+    fun failedHookNames(): Set<String> = synchronized(failedHooks) { failedHooks.toSet() }
+
+    fun currentAppInfo(): ApplicationInfo? = startupAppInfo
 
     init {
         PreferencesManager.addOnPreferenceChangedListener {
@@ -83,8 +93,32 @@ object HookRegistry {
     fun reset() {
         synchronized(lock) {
             isResolved = false
+            isSettingsResolved = false
             installedHooks.clear()
+            failedHooks.clear()
         }
+    }
+
+    private fun resolveVersionCode(appInfo: ApplicationInfo): Long {
+        val apkPath = appInfo.sourceDir
+        return runCatching {
+            val pm = Class.forName("android.app.ActivityThread")
+                .getMethod("getPackageManager")
+                .invoke(null)
+            val method = pm.javaClass.methods.firstOrNull { it.name == "getPackageInfo" }
+            val userId = android.os.Process.myUid() / 100000
+            val pkgInfo = when (method?.parameterTypes?.size) {
+                3 -> method.invoke(pm, appInfo.packageName, 0, userId)
+                4 -> method.invoke(pm, appInfo.packageName, 0L, userId)
+                else -> null
+            } as? android.content.pm.PackageInfo
+            if (android.os.Build.VERSION.SDK_INT >= 28) {
+                pkgInfo?.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                pkgInfo?.versionCode?.toLong()
+            }
+        }.getOrNull() ?: java.io.File(apkPath).lastModified()
     }
 
     fun resolveAndInstall(module: XposedModule, appInfo: ApplicationInfo, classLoader: ClassLoader) {
@@ -92,36 +126,46 @@ object HookRegistry {
         startupAppInfo = appInfo
         startupClassLoader = classLoader
 
-        if (!PreferencesManager.isEnabled(PrefKeys.KEY_MASTER_ENABLED, true)) {
-            Log.i(TAG, "Master switch disabled; deferring hook resolution until enabled")
-            return
-        }
+        val masterEnabled = PreferencesManager.isEnabled(PrefKeys.KEY_MASTER_ENABLED, true)
 
         synchronized(lock) {
+            inAppSettingsSupported = ModuleStatus.isLspatchIntegrated(module, appInfo, classLoader)
+
+            if (!masterEnabled) {
+                if (!inAppSettingsSupported) {
+                    Log.i(TAG, "Master switch disabled; deferring hook resolution until enabled")
+                    return
+                }
+                if (!isSettingsResolved) {
+                    val versionCode = resolveVersionCode(appInfo)
+                    val cachedSignatures = DexKitSignatureCache.loadFromFile(appInfo, versionCode)
+                    System.loadLibrary("dexkit")
+                    DexKitBridge.create(appInfo.sourceDir).use { dexKit ->
+                        val signatures = DexKitResolver.resolve(
+                            dexKit,
+                            classLoader,
+                            cachedSignatures,
+                            includeInAppSettings = true,
+                            settingsOnly = true
+                        )
+                        if (signatures.isNotEmpty()) {
+                            val merged = cachedSignatures.orEmpty() + signatures
+                            if (merged != cachedSignatures) {
+                                DexKitSignatureCache.saveToFile(appInfo, versionCode, merged)
+                            }
+                        }
+                    }
+                    isSettingsResolved = true
+                }
+                installHooks(module, listOf(HookEntry("InAppSettings", { inAppSettingsSupported }) { InAppSettingsHook.install(module) }))
+                return
+            }
+
             if (!isResolved) {
                 val apkPath = appInfo.sourceDir
-                val versionCode: Long = runCatching {
-                    val pm = Class.forName("android.app.ActivityThread")
-                        .getMethod("getPackageManager")
-                        .invoke(null)
-                    val method = pm.javaClass.methods.firstOrNull { it.name == "getPackageInfo" }
-                    val userId = android.os.Process.myUid() / 100000
-                    val pkgInfo = when (method?.parameterTypes?.size) {
-                        3 -> method.invoke(pm, appInfo.packageName, 0, userId)
-                        4 -> method.invoke(pm, appInfo.packageName, 0L, userId)
-                        else -> null
-                    } as? android.content.pm.PackageInfo
-                    if (android.os.Build.VERSION.SDK_INT >= 28) {
-                        pkgInfo?.longVersionCode
-                    } else {
-                        @Suppress("DEPRECATION")
-                        pkgInfo?.versionCode?.toLong()
-                    }
-                }.getOrNull() ?: java.io.File(apkPath).lastModified()
-
+                val versionCode = resolveVersionCode(appInfo)
                 val cachedSignatures = DexKitSignatureCache.loadFromFile(appInfo, versionCode)
 
-                inAppSettingsSupported = ModuleStatus.isLspatchIntegrated(module, appInfo, classLoader)
                 System.loadLibrary("dexkit")
                 DexKitBridge.create(apkPath).use { dexKit ->
                     val signatures = DexKitResolver.resolve(
@@ -139,10 +183,33 @@ object HookRegistry {
                         DexKitSignatureCache.saveToFile(appInfo, versionCode, signatures)
                     }
                 }
+                isSettingsResolved = inAppSettingsSupported
                 isResolved = true
             }
 
             installAll(module)
+        }
+    }
+
+    private fun installHooks(module: XposedModule, hooks: List<HookEntry>) {
+        startupModule = module
+        val failures = mutableListOf<String>()
+        for (hook in hooks) {
+            if (hook.isEnabled() && installedHooks.add(hook.name)) {
+                try {
+                    hook.install()
+                    failedHooks.remove(hook.name)
+                    Log.i(TAG, "Installed hook: ${hook.name}")
+                } catch (t: Throwable) {
+                    installedHooks.remove(hook.name)
+                    failedHooks.add(hook.name)
+                    failures += hook.name
+                    Log.e(TAG, "Failed installing hook ${hook.name}", t)
+                }
+            }
+        }
+        if (failures.isNotEmpty()) {
+            throw IllegalStateException("Hook installation failed: ${failures.joinToString()}")
         }
     }
 
@@ -179,22 +246,7 @@ object HookRegistry {
                 HookEntry("PackageSignature", { true }) { PackageSignatureHook.install(module) },
             )
 
-            val failures = mutableListOf<String>()
-            for (hook in hooks) {
-                if (hook.isEnabled() && installedHooks.add(hook.name)) {
-                    try {
-                        hook.install()
-                        Log.i(TAG, "Installed hook: ${hook.name}")
-                    } catch (t: Throwable) {
-                        installedHooks.remove(hook.name)
-                        failures += hook.name
-                        Log.e(TAG, "Failed installing hook ${hook.name}", t)
-                    }
-                }
-            }
-            if (failures.isNotEmpty()) {
-                throw IllegalStateException("Hook installation failed: ${failures.joinToString()}")
-            }
+            installHooks(module, hooks)
         }
     }
 }

@@ -120,6 +120,15 @@ object PrefKeys {
         "genius"
     )
     val DEFAULT_LYRICS_PROVIDERS_ORDER = DEFAULT_LYRICS_PROVIDERS.joinToString(",")
+
+    fun parseLyricsProviders(raw: String): List<String> {
+        val items = raw.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        val result = items.filter { it in DEFAULT_LYRICS_PROVIDERS }.distinct().toMutableList()
+        for (provider in DEFAULT_LYRICS_PROVIDERS) {
+            if (provider !in result) result.add(provider)
+        }
+        return result
+    }
     const val KEY_LYRICS_PROVIDER_SPICYLYRICS = "pref_lyrics_provider_spicylyrics"
     const val KEY_LYRICS_PROVIDER_BETTERLYRICS = "pref_lyrics_provider_betterlyrics"
     const val KEY_LYRICS_PROVIDER_LRCRED = "pref_lyrics_provider_lrcred"

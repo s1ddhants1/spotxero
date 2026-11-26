@@ -65,15 +65,36 @@ fun HomeDashboard(
     onSeekProgressiveToggle: (Boolean) -> Unit = {},
     onOpenLyricsSources: () -> Unit = {},
     onRequestScope: () -> Unit = {},
+    onOpenInAppSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        FrameworkStatusBanner(uiState = uiState, onRequestScope = onRequestScope)
+        FrameworkStatusBanner(
+            uiState = uiState,
+            onRequestScope = onRequestScope
+        )
 
-        if (!uiState.isIntegrated) {
+        if (uiState.isIntegrated) {
+            SettingsGroup {
+                SettingsItem(
+                    title = stringResource(R.string.btn_open_in_app_settings),
+                    subtitle = stringResource(R.string.open_in_app_settings_desc),
+                    painter = painterResource(id = R.drawable.ic_tune),
+                    onClick = onOpenInAppSettings,
+                    trailingContent = {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_launch),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                )
+            }
+        } else {
 
         MasterSwitchCard(
             checked = uiState.isMasterEnabled,
@@ -218,7 +239,7 @@ fun HomeDashboard(
             }
         }
 
-        } // end !isIntegrated
+        }
     }
 }
 
@@ -320,16 +341,30 @@ private fun FrameworkStatusBanner(
     uiState: DashboardUiState,
     onRequestScope: () -> Unit
 ) {
-    val isBannerActive = uiState.isFrameworkConnected && uiState.isInjectable
+    val isReady = uiState.isFrameworkConnected && uiState.isInjectable
+    val isPaused = isReady && !uiState.isMasterEnabled
+    val isBannerActive = isReady && !isPaused
     val canRequestScope = uiState.canRequestScope
     val haptics = LocalAppHaptics.current
-    val statusBg = if (isBannerActive) {
-        MaterialTheme.colorScheme.surfaceContainerHigh
-    } else {
-        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+    val statusBg = when {
+        isBannerActive -> MaterialTheme.colorScheme.surfaceContainerHigh
+        isPaused -> MaterialTheme.colorScheme.surfaceContainerHigh
+        else -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
     }
-    val badgeColor = if (isBannerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-    val iconTint = if (isBannerActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onError
+    val badgeColor = when {
+        isBannerActive -> MaterialTheme.colorScheme.primary
+        isPaused -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.error
+    }
+    val iconTint = when {
+        isBannerActive -> MaterialTheme.colorScheme.onPrimary
+        isPaused -> MaterialTheme.colorScheme.surface
+        else -> MaterialTheme.colorScheme.onError
+    }
+    val borderColor = when {
+        isBannerActive || isPaused -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        else -> MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+    }
     val cardShape = RoundedCornerShape(20.dp)
 
     val cardModifier = if (canRequestScope) {
@@ -344,11 +379,33 @@ private fun FrameworkStatusBanner(
         Modifier.fillMaxWidth()
     }
 
+    val titleText = if (isPaused) {
+        stringResource(R.string.framework_paused_title)
+    } else if (uiState.titleArgs.isEmpty()) {
+        stringResource(uiState.titleRes)
+    } else {
+        stringResource(uiState.titleRes, *uiState.titleArgs.toTypedArray())
+    }
+
+    val descText = if (isPaused) {
+        stringResource(R.string.framework_paused_desc)
+    } else if (uiState.descArgs.isEmpty()) {
+        stringResource(uiState.descRes)
+    } else {
+        stringResource(uiState.descRes, *uiState.descArgs.toTypedArray())
+    }
+
+    val spotifyLabel = uiState.activeSpotify?.takeIf {
+        uiState.titleRes != R.string.framework_spotify_not_installed_title
+    }?.let { info ->
+        "Spotify ${info.versionName}"
+    }
+
     OutlinedCard(
         modifier = cardModifier,
         shape = cardShape,
         colors = CardDefaults.outlinedCardColors(containerColor = statusBg),
-        border = BorderStroke(1.dp, if (isBannerActive) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+        border = BorderStroke(1.dp, borderColor)
     ) {
         Row(
             modifier = Modifier.padding(AppSpacing.md),
@@ -358,7 +415,13 @@ private fun FrameworkStatusBanner(
             Surface(shape = CircleShape, color = badgeColor, modifier = Modifier.size(38.dp)) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        painter = painterResource(id = if (isBannerActive) R.drawable.ic_check_circle else R.drawable.ic_warning),
+                        painter = painterResource(
+                            id = when {
+                                isBannerActive -> R.drawable.ic_check_circle
+                                isPaused -> R.drawable.ic_power_settings_new
+                                else -> R.drawable.ic_warning
+                            }
+                        ),
                         contentDescription = null,
                         tint = iconTint,
                         modifier = Modifier.size(22.dp)
@@ -367,25 +430,32 @@ private fun FrameworkStatusBanner(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (uiState.titleArgs.isEmpty()) {
-                        stringResource(uiState.titleRes)
-                    } else {
-                        stringResource(uiState.titleRes, *uiState.titleArgs.toTypedArray())
-                    },
+                    text = titleText,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.height(AppSpacing.xxs))
                 Text(
-                    text = if (uiState.descArgs.isEmpty()) {
-                        stringResource(uiState.descRes)
-                    } else {
-                        stringResource(uiState.descRes, *uiState.descArgs.toTypedArray())
-                    },
+                    text = descText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (spotifyLabel != null) {
+                    Spacer(Modifier.height(AppSpacing.xs))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.8f)
+                    ) {
+                        Text(
+                            text = spotifyLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
             }
             if (canRequestScope) {
                 Icon(

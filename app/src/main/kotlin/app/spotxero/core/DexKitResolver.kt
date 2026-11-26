@@ -155,10 +155,20 @@ object DexKitResolver {
         dexKit: DexKitBridge,
         classLoader: ClassLoader,
         cachedSignatures: Map<String, String>?,
-        includeInAppSettings: Boolean
+        includeInAppSettings: Boolean,
+        settingsOnly: Boolean = false
     ): Map<String, String> {
         val signatures = mutableMapOf<String, String>()
         val members = mutableMapOf<String, Any>()
+
+        if (settingsOnly) {
+            if (includeInAppSettings) {
+                resolveSettingsRootFactory(dexKit, classLoader, cachedSignatures, signatures, members)
+                resolveNativeSettingsContracts(dexKit, classLoader, cachedSignatures, signatures, members)
+            }
+            resolved = members
+            return signatures
+        }
 
         resolveShareUrlBuilder(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveShareResponseUrls(classLoader, cachedSignatures, signatures, members)
@@ -1804,6 +1814,16 @@ object DexKitResolver {
 
         val toggleItemCtor = cachedConstructor(cached, KEY_SETTINGS_TOGGLE_ITEM_CTOR, classLoader, ::isSettingsToggleItemCtor)
             ?: localFilesCreateMethod?.returnType?.declaredConstructors?.firstOrNull(::isSettingsToggleItemCtor)
+            ?: runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        name("<init>")
+                        paramCount(13)
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getConstructorInstance(classLoader) }.getOrNull() }
+                    .firstOrNull(::isSettingsToggleItemCtor)
+            }.getOrNull()
         storeCtor(KEY_SETTINGS_TOGGLE_ITEM_CTOR, toggleItemCtor, sigs, members)
 
         val controlInterface = toggleItemCtor?.parameterTypes?.getOrNull(10)
@@ -1840,6 +1860,20 @@ object DexKitResolver {
             .filter { it.isConstructor && it.paramCount == 2 }
             .mapNotNull { runCatching { it.getConstructorInstance(classLoader) }.getOrNull() }
             .firstOrNull { isToggleControlCtor(it, controlInterface) }
+            ?: if (controlInterface != null) {
+                runCatching {
+                    dexKit.findClass {
+                        matcher {
+                            interfaces {
+                                add(controlInterface.name)
+                            }
+                        }
+                    }.asSequence()
+                        .mapNotNull { runCatching { it.getInstance(classLoader) }.getOrNull() }
+                        .flatMap { it.declaredConstructors.asSequence() }
+                        .firstOrNull { isToggleControlCtor(it, controlInterface) }
+                }.getOrNull()
+            } else null
         storeCtor(KEY_SETTINGS_TOGGLE_CONTROL_CTOR, toggleControlCtor, sigs, members)
 
         val eyd1Interface = toggleControlCtor?.parameterTypes?.getOrNull(1)
@@ -1878,7 +1912,20 @@ object DexKitResolver {
                         .mapNotNull { runCatching { it.getConstructorInstance(classLoader) }.getOrNull() }
                         .firstOrNull(::isSuccessResultCtor)
                 }.getOrNull()
-            } else null
+            } else {
+                runCatching {
+                    dexKit.findMethod {
+                        matcher {
+                            name("setValue")
+                            paramCount(4)
+                        }
+                    }.asSequence()
+                        .flatMap { it.invokes.asSequence() }
+                        .filter { it.isConstructor && it.paramCount == 1 }
+                        .mapNotNull { runCatching { it.getConstructorInstance(classLoader) }.getOrNull() }
+                        .firstOrNull(::isSuccessResultCtor)
+                }.getOrNull()
+            }
         storeCtor(KEY_SETTINGS_SUCCESS_RESULT_CTOR, successResultCtor, sigs, members)
 
         val stateFlowCtor = cachedConstructor(cached, KEY_SETTINGS_STATE_FLOW_CTOR, classLoader, ::isStateFlowCtor)

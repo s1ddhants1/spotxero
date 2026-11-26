@@ -199,7 +199,8 @@ fun SpotXeroApp(
                                 onSeekDurationChange = { viewModel.setSeekDurationSeconds(it.roundToInt()) },
                                 onSeekProgressiveToggle = { viewModel.setSeekProgressive(it) },
                                 onOpenLyricsSources = { viewModel.showLyricsSourcesScreen() },
-                                onRequestScope = { viewModel.requestScope() }
+                                onRequestScope = { viewModel.requestScope() },
+                                onOpenInAppSettings = { viewModel.openInAppSettings() }
                             )
                         }
                         item(key = "bottom_spacer") { Spacer(Modifier.height(AppSpacing.xs)) }

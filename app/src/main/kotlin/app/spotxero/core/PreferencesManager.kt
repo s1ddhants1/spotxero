@@ -182,6 +182,14 @@ object PreferencesManager {
                     }
                 }
             }
+            val tp = targetPrefs
+            if (tp != null && prefs == remotePrefs && key !in SECRET_KEYS && prefs.contains(key)) {
+                when (val value = prefs.all[key]) {
+                    is Boolean -> tp.edit().putBoolean(key, value).apply()
+                    is String -> tp.edit().putString(key, value).apply()
+                    is Int -> tp.edit().putInt(key, value).apply()
+                }
+            }
             onPreferenceChangedListener?.invoke()
             for (listener in preferenceChangeCallbacks) {
                 runCatching { listener.invoke() }
@@ -488,12 +496,12 @@ object PreferencesManager {
         inMemoryStrings[key] = value
         updateStringFieldDirectly(key, value)
         val tp = getTargetPrefs()
-        if (tp != null && key !in SECRET_KEYS) {
+        val rp = remotePrefs
+        if (tp != null && (key !in SECRET_KEYS || rp == null)) {
             runCatching {
                 tp.edit().putString(key, value).commit()
             }
         }
-        val rp = remotePrefs
         if (rp != null) {
             runCatching {
                 rp.edit().putString(key, value).apply()
@@ -585,6 +593,7 @@ object PreferencesManager {
             PrefKeys.KEY_LYRICS_TRANSLATIONS -> isLyricsTranslationsEnabled = value
             PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED -> isAiLyricsTranslationEnabled = value
             PrefKeys.KEY_AI_TRANSLATION_DUAL_LINE -> isAiTranslationDualLine = value
+            PrefKeys.KEY_LYRICS_PROVIDER_SPICYLYRICS -> isSpicylyricsEnabled = value
             PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS -> isBetterlyricsEnabled = value
             PrefKeys.KEY_LYRICS_PROVIDER_LRCRED -> isLrcredEnabled = value
             PrefKeys.KEY_LYRICS_PROVIDER_LRCLIB -> isLrclibEnabled = value

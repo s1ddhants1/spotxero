@@ -30,7 +30,8 @@ object LSPatchHelper {
         val isInstalled: Boolean,
         val isPatched: Boolean,
         val isModuleEmbedded: Boolean,
-        val useManager: Boolean? = null
+        val useManager: Boolean? = null,
+        val packageName: String? = null
     )
 
     data class BannerEvaluation(
@@ -94,6 +95,8 @@ object LSPatchHelper {
         packageNames: List<String> = CommonUtils.SUPPORTED_PACKAGES
     ): TargetStatus {
         val pm = context.packageManager
+        val results = mutableListOf<TargetStatus>()
+
         for (pkg in packageNames) {
             val appInfo = runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -164,115 +167,78 @@ object LSPatchHelper {
             }
 
             val isPatched = hasMeta || hasFactory || hasLspAsset
-            return TargetStatus(
+            val status = TargetStatus(
                 isInstalled = true,
                 isPatched = isPatched,
                 isModuleEmbedded = isEmbedded,
-                useManager = useManager
+                useManager = useManager,
+                packageName = pkg
             )
-        }
-
-        return TargetStatus(
-            isInstalled = false,
-            isPatched = false,
-            isModuleEmbedded = false,
-            useManager = null
-        )
-    }
-
-    fun isLSPatched(context: Context): Boolean {
-        val appInfo = context.applicationInfo
-        val hasMeta = appInfo.metaData?.containsKey("lspatch") == true
-        val hasFactory = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            appInfo.appComponentFactory?.contains("lspatch", ignoreCase = true) == true
-        } else false
-        if (hasMeta || hasFactory) return true
-        val pm = context.packageManager
-        val installer = runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                pm.getInstallSourceInfo(context.packageName).installingPackageName
-            } else {
-                @Suppress("DEPRECATION")
-                pm.getInstallerPackageName(context.packageName)
+            if (isEmbedded) {
+                return status
             }
-        }.getOrNull()
-        return installer?.contains("lspatch", ignoreCase = true) == true
-    }
-
-    fun isIntegratedMode(
-        context: Context? = null,
-        remotePrefsAvailable: Boolean = false,
-        targetStatusProvider: () -> TargetStatus = {
-            if (context != null) inspectTargetApp(context) else TargetStatus(isInstalled = false, isPatched = false, isModuleEmbedded = false)
-        }
-    ): Boolean {
-        if (context != null) {
-            val metaResult = runCatching {
-                val pm = context.packageManager
-                val appInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    pm.getApplicationInfo(
-                        context.packageName,
-                        PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    pm.getApplicationInfo(context.packageName, PackageManager.GET_META_DATA)
-                }
-                val meta = appInfo.metaData
-                val b64 = meta?.getString("lspatch")
-                if (!b64.isNullOrBlank()) {
-                    val jsonStr = String(Base64.decode(b64, Base64.DEFAULT), StandardCharsets.UTF_8)
-                    val json = JSONObject(jsonStr)
-                    if (json.has("useManager")) {
-                        return@runCatching !json.optBoolean("useManager", true)
-                    }
-                }
-                null
-            }.getOrNull()
-            if (metaResult != null) return metaResult
+            results.add(status)
         }
 
-        val status = targetStatusProvider()
-        if (status.useManager != null) {
-            return !status.useManager
-        }
-        if (status.isModuleEmbedded) {
-            return true
-        }
-
-        return !remotePrefsAvailable
+        return results.firstOrNull { it.isPatched }
+            ?: results.firstOrNull()
+            ?: TargetStatus(
+                isInstalled = false,
+                isPatched = false,
+                isModuleEmbedded = false,
+                useManager = null,
+                packageName = null
+            )
     }
 
     fun evaluateFrameworkStatus(
-        context: Context,
         frameworkName: String?,
         frameworkVersion: String?,
         scope: List<String>?,
         isServiceBound: Boolean,
+        targetStatus: TargetStatus,
         packageNames: List<String> = CommonUtils.SUPPORTED_PACKAGES
-    ): BannerEvaluation = evaluateFrameworkStatus(
-        frameworkName = frameworkName,
-        frameworkVersion = frameworkVersion,
-        scope = scope,
-        isServiceBound = isServiceBound,
-        targetStatus = inspectTargetApp(context, packageNames),
-        packageNames = packageNames
-    )
-
-    fun evaluateFrameworkStatus(
-        context: Context,
-        isModuleActive: Boolean,
-        packageNames: List<String> = CommonUtils.SUPPORTED_PACKAGES
-    ): BannerEvaluation = evaluateFrameworkStatus(
-        isModuleActive = isModuleActive,
-        targetStatus = inspectTargetApp(context, packageNames)
-    )
-
-    fun evaluateFrameworkStatus(
-        isModuleActive: Boolean,
-        targetStatus: TargetStatus
     ): BannerEvaluation {
-        if (targetStatus.isInstalled && targetStatus.isPatched && (targetStatus.isModuleEmbedded || targetStatus.useManager == false)) {
+        val name = frameworkName ?: "Xposed"
+        val version = frameworkVersion ?: ""
+        val isLSPatchService = name.contains("LSPatch", ignoreCase = true)
+
+        if (isServiceBound && !isLSPatchService) {
+            val currentScope = scope ?: emptyList()
+            val isLSPosed = name.contains("LSPosed", ignoreCase = true)
+            val isInScope = if (isLSPosed) {
+                currentScope.any { it in packageNames }
+            } else {
+                currentScope.isEmpty() || currentScope.any { it in packageNames }
+            }
+
+            if (!isInScope) {
+                return BannerEvaluation(
+                    isConnected = true,
+                    isInjectable = false,
+                    frameworkName = name,
+                    frameworkVersion = version,
+                    titleRes = if (isLSPosed) R.string.framework_lsposed_not_in_scope_title else R.string.framework_lspatch_not_in_scope_title,
+                    descRes = if (isLSPosed) R.string.framework_lsposed_not_in_scope_desc else R.string.framework_lspatch_not_in_scope_desc,
+                    isIntegrated = false,
+                    canRequestScope = isLSPosed
+                )
+            }
+
+            return BannerEvaluation(
+                isConnected = true,
+                isInjectable = true,
+                frameworkName = name,
+                frameworkVersion = version,
+                titleRes = R.string.framework_active_title_dynamic,
+                titleArgs = listOf(name),
+                descRes = R.string.framework_active_desc,
+                descArgs = listOf(name, version),
+                isIntegrated = false
+            )
+        }
+
+        if (targetStatus.isInstalled && targetStatus.isPatched && targetStatus.isModuleEmbedded) {
             return BannerEvaluation(
                 isConnected = true,
                 isInjectable = true,
@@ -284,16 +250,55 @@ object LSPatchHelper {
             )
         }
 
-        if (isModuleActive) {
+        if (isServiceBound) {
+            if (!targetStatus.isInstalled) {
+                return BannerEvaluation(
+                    isConnected = true,
+                    isInjectable = false,
+                    frameworkName = name,
+                    frameworkVersion = version,
+                    titleRes = R.string.framework_spotify_not_installed_title,
+                    descRes = R.string.framework_spotify_not_installed_desc,
+                    isIntegrated = false
+                )
+            }
+            if (!targetStatus.isPatched) {
+                return BannerEvaluation(
+                    isConnected = false,
+                    isInjectable = false,
+                    frameworkName = name,
+                    frameworkVersion = version,
+                    titleRes = R.string.framework_inactive_title,
+                    descRes = R.string.framework_inactive_desc,
+                    isIntegrated = false
+                )
+            }
+
+            val currentScope = scope ?: emptyList()
+            val isInScope = currentScope.any { it in packageNames }
+
+            if (!isInScope) {
+                return BannerEvaluation(
+                    isConnected = true,
+                    isInjectable = false,
+                    frameworkName = name,
+                    frameworkVersion = version,
+                    titleRes = R.string.framework_lspatch_not_in_scope_title,
+                    descRes = R.string.framework_lspatch_not_in_scope_desc,
+                    isIntegrated = false,
+                    canRequestScope = true
+                )
+            }
+
             return BannerEvaluation(
                 isConnected = true,
                 isInjectable = true,
-                frameworkName = "Xposed",
-                frameworkVersion = "(Legacy)",
+                frameworkName = name,
+                frameworkVersion = version,
                 titleRes = R.string.framework_active_title_dynamic,
-                titleArgs = listOf("Xposed"),
+                titleArgs = listOf(name),
                 descRes = R.string.framework_active_desc,
-                descArgs = listOf("Xposed", "(Legacy)"),
+                descArgs = listOf(name, version),
                 isIntegrated = false
             )
         }
@@ -319,128 +324,5 @@ object LSPatchHelper {
             descRes = R.string.framework_inactive_desc,
             isIntegrated = false
         )
-    }
-
-    fun evaluateFrameworkStatus(
-        frameworkName: String?,
-        frameworkVersion: String?,
-        scope: List<String>?,
-        isServiceBound: Boolean,
-        targetStatus: TargetStatus,
-        packageNames: List<String> = CommonUtils.SUPPORTED_PACKAGES
-    ): BannerEvaluation {
-        if (targetStatus.isInstalled && targetStatus.isPatched && (targetStatus.isModuleEmbedded || targetStatus.useManager == false)) {
-            return BannerEvaluation(
-                isConnected = true,
-                isInjectable = true,
-                frameworkName = "LSPatch",
-                frameworkVersion = "(Embedded)",
-                titleRes = R.string.framework_lspatch_embedded_active_title,
-                descRes = R.string.framework_lspatch_embedded_active_desc,
-                isIntegrated = true
-            )
-        }
-
-        if (isServiceBound) {
-            val name = frameworkName ?: "Xposed"
-            val version = frameworkVersion ?: ""
-            val isLSPatch = name.contains("LSPatch", ignoreCase = true)
-
-            if (isLSPatch) {
-                if (!targetStatus.isInstalled) {
-                    return BannerEvaluation(
-                        isConnected = true,
-                        isInjectable = false,
-                        frameworkName = name,
-                        frameworkVersion = version,
-                        titleRes = R.string.framework_spotify_not_installed_title,
-                        descRes = R.string.framework_spotify_not_installed_desc,
-                        isIntegrated = false
-                    )
-                }
-                if (!targetStatus.isPatched) {
-                    return BannerEvaluation(
-                        isConnected = false,
-                        isInjectable = false,
-                        frameworkName = name,
-                        frameworkVersion = version,
-                        titleRes = R.string.framework_inactive_title,
-                        descRes = R.string.framework_inactive_desc,
-                        isIntegrated = false
-                    )
-                }
-
-                val currentScope = scope ?: emptyList()
-                val isInScope = currentScope.any { it in packageNames }
-
-                if (!isInScope) {
-                    return BannerEvaluation(
-                        isConnected = true,
-                        isInjectable = false,
-                        frameworkName = name,
-                        frameworkVersion = version,
-                        titleRes = R.string.framework_lspatch_not_in_scope_title,
-                        descRes = R.string.framework_lspatch_not_in_scope_desc,
-                        isIntegrated = false,
-                        canRequestScope = true
-                    )
-                }
-
-                return BannerEvaluation(
-                    isConnected = true,
-                    isInjectable = true,
-                    frameworkName = name,
-                    frameworkVersion = version,
-                    titleRes = R.string.framework_active_title_dynamic,
-                    titleArgs = listOf(name),
-                    descRes = R.string.framework_active_desc,
-                    descArgs = listOf(name, version),
-                    isIntegrated = false
-                )
-            } else {
-                val currentScope = scope ?: emptyList()
-                val isLSPosed = name.contains("LSPosed", ignoreCase = true)
-                val isInScope = if (isLSPosed) {
-                    currentScope.any { it in packageNames }
-                } else {
-                    currentScope.isEmpty() || currentScope.any { it in packageNames }
-                }
-
-                if (!isInScope) {
-                    return BannerEvaluation(
-                        isConnected = true,
-                        isInjectable = false,
-                        frameworkName = name,
-                        frameworkVersion = version,
-                        titleRes = if (isLSPosed) R.string.framework_lsposed_not_in_scope_title else R.string.framework_lspatch_not_in_scope_title,
-                        descRes = if (isLSPosed) R.string.framework_lsposed_not_in_scope_desc else R.string.framework_lspatch_not_in_scope_desc,
-                        isIntegrated = false,
-                        canRequestScope = isLSPosed
-                    )
-                }
-
-                return BannerEvaluation(
-                    isConnected = true,
-                    isInjectable = true,
-                    frameworkName = name,
-                    frameworkVersion = version,
-                    titleRes = R.string.framework_active_title_dynamic,
-                    titleArgs = listOf(name),
-                    descRes = R.string.framework_active_desc,
-                    descArgs = listOf(name, version),
-                    isIntegrated = false
-                )
-            }
-        } else {
-            return BannerEvaluation(
-                isConnected = false,
-                isInjectable = false,
-                frameworkName = "",
-                frameworkVersion = "",
-                titleRes = R.string.framework_inactive_title,
-                descRes = R.string.framework_inactive_desc,
-                isIntegrated = false
-            )
-        }
     }
 }

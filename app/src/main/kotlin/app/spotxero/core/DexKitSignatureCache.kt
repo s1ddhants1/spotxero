@@ -58,6 +58,11 @@ object DexKitSignatureCache {
         saveToDisk(cacheFileFor(appInfo), versionCode, values)
     }
 
+    fun clear(appInfo: ApplicationInfo): Boolean {
+        cachedSignatures = null
+        return runCatching { cacheFileFor(appInfo).delete() }.getOrDefault(false)
+    }
+
     private fun cacheFileFor(appInfo: ApplicationInfo): File {
         val cacheDir = File(appInfo.dataDir, "spotxero_cache").apply { mkdirs() }
         return File(cacheDir, CACHE_FILE_NAME)

@@ -13,8 +13,7 @@ enum class SettingsSubpage {
 @Immutable
 data class InstalledSpotifyInfo(
     val packageName: String,
-    val versionName: String,
-    val variantLabel: String
+    val versionName: String
 )
 
 @Immutable
