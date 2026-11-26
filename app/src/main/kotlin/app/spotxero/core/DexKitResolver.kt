@@ -154,7 +154,8 @@ object DexKitResolver {
     fun resolve(
         dexKit: DexKitBridge,
         classLoader: ClassLoader,
-        cachedSignatures: Map<String, String>?
+        cachedSignatures: Map<String, String>?,
+        includeInAppSettings: Boolean
     ): Map<String, String> {
         val signatures = mutableMapOf<String, String>()
         val members = mutableMapOf<String, Any>()
@@ -206,8 +207,10 @@ object DexKitResolver {
         resolveHomeChipsMapper(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveSearchChips(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveVolumeKeyHandlers(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolveSettingsRootFactory(dexKit, classLoader, cachedSignatures, signatures, members)
-        resolveNativeSettingsContracts(dexKit, classLoader, cachedSignatures, signatures, members)
+        if (includeInAppSettings) {
+            resolveSettingsRootFactory(dexKit, classLoader, cachedSignatures, signatures, members)
+            resolveNativeSettingsContracts(dexKit, classLoader, cachedSignatures, signatures, members)
+        }
         resolveAppSignaturesMethod(dexKit, classLoader, cachedSignatures, signatures, members)
         resolveInstallerPackageMethod(dexKit, classLoader, cachedSignatures, signatures, members)
 

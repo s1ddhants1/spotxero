@@ -51,6 +51,9 @@ object HookRegistry {
     @Volatile
     private var isResolved: Boolean = false
 
+    @Volatile
+    private var inAppSettingsSupported: Boolean = false
+
     private val installedHooks = Collections.synchronizedSet(mutableSetOf<String>())
     private val lock = Any()
 
@@ -118,9 +121,15 @@ object HookRegistry {
 
                 val cachedSignatures = DexKitSignatureCache.loadFromFile(appInfo, versionCode)
 
+                inAppSettingsSupported = ModuleStatus.isLspatchIntegrated(module, appInfo, classLoader)
                 System.loadLibrary("dexkit")
                 DexKitBridge.create(apkPath).use { dexKit ->
-                    val signatures = DexKitResolver.resolve(dexKit, classLoader, cachedSignatures)
+                    val signatures = DexKitResolver.resolve(
+                        dexKit,
+                        classLoader,
+                        cachedSignatures,
+                        inAppSettingsSupported
+                    )
                     if (signatures.isEmpty()) {
                         throw IllegalStateException(
                             "DexKit resolution produced no signatures for ${appInfo.packageName}"
@@ -166,10 +175,7 @@ object HookRegistry {
                 HookEntry("ForceLocalPlayback", { PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, true) }) { ForceLocalPlaybackHook.install(module) },
                 HookEntry("ArtworkSeek", { true }) { ArtworkSeekHook.install(module) },
                 HookEntry("Lyrics", { true }) { LyricsHook.install(module) },
-                HookEntry("InAppSettings", {
-                    ModuleStatus.isLspatchIntegrated(module, startupAppInfo, startupClassLoader) ||
-                        PreferencesManager.isEnabled(PrefKeys.KEY_INJECT_IN_APP_SETTINGS, false)
-                }) { InAppSettingsHook.install(module) },
+                HookEntry("InAppSettings", { inAppSettingsSupported }) { InAppSettingsHook.install(module) },
                 HookEntry("PackageSignature", { true }) { PackageSignatureHook.install(module) },
             )
 

@@ -135,7 +135,6 @@ object PrefKeys {
     const val KEY_HIDE_PODCASTS = "pref_hide_podcasts"
     const val KEY_HIDE_AUDIOBOOKS = "pref_hide_audiobooks"
     const val KEY_HIDE_PREMIUM_TAB = "pref_hide_premium_tab"
-    const val KEY_INJECT_IN_APP_SETTINGS = "pref_inject_in_app_settings"
     const val KEY_SHUFFLE_STATE = "pref_user_shuffle_state"
     const val KEY_SMART_SHUFFLE_IN_MODES = "pref_smart_shuffle_in_modes"
     const val KEY_DOUBLE_TAP_TO_SEEK = "pref_double_tap_to_seek"

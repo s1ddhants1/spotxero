@@ -58,7 +58,6 @@ fun HomeDashboard(
     onHidePodcastsToggle: (Boolean) -> Unit = {},
     onHideAudiobooksToggle: (Boolean) -> Unit = {},
     onHidePremiumTabToggle: (Boolean) -> Unit = {},
-    onInAppSettingsInjectionToggle: (Boolean) -> Unit = {},
     onLyricsToggle: (Boolean) -> Unit = {},
     onForceLocalPlaybackToggle: (Boolean) -> Unit = {},
     onDoubleTapToSeekToggle: (Boolean) -> Unit = {},
@@ -187,20 +186,6 @@ fun HomeDashboard(
                     painter = painterResource(id = R.drawable.ic_auto_stories_off),
                     checked = uiState.isHideAudiobooksEnabled,
                     onCheckedChange = onHideAudiobooksToggle
-                )
-            }
-        }
-
-        SettingsSection(
-            title = stringResource(R.string.category_integration)
-        ) {
-            SettingsGroup {
-                SettingsSwitchItem(
-                    title = stringResource(R.string.feature_in_app_settings_title),
-                    subtitle = stringResource(R.string.feature_in_app_settings_desc),
-                    painter = painterResource(id = R.drawable.ic_settings),
-                    checked = uiState.isInAppSettingsInjectionEnabled,
-                    onCheckedChange = onInAppSettingsInjectionToggle
                 )
             }
         }

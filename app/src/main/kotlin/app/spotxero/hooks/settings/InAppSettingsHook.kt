@@ -8,6 +8,7 @@ import android.content.pm.PackageInfo
 import android.net.Uri
 import android.os.Bundle
 import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import app.spotxero.BuildConfig
@@ -22,16 +23,20 @@ import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.system.exitProcess
 
 object InAppSettingsHook {
 
     private const val TAG = "SpotXero.InAppSettings"
     private const val SPOTXERO_URI = "spotify:spotxero"
-    private const val SPOTXERO_RESTART_URI = "spotify:spotxero:restart"
-    private const val SPOTXERO_SEEK_URI = "spotify:spotxero:seek-duration"
     private const val ABOUT_SETTINGS_URI = "spotify:settings:about"
+    private const val PRIVATE_ROUTE_PREFIX = "spotify:spotxero:private:"
+    private const val PENDING_ROUTE_TIMEOUT_MS = 10_000L
+    private val routeToken = UUID.randomUUID().toString()
     private const val L2C1_DEFAULT_MASK = 2 or 16 or 4096 or 16384 or 65536
     private const val ND71_SECTION_DEFAULT_MASK = 253
 
@@ -45,7 +50,6 @@ object InAppSettingsHook {
 
     private data class SectionSpec(
         val syntheticTitleId: Int?,
-        val title: String?,
         val toggles: List<ToggleSpec> = emptyList(),
         val seekDurationAfterToggleId: String? = null
     )
@@ -67,7 +71,6 @@ object InAppSettingsHook {
     private val SPOTXERO_SECTIONS = listOf(
         SectionSpec(
             syntheticTitleId = null,
-            title = null,
             toggles = listOf(
                 ToggleSpec(
                     id = "spotxero_master",
@@ -79,7 +82,6 @@ object InAppSettingsHook {
         ),
         SectionSpec(
             syntheticTitleId = SECTION_PLAYBACK,
-            title = "Playback",
             toggles = listOf(
                 ToggleSpec(
                     id = "spotxero_premium",
@@ -114,7 +116,6 @@ object InAppSettingsHook {
         ),
         SectionSpec(
             syntheticTitleId = SECTION_LYRICS,
-            title = "Lyrics",
             toggles = listOf(
                 ToggleSpec(
                     id = "spotxero_uncapped_lyrics",
@@ -141,7 +142,6 @@ object InAppSettingsHook {
         ),
         SectionSpec(
             syntheticTitleId = SECTION_PRIVACY,
-            title = "Privacy",
             toggles = listOf(
                 ToggleSpec(
                     id = "spotxero_clean_sharing",
@@ -154,7 +154,6 @@ object InAppSettingsHook {
         ),
         SectionSpec(
             syntheticTitleId = SECTION_CONTENT,
-            title = "Content",
             toggles = listOf(
                 ToggleSpec(
                     id = "spotxero_hide_premium_tab",
@@ -181,7 +180,6 @@ object InAppSettingsHook {
         ),
         SectionSpec(
             syntheticTitleId = SECTION_APPEARANCE,
-            title = "Theme & Appearance",
             toggles = listOf(
                 ToggleSpec(
                     id = "spotxero_amoled",
@@ -205,15 +203,15 @@ object InAppSettingsHook {
                     defaultValue = false
                 )
             )
-        ),
-        SectionSpec(
-            syntheticTitleId = null,
-            title = null
         )
     )
 
-    private val pendingSpotXeroRoute = AtomicBoolean(false)
-    private val activeToggleFlows = mutableListOf<Pair<ToggleSpec, Any>>()
+    private val pendingSpotXeroRouteAt = AtomicLong(0L)
+    private val activeToggleFlows = CopyOnWriteArrayList<Pair<ToggleSpec, Any>>()
+    private val hookedNewIntentClasses: MutableSet<Class<*>> = ConcurrentHashMap.newKeySet()
+
+    @Volatile
+    private var moduleRef: XposedModule? = null
 
     @Volatile
     private var currentActivity: WeakReference<Activity>? = null
@@ -277,6 +275,9 @@ object InAppSettingsHook {
     private lateinit var hostPropsUpdateMethod: Method
 
     fun install(module: XposedModule) {
+        moduleRef = module
+        hookedNewIntentClasses.clear()
+        pendingSpotXeroRouteAt.set(0L)
         resolveContracts()
         registerPreferenceSync()
 
@@ -287,35 +288,35 @@ object InAppSettingsHook {
             mapped ?: chain.proceed()
         }
 
-        val routerClass = routerNavigate.declaringClass
-        for (method in routerClass.declaredMethods) {
-            if (!Modifier.isStatic(method.modifiers) &&
-                method.returnType == Void.TYPE &&
-                method.parameterTypes.any { it == String::class.java }
-            ) {
-                module.deoptimize(method)
-                module.hook(method).intercept { chain ->
-                    val strIdx = method.parameterTypes.indexOfFirst { it == String::class.java }
-                    val uri = chain.args[strIdx] as? String
-                    when {
-                        uri == SPOTXERO_RESTART_URI -> {
-                            restartSpotify()
-                            null
-                        }
-                        uri == SPOTXERO_SEEK_URI -> {
-                            showSeekDurationBottomSheet()
-                            null
-                        }
-                        uri == SPOTXERO_URI || uri?.startsWith("$SPOTXERO_URI?") == true -> {
-                            pendingSpotXeroRoute.set(true)
+        val routeIndex = routerNavigate.parameterTypes.indexOfFirst { it == String::class.java }
+        if (routeIndex >= 0) {
+            val restartRoute = privateRoute("restart")
+            val seekRoute = privateRoute("seek-duration")
+            module.deoptimize(routerNavigate)
+            module.hook(routerNavigate).intercept { chain ->
+                when (val uri = chain.args[routeIndex] as? String) {
+                    restartRoute -> {
+                        restartSpotify()
+                        null
+                    }
+                    seekRoute -> {
+                        showSeekDurationBottomSheet()
+                        null
+                    }
+                    else -> {
+                        if (uri == SPOTXERO_URI || uri?.startsWith("$SPOTXERO_URI?") == true) {
+                            markPendingSpotXeroRoute()
                             val modifiedArgs = chain.args.toTypedArray()
-                            modifiedArgs[strIdx] = ABOUT_SETTINGS_URI
+                            modifiedArgs[routeIndex] = ABOUT_SETTINGS_URI
                             chain.proceed(modifiedArgs)
+                        } else {
+                            chain.proceed()
                         }
-                        else -> chain.proceed()
                     }
                 }
             }
+        } else {
+            Log.w(TAG, "Router navigate has no string route argument")
         }
 
         val onNewIntent = Activity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
@@ -332,7 +333,7 @@ object InAppSettingsHook {
             val viewUriStr = runCatching {
                 viewUriField.get(viewUriObj) as? String ?: viewUriObj?.toString()
             }.getOrNull()
-            val isSpotXero = viewUriStr == ABOUT_SETTINGS_URI && pendingSpotXeroRoute.compareAndSet(true, false)
+            val isSpotXero = viewUriStr == ABOUT_SETTINGS_URI && consumePendingSpotXeroRoute()
 
             val result = if (isSpotXero && pageDef != null) {
                 val modifiedArgs = chain.args.toTypedArray()
@@ -343,10 +344,14 @@ object InAppSettingsHook {
             }
 
             if (isSpotXero) {
-                val host = chain.thisObject
-                val props = hostPropsField.get(host)
-                val titleProp = headerPropCtor.newInstance(stringTitleCtor.newInstance("SpotXero"))
-                hostPropsUpdateMethod.invoke(props, titleProp)
+                runCatching {
+                    val host = chain.thisObject
+                    val props = hostPropsField.get(host)
+                    val titleProp = headerPropCtor.newInstance(stringTitleCtor.newInstance("SpotXero"))
+                    hostPropsUpdateMethod.invoke(props, titleProp)
+                }.onFailure {
+                    Log.w(TAG, "Failed applying SpotXero settings title", it)
+                }
             }
             result
         }
@@ -354,7 +359,8 @@ object InAppSettingsHook {
         module.deoptimize(rootFactory)
         module.hook(rootFactory).intercept { chain ->
             val result = chain.proceed() ?: return@intercept null
-            injectRootEntry(result)
+            runCatching { injectRootEntry(result) }
+                .onFailure { Log.e(TAG, "Failed injecting SpotXero settings entry", it) }
             result
         }
 
@@ -363,6 +369,7 @@ object InAppSettingsHook {
 
     fun onActivityCreated(activity: Activity) {
         currentActivity = WeakReference(activity)
+        hookNewIntentOverride(activity.javaClass)
         rewriteDeepLinkIfNeeded(activity.intent)
     }
 
@@ -382,18 +389,53 @@ object InAppSettingsHook {
         }
     }
 
-    fun onNewIntent(activity: Activity, intent: Intent?) {
-        currentActivity = WeakReference(activity)
-        rewriteDeepLinkIfNeeded(intent)
-    }
-
     private fun rewriteDeepLinkIfNeeded(intent: Intent?) {
         val data = intent?.dataString ?: return
         if (data == SPOTXERO_URI || data.startsWith("$SPOTXERO_URI?")) {
-            pendingSpotXeroRoute.set(true)
+            markPendingSpotXeroRoute()
             intent.data = Uri.parse(ABOUT_SETTINGS_URI)
         }
     }
+
+    private fun hookNewIntentOverride(activityClass: Class<*>) {
+        val module = moduleRef ?: return
+        var current: Class<*>? = activityClass
+        while (current != null && current != Activity::class.java) {
+            val type = current
+            if (hookedNewIntentClasses.add(type)) {
+                val method = runCatching { type.getDeclaredMethod("onNewIntent", Intent::class.java) }.getOrNull()
+                if (method != null) {
+                    runCatching {
+                        module.deoptimize(method)
+                        module.hook(method).intercept { chain ->
+                            rewriteDeepLinkIfNeeded(chain.args[0] as? Intent)
+                            chain.proceed()
+                        }
+                    }.onFailure {
+                        hookedNewIntentClasses.remove(type)
+                        Log.w(TAG, "Failed hooking ${type.name}.onNewIntent", it)
+                    }
+                }
+            }
+            current = type.superclass
+        }
+    }
+
+    private fun markPendingSpotXeroRoute() {
+        pendingSpotXeroRouteAt.set(SystemClock.elapsedRealtime())
+    }
+
+    private fun consumePendingSpotXeroRoute(): Boolean {
+        val markedAt = pendingSpotXeroRouteAt.get()
+        if (markedAt == 0L) return false
+        if (SystemClock.elapsedRealtime() - markedAt > PENDING_ROUTE_TIMEOUT_MS) {
+            pendingSpotXeroRouteAt.compareAndSet(markedAt, 0L)
+            return false
+        }
+        return pendingSpotXeroRouteAt.compareAndSet(markedAt, 0L)
+    }
+
+    private fun privateRoute(name: String): String = "$PRIVATE_ROUTE_PREFIX$name:$routeToken"
 
     private fun resolveContracts() {
         rootFactory = DexKitResolver.get<Method>(DexKitResolver.KEY_SETTINGS_ROOT_FACTORY)
@@ -566,8 +608,15 @@ object InAppSettingsHook {
                                     when {
                                         fMethod == sb71CreateMethod -> {
                                             val template = fMethod.invoke(realFactory)
-                                                ?: error("Missing settings template model")
-                                            buildSpotXeroPageModel(template)
+                                            if (template == null) {
+                                                null
+                                            } else {
+                                                runCatching { buildSpotXeroPageModel(template) }
+                                                    .onFailure {
+                                                        Log.e(TAG, "Failed building SpotXero settings page", it)
+                                                    }
+                                                    .getOrDefault(template)
+                                            }
                                         }
                                         fMethod.name == "equals" -> fArgs?.get(0) === fProxy
                                         fMethod.name == "hashCode" -> System.identityHashCode(fProxy)
@@ -622,15 +671,16 @@ object InAppSettingsHook {
         val allSections = buildList {
             addAll(standardSections)
             val footerRows = buildList {
-                val versionAttempt = runCatching { createVersionItem(templateModel, itemGroup) }
-                Log.i(TAG, "createVersionItem result=${versionAttempt.getOrNull()} err=${versionAttempt.exceptionOrNull()}")
+                val versionItem = runCatching { createVersionItem(templateModel, itemGroup) }
+                    .onFailure { Log.w(TAG, "Failed composing native version row", it) }
+                    .getOrNull()
                 add(
-                    versionAttempt.getOrNull()
+                    versionItem
                         ?: createActionItem("spotxero_version", "SpotXero Version", BuildConfig.VERSION_NAME, SPOTXERO_URI, itemGroup)
                 )
                 add(createExternalLinkItem("spotxero_github", "GitHub", "https://github.com/s1ddhants1/SpotXero", itemGroup))
                 add(createExternalLinkItem("spotxero_telegram", "Telegram Group", "https://t.me/SpotXero", itemGroup))
-                add(createActionItem("spotxero_restart", "Restart Spotify", "Apply changes that need a fresh session", SPOTXERO_RESTART_URI, itemGroup))
+                add(createActionItem("spotxero_restart", "Restart Spotify", "Apply changes that need a fresh session", privateRoute("restart"), itemGroup))
             }
             val footerItems = listFactory.invoke(null, footerRows.toTypedArray())
             add(sectionCtor.newInstance(pageGroup, null, null, null, footerItems, ND71_SECTION_DEFAULT_MASK))
@@ -641,7 +691,7 @@ object InAppSettingsHook {
     }
 
     private fun createToggleItem(spec: ToggleSpec, itemGroup: Any): Any {
-        val initial = PreferencesManager.isEnabled(spec.key, spec.defaultValue)
+        val initial = PreferencesManager.isStoredEnabled(spec.key, spec.defaultValue)
         val stateFlow = stateFlowCtor.newInstance(initial)
         activeToggleFlows.add(spec to stateFlow)
 
@@ -724,7 +774,7 @@ object InAppSettingsHook {
     private fun createSeekDurationItem(itemGroup: Any): Any {
         val visibilityFlow = stateFlowCtor.newInstance(java.lang.Boolean.TRUE)
         val actionId = allocateActionId()
-        val actionUri = actionUriCtor.newInstance(SPOTXERO_SEEK_URI, null)
+        val actionUri = actionUriCtor.newInstance(privateRoute("seek-duration"), null)
         val control = actionControlCtor.newInstance(actionId, actionUri)
         val item = toggleItemCtor.newInstance(
             "spotxero_seek_duration",
@@ -838,16 +888,22 @@ object InAppSettingsHook {
         val nativeProvider = providerField.get(nativePresenter) ?: return null
         val providerClass = nativeProvider.javaClass
         val app = context.applicationContext as? Application ?: return null
-        val stringValues = providerClass.declaredFields
+        val sourceStringFields = providerClass.declaredFields
             .filter { !Modifier.isStatic(it.modifiers) && it.type == String::class.java }
-            .map { it.apply { isAccessible = true }.get(nativeProvider) }
+            .onEach { it.isAccessible = true }
+        val sourceStrings = sourceStringFields.map { it.get(nativeProvider) }
         val providerCtor = providerClass.declaredConstructors.firstOrNull {
             it.parameterCount == 3 &&
                 it.parameterTypes[0] == Application::class.java &&
                 it.parameterTypes[1] == String::class.java &&
                 it.parameterTypes[2] == String::class.java
         } ?: return null
-        val provider = providerCtor.newInstance(app, stringValues.getOrNull(0), stringValues.getOrNull(1))
+        val provider = providerCtor.newInstance(app, sourceStrings.getOrNull(0), sourceStrings.getOrNull(1))
+        providerClass.declaredFields
+            .filter { !Modifier.isStatic(it.modifiers) && it.type == String::class.java }
+            .onEach { it.isAccessible = true }
+            .zip(sourceStrings)
+            .forEach { (field, value) -> field.set(provider, value) }
         val packageInfo = PackageInfo().apply { versionName = BuildConfig.VERSION_NAME }
         val versionField = providerClass.declaredFields.firstOrNull { field ->
             if (Modifier.isStatic(field.modifiers)) return@firstOrNull false
@@ -1143,7 +1199,7 @@ object InAppSettingsHook {
     private fun syncToggleFlows() {
         for ((spec, flow) in activeToggleFlows) {
             runCatching {
-                stateFlowEmit.invoke(flow, PreferencesManager.isEnabled(spec.key, spec.defaultValue))
+                stateFlowEmit.invoke(flow, PreferencesManager.isStoredEnabled(spec.key, spec.defaultValue))
             }
         }
     }
@@ -1350,7 +1406,7 @@ object InAppSettingsHook {
         val vec24 = buildSpotXeroVector(24f, "SpotXero.Vector.Logo24", blackBrush, oc80Class)
         val n0yPair = n0yCtor.newInstance(vec16, vec24)
 
-        val icon = allocateUnsafe(iconLogoClass)
+        val icon = allocateInstance(iconLogoClass)
         for (f in n0yFields) {
             f.set(icon, n0yPair)
         }
@@ -1469,12 +1525,29 @@ object InAppSettingsHook {
         return buildMethod.invoke(builder)!!
     }
 
-    private fun allocateActionId(): Any {
-        actionIdClass.declaredConstructors.firstOrNull { it.parameterCount == 0 }?.let { ctor ->
-            ctor.isAccessible = true
-            return ctor.newInstance()
+    private fun allocateActionId(): Any = allocateInstance(actionIdClass)
+
+    private fun allocateInstance(cls: Class<*>): Any {
+        for (ctor in cls.declaredConstructors.sortedBy { it.parameterCount }) {
+            runCatching {
+                ctor.isAccessible = true
+                val args = Array<Any?>(ctor.parameterCount) { index ->
+                    when (ctor.parameterTypes[index]) {
+                        Int::class.javaPrimitiveType -> 0
+                        Boolean::class.javaPrimitiveType -> false
+                        Float::class.javaPrimitiveType -> 0f
+                        Long::class.javaPrimitiveType -> 0L
+                        Double::class.javaPrimitiveType -> 0.0
+                        Short::class.javaPrimitiveType -> 0.toShort()
+                        Byte::class.javaPrimitiveType -> 0.toByte()
+                        Char::class.javaPrimitiveType -> '\u0000'
+                        else -> null
+                    }
+                }
+                return ctor.newInstance(*args)
+            }
         }
-        return allocateUnsafe(actionIdClass)
+        return allocateUnsafe(cls)
     }
 
     private fun allocateUnsafe(cls: Class<*>): Any {
@@ -1490,7 +1563,9 @@ object InAppSettingsHook {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         } ?: return
         ctx.startActivity(launchIntent)
-        Process.killProcess(Process.myPid())
-        exitProcess(0)
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            Process.killProcess(Process.myPid())
+            exitProcess(0)
+        }, 300)
     }
 }

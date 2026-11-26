@@ -142,7 +142,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 isHidePodcastsEnabled = PreferencesManager.isHidePodcastsEnabled,
                 isHideAudiobooksEnabled = PreferencesManager.isHideAudiobooksEnabled,
                 isHidePremiumTabEnabled = PreferencesManager.isHidePremiumTabEnabled,
-                isInAppSettingsInjectionEnabled = PreferencesManager.isInAppSettingsInjectionEnabled,
                 isDoubleTapToSeekEnabled = PreferencesManager.isDoubleTapToSeekEnabled,
                 seekDurationSeconds = PreferencesManager.seekDurationSeconds,
                 isSeekProgressive = PreferencesManager.isSeekProgressive,
@@ -279,11 +278,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun setHidePremiumTab(enabled: Boolean) {
         PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_HIDE_PREMIUM_TAB, enabled)
         _uiState.update { it.copy(isHidePremiumTabEnabled = enabled) }
-    }
-
-    fun setInAppSettingsInjection(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_INJECT_IN_APP_SETTINGS, enabled)
-        _uiState.update { it.copy(isInAppSettingsInjectionEnabled = enabled) }
     }
 
 

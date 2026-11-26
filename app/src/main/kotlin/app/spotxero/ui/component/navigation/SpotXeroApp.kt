@@ -193,7 +193,6 @@ fun SpotXeroApp(
                                 onHidePodcastsToggle = { viewModel.setHidePodcasts(it) },
                                 onHideAudiobooksToggle = { viewModel.setHideAudiobooks(it) },
                                 onHidePremiumTabToggle = { viewModel.setHidePremiumTab(it) },
-                                onInAppSettingsInjectionToggle = { viewModel.setInAppSettingsInjection(it) },
                                 onLyricsToggle = { viewModel.setLyrics(it) },
                                 onForceLocalPlaybackToggle = { viewModel.setForceLocalPlayback(it) },
                                 onDoubleTapToSeekToggle = { viewModel.setDoubleTapToSeekEnabled(it) },

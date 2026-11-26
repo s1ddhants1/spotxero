@@ -58,7 +58,6 @@ object PreferencesManager {
     var isHidePodcastsEnabled: Boolean = false
     var isHideAudiobooksEnabled: Boolean = false
     var isHidePremiumTabEnabled: Boolean = true
-    var isInAppSettingsInjectionEnabled: Boolean = false
     var isDoubleTapToSeekEnabled: Boolean = true
     var seekDurationSeconds: Int = 10
     var isSeekProgressive: Boolean = false
@@ -382,14 +381,6 @@ object PreferencesManager {
         inMemoryBooleans[PrefKeys.KEY_HIDE_AUDIOBOOKS] = isHideAudiobooksEnabled
         isHidePremiumTabEnabled = prefs.getBoolean(PrefKeys.KEY_HIDE_PREMIUM_TAB, true)
         inMemoryBooleans[PrefKeys.KEY_HIDE_PREMIUM_TAB] = isHidePremiumTabEnabled
-        val inAppSettingsDefault = if (!prefs.contains(PrefKeys.KEY_INJECT_IN_APP_SETTINGS)) {
-            val framework = SpotXeroApplication.service?.frameworkName.orEmpty()
-            !framework.contains("LSPatch", ignoreCase = true)
-        } else {
-            false
-        }
-        isInAppSettingsInjectionEnabled = prefs.getBoolean(PrefKeys.KEY_INJECT_IN_APP_SETTINGS, inAppSettingsDefault)
-        inMemoryBooleans[PrefKeys.KEY_INJECT_IN_APP_SETTINGS] = isInAppSettingsInjectionEnabled
         isDoubleTapToSeekEnabled = prefs.getBoolean(PrefKeys.KEY_DOUBLE_TAP_TO_SEEK, true)
         inMemoryBooleans[PrefKeys.KEY_DOUBLE_TAP_TO_SEEK] = isDoubleTapToSeekEnabled
         seekDurationSeconds = prefs.getInt(PrefKeys.KEY_SEEK_DURATION_SECONDS, 10)
@@ -421,6 +412,8 @@ object PreferencesManager {
         }
         return isEnabledDirect(key, default)
     }
+
+    fun isStoredEnabled(key: String, default: Boolean): Boolean = isEnabledDirect(key, default)
 
     private fun isEnabledDirect(key: String, default: Boolean): Boolean {
         val tp = getTargetPrefs()
@@ -607,7 +600,6 @@ object PreferencesManager {
             PrefKeys.KEY_HIDE_PODCASTS -> isHidePodcastsEnabled = value
             PrefKeys.KEY_HIDE_AUDIOBOOKS -> isHideAudiobooksEnabled = value
             PrefKeys.KEY_HIDE_PREMIUM_TAB -> isHidePremiumTabEnabled = value
-            PrefKeys.KEY_INJECT_IN_APP_SETTINGS -> isInAppSettingsInjectionEnabled = value
             PrefKeys.KEY_DOUBLE_TAP_TO_SEEK -> isDoubleTapToSeekEnabled = value
             PrefKeys.KEY_SEEK_PROGRESSIVE -> isSeekProgressive = value
             KEY_APP_DYNAMIC_COLOR -> isDynamicColorEnabled = value

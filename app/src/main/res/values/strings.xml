@@ -32,7 +32,6 @@
     <string name="category_lyrics">Lyrics</string>
     <string name="category_privacy">Privacy</string>
     <string name="category_content">Content</string>
-    <string name="category_integration">Integration</string>
     <string name="category_theme">Theme &amp; Appearance</string>
     <string name="category_preferences">Preferences</string>
     <string name="feature_uncapped_lyrics_title">Unlimited Lyrics</string>
@@ -53,8 +52,6 @@
     <string name="feature_hide_audiobooks_desc">Remove audiobooks from Home and Search</string>
     <string name="feature_hide_premium_tab_title">Hide Premium Tab</string>
     <string name="feature_hide_premium_tab_desc">Remove Premium from bottom navigation</string>
-    <string name="feature_in_app_settings_title">Inject SpotXero Settings</string>
-    <string name="feature_in_app_settings_desc">Show SpotXero in Spotify Settings</string>
     <string name="title_appearance">Appearance</string>
     <string name="title_about">About</string>
     <string name="appearance_category_desc">Themes • Hide App Icon</string>

@@ -70,7 +70,6 @@ data class DashboardUiState(
     val isHidePodcastsEnabled: Boolean = false,
     val isHideAudiobooksEnabled: Boolean = false,
     val isHidePremiumTabEnabled: Boolean = true,
-    val isInAppSettingsInjectionEnabled: Boolean = false,
     val isDoubleTapToSeekEnabled: Boolean = true,
     val seekDurationSeconds: Int = 10,
     val isSeekProgressive: Boolean = false,
