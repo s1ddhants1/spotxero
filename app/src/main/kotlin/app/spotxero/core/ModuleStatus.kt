@@ -11,19 +11,14 @@ import java.io.File
 
 object ModuleStatus {
 
-    private val _isModuleActive = mutableStateOf(false)
-    val isModuleActive: State<Boolean> = _isModuleActive
-
     private val _frameworkName = mutableStateOf<String?>(null)
     val frameworkName: State<String?> = _frameworkName
 
     fun checkStatus() {
         val service = SpotXeroApplication.service
         if (service != null) {
-            _isModuleActive.value = true
             _frameworkName.value = service.frameworkName.takeIf { it.isNotBlank() } ?: detectFramework()
         } else {
-            _isModuleActive.value = false
             _frameworkName.value = null
         }
     }

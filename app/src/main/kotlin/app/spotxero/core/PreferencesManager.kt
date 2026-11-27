@@ -69,10 +69,6 @@ object PreferencesManager {
         preferenceChangeCallbacks.add(listener)
     }
 
-    fun removeOnPreferenceChangedListener(listener: () -> Unit) {
-        preferenceChangeCallbacks.remove(listener)
-    }
-
     @Volatile
     private var remotePrefs: SharedPreferences? = null
 

@@ -64,12 +64,6 @@ object HookRegistry {
     private val failedHooks = Collections.synchronizedSet(mutableSetOf<String>())
     private val lock = Any()
 
-    fun installedHookNames(): Set<String> = synchronized(installedHooks) { installedHooks.toSet() }
-
-    fun failedHookNames(): Set<String> = synchronized(failedHooks) { failedHooks.toSet() }
-
-    fun currentAppInfo(): ApplicationInfo? = startupAppInfo
-
     init {
         PreferencesManager.addOnPreferenceChangedListener {
             checkAndInstallPending()

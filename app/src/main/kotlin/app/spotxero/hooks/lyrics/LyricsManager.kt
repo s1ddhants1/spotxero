@@ -162,11 +162,6 @@ object LyricsManager {
         return "track:$trackId::$provKey::$transKey".lowercase()
     }
 
-    fun clearCache() {
-        parsedCache.clear()
-        inFlightFetches.clear()
-    }
-
     fun getLyrics(trackId: String? = null): CachedLyrics? {
         if (!PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false)) return null
         val trackKey = trackId?.let { buildTrackKey(it) }
