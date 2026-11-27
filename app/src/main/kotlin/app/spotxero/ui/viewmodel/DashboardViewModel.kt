@@ -228,32 +228,39 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
 
-    fun setMasterEnabled(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_MASTER_ENABLED, enabled)
-        _uiState.update { it.copy(isMasterEnabled = enabled) }
+    private inline fun updateBoolPref(
+        key: String,
+        value: Boolean,
+        crossinline copyState: DashboardUiState.(Boolean) -> DashboardUiState
+    ) {
+        PreferencesManager.setBoolean(getApplication(), key, value)
+        _uiState.update { it.copyState(value) }
     }
 
-    fun setPremiumEnabled(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_ENABLE_PREMIUM, enabled)
-        _uiState.update { it.copy(isPremiumEnabled = enabled) }
+    private inline fun updateStringPref(
+        key: String,
+        value: String,
+        clearLyricsCache: Boolean = false,
+        crossinline copyState: DashboardUiState.(String) -> DashboardUiState
+    ) {
+        PreferencesManager.setString(getApplication(), key, value)
+        if (clearLyricsCache) PersistentLyricsCache.clear()
+        _uiState.update { it.copyState(value) }
     }
+
+    fun setMasterEnabled(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_MASTER_ENABLED, enabled) { copy(isMasterEnabled = it) }
+
+    fun setPremiumEnabled(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_ENABLE_PREMIUM, enabled) { copy(isPremiumEnabled = it) }
 
     fun setThemeMode(mode: PreferencesManager.ThemeMode) {
-        val app = getApplication<Application>()
-        PreferencesManager.setString(app, PreferencesManager.KEY_APP_THEME_MODE, mode.name)
+        PreferencesManager.setString(getApplication(), PreferencesManager.KEY_APP_THEME_MODE, mode.name)
         PreferencesManager.appThemeMode = mode
         _uiState.update { it.copy(themeMode = mode) }
     }
 
-    fun setDynamicColor(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PreferencesManager.KEY_APP_DYNAMIC_COLOR, enabled)
-        _uiState.update { it.copy(isDynamicColorEnabled = enabled) }
-    }
+    fun setDynamicColor(enabled: Boolean) = updateBoolPref(PreferencesManager.KEY_APP_DYNAMIC_COLOR, enabled) { copy(isDynamicColorEnabled = it) }
 
-    fun setAppAmoled(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PreferencesManager.KEY_APP_AMOLED_THEME, enabled)
-        _uiState.update { it.copy(isAppAmoledEnabled = enabled) }
-    }
+    fun setAppAmoled(enabled: Boolean) = updateBoolPref(PreferencesManager.KEY_APP_AMOLED_THEME, enabled) { copy(isAppAmoledEnabled = it) }
 
     fun setLauncherIconHidden(enabled: Boolean) {
         val app = getApplication<Application>()
@@ -262,56 +269,25 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(isLauncherIconHidden = enabled) }
     }
 
-    fun setHapticFeedback(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_ENABLE_HAPTIC_FEEDBACK, enabled)
-        _uiState.update { it.copy(isHapticFeedbackEnabled = enabled) }
-    }
+    fun setHapticFeedback(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_ENABLE_HAPTIC_FEEDBACK, enabled) { copy(isHapticFeedbackEnabled = it) }
 
-    fun setCleanSharing(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_CLEAN_SHARING, enabled)
-        _uiState.update { it.copy(isCleanSharingEnabled = enabled) }
-    }
+    fun setCleanSharing(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_CLEAN_SHARING, enabled) { copy(isCleanSharingEnabled = it) }
 
-    fun setLyrics(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_UNCAPPED_LYRICS, enabled)
-        _uiState.update { it.copy(isLyricsEnabled = enabled) }
-    }
+    fun setLyrics(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_UNCAPPED_LYRICS, enabled) { copy(isLyricsEnabled = it) }
 
-    fun setForceLocalPlayback(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, enabled)
-        _uiState.update { it.copy(isForceLocalPlaybackEnabled = enabled) }
-    }
+    fun setForceLocalPlayback(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, enabled) { copy(isForceLocalPlaybackEnabled = it) }
 
-    fun setSpotifyAmoled(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_SPOTIFY_AMOLED, enabled)
-        _uiState.update { it.copy(isSpotifyAmoledEnabled = enabled) }
-    }
+    fun setSpotifyAmoled(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_SPOTIFY_AMOLED, enabled) { copy(isSpotifyAmoledEnabled = it) }
 
-    fun setSpotifyMonet(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_SPOTIFY_MONET, enabled)
-        _uiState.update { it.copy(isSpotifyMonetEnabled = enabled) }
-    }
+    fun setSpotifyMonet(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_SPOTIFY_MONET, enabled) { copy(isSpotifyMonetEnabled = it) }
 
-    fun setSpotifyRoundyUi(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_SPOTIFY_ROUNDY_UI, enabled)
-        _uiState.update { it.copy(isSpotifyRoundyUiEnabled = enabled) }
-    }
+    fun setSpotifyRoundyUi(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_SPOTIFY_ROUNDY_UI, enabled) { copy(isSpotifyRoundyUiEnabled = it) }
 
-    fun setHidePodcasts(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_HIDE_PODCASTS, enabled)
-        _uiState.update { it.copy(isHidePodcastsEnabled = enabled) }
-    }
+    fun setHidePodcasts(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_HIDE_PODCASTS, enabled) { copy(isHidePodcastsEnabled = it) }
 
-    fun setHideAudiobooks(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_HIDE_AUDIOBOOKS, enabled)
-        _uiState.update { it.copy(isHideAudiobooksEnabled = enabled) }
-    }
+    fun setHideAudiobooks(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_HIDE_AUDIOBOOKS, enabled) { copy(isHideAudiobooksEnabled = it) }
 
-    fun setHidePremiumTab(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_HIDE_PREMIUM_TAB, enabled)
-        _uiState.update { it.copy(isHidePremiumTabEnabled = enabled) }
-    }
-
+    fun setHidePremiumTab(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_HIDE_PREMIUM_TAB, enabled) { copy(isHidePremiumTabEnabled = it) }
 
     fun showLyricsSourcesScreen() {
         _uiState.update { it.copy(showLyricsSources = true, showAiLyricsTranslation = false) }
@@ -321,125 +297,46 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(showAiLyricsTranslation = true) }
     }
 
-    fun setAiTranslationProvider(provider: String) {
-        val app = getApplication<Application>()
-        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_PROVIDER, provider)
-        _uiState.update { it.copy(aiTranslationProvider = provider) }
-    }
+    fun setAiTranslationProvider(provider: String) = updateStringPref(PrefKeys.KEY_AI_TRANSLATION_PROVIDER, provider) { copy(aiTranslationProvider = it) }
 
-    fun setAiTranslationApiKey(key: String) {
-        val app = getApplication<Application>()
-        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_API_KEY, key)
-        _uiState.update { it.copy(aiTranslationApiKey = key) }
-    }
+    fun setAiTranslationApiKey(key: String) = updateStringPref(PrefKeys.KEY_AI_TRANSLATION_API_KEY, key) { copy(aiTranslationApiKey = it) }
 
-    fun setAiTranslationBaseUrl(url: String) {
-        val app = getApplication<Application>()
-        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_BASE_URL, url)
-        PersistentLyricsCache.clear()
-        _uiState.update { it.copy(aiTranslationBaseUrl = url) }
-    }
+    fun setAiTranslationBaseUrl(url: String) = updateStringPref(PrefKeys.KEY_AI_TRANSLATION_BASE_URL, url, clearLyricsCache = true) { copy(aiTranslationBaseUrl = it) }
 
-    fun setAiTranslationModel(model: String) {
-        val app = getApplication<Application>()
-        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_MODEL, model)
-        _uiState.update { it.copy(aiTranslationModel = model) }
-    }
+    fun setAiTranslationModel(model: String) = updateStringPref(PrefKeys.KEY_AI_TRANSLATION_MODEL, model) { copy(aiTranslationModel = it) }
 
-    fun setAiTranslationTargetLang(lang: String) {
-        val app = getApplication<Application>()
-        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_TARGET_LANG, lang)
-        _uiState.update { it.copy(aiTranslationTargetLang = lang) }
-    }
+    fun setAiTranslationTargetLang(lang: String) = updateStringPref(PrefKeys.KEY_AI_TRANSLATION_TARGET_LANG, lang) { copy(aiTranslationTargetLang = it) }
 
-    fun setAiTranslationCustomPrompt(prompt: String) {
-        val app = getApplication<Application>()
-        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_CUSTOM_PROMPT, prompt)
-        PersistentLyricsCache.clear()
-        _uiState.update { it.copy(aiTranslationCustomPrompt = prompt) }
-    }
+    fun setAiTranslationCustomPrompt(prompt: String) = updateStringPref(PrefKeys.KEY_AI_TRANSLATION_CUSTOM_PROMPT, prompt, clearLyricsCache = true) { copy(aiTranslationCustomPrompt = it) }
 
-    fun setAiTranslationTranslateMode(mode: String) {
-        val app = getApplication<Application>()
-        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_TRANSLATE_MODE, mode)
-        _uiState.update { it.copy(aiTranslationTranslateMode = mode) }
-    }
+    fun setAiTranslationTranslateMode(mode: String) = updateStringPref(PrefKeys.KEY_AI_TRANSLATION_TRANSLATE_MODE, mode) { copy(aiTranslationTranslateMode = it) }
 
-    fun setAiTranslationDeeplApiKey(key: String) {
-        val app = getApplication<Application>()
-        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_DEEPL_API_KEY, key)
-        _uiState.update { it.copy(aiTranslationDeeplApiKey = key) }
-    }
+    fun setAiTranslationDeeplApiKey(key: String) = updateStringPref(PrefKeys.KEY_AI_TRANSLATION_DEEPL_API_KEY, key) { copy(aiTranslationDeeplApiKey = it) }
 
-    fun setAiLyricsTranslationEnabled(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, enabled)
-        _uiState.update { it.copy(isAiLyricsTranslationEnabled = enabled) }
-    }
+    fun setAiLyricsTranslationEnabled(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, enabled) { copy(isAiLyricsTranslationEnabled = it) }
 
-    fun setAiTranslationDualLine(enabled: Boolean) {
-        val app = getApplication<Application>()
-        PreferencesManager.setBoolean(app, PrefKeys.KEY_AI_TRANSLATION_DUAL_LINE, enabled)
-        _uiState.update { it.copy(isAiTranslationDualLine = enabled) }
-    }
+    fun setAiTranslationDualLine(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_AI_TRANSLATION_DUAL_LINE, enabled) { copy(isAiTranslationDualLine = it) }
 
-    fun setAiTranslationDeeplFormality(formality: String) {
-        val app = getApplication<Application>()
-        PreferencesManager.setString(app, PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY, formality)
-        PersistentLyricsCache.clear()
-        _uiState.update { it.copy(aiTranslationDeeplFormality = formality) }
-    }
+    fun setAiTranslationDeeplFormality(formality: String) = updateStringPref(PrefKeys.KEY_AI_TRANSLATION_DEEPL_FORMALITY, formality, clearLyricsCache = true) { copy(aiTranslationDeeplFormality = it) }
 
+    fun setExternalLyrics(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_EXTERNAL_LYRICS, enabled) { copy(isExternalLyricsEnabled = it) }
 
-    fun setExternalLyrics(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_EXTERNAL_LYRICS, enabled)
-        _uiState.update { it.copy(isExternalLyricsEnabled = enabled) }
-    }
-
-    fun setForceExternalLyrics(enabled: Boolean) {
-        PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_FORCE_EXTERNAL_LYRICS, enabled)
-        _uiState.update { it.copy(isForceExternalLyricsEnabled = enabled) }
-    }
+    fun setForceExternalLyrics(enabled: Boolean) = updateBoolPref(PrefKeys.KEY_FORCE_EXTERNAL_LYRICS, enabled) { copy(isForceExternalLyricsEnabled = it) }
 
     fun setLyricsProviderEnabled(id: String, enabled: Boolean) {
-        val app = getApplication<Application>()
         when (id) {
-            "spicylyrics" -> {
-                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_SPICYLYRICS, enabled)
-                _uiState.update { it.copy(isSpicylyricsEnabled = enabled) }
-            }
-            "betterlyrics" -> {
-                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS, enabled)
-                _uiState.update { it.copy(isBetterlyricsEnabled = enabled) }
-            }
-            "lrcred" -> {
-                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_LRCRED, enabled)
-                _uiState.update { it.copy(isLrcredEnabled = enabled) }
-            }
-            "lrclib" -> {
-                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_LRCLIB, enabled)
-                _uiState.update { it.copy(isLrclibEnabled = enabled) }
-            }
-            "kugou" -> {
-                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_KUGOU, enabled)
-                _uiState.update { it.copy(isKugouEnabled = enabled) }
-            }
-            "netease" -> {
-                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_NETEASE, enabled)
-                _uiState.update { it.copy(isNeteaseEnabled = enabled) }
-            }
-            "genius" -> {
-                PreferencesManager.setBoolean(app, PrefKeys.KEY_LYRICS_PROVIDER_GENIUS, enabled)
-                _uiState.update { it.copy(isGeniusEnabled = enabled) }
-            }
+            "spicylyrics" -> updateBoolPref(PrefKeys.KEY_LYRICS_PROVIDER_SPICYLYRICS, enabled) { copy(isSpicylyricsEnabled = it) }
+            "betterlyrics" -> updateBoolPref(PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS, enabled) { copy(isBetterlyricsEnabled = it) }
+            "lrcred" -> updateBoolPref(PrefKeys.KEY_LYRICS_PROVIDER_LRCRED, enabled) { copy(isLrcredEnabled = it) }
+            "lrclib" -> updateBoolPref(PrefKeys.KEY_LYRICS_PROVIDER_LRCLIB, enabled) { copy(isLrclibEnabled = it) }
+            "kugou" -> updateBoolPref(PrefKeys.KEY_LYRICS_PROVIDER_KUGOU, enabled) { copy(isKugouEnabled = it) }
+            "netease" -> updateBoolPref(PrefKeys.KEY_LYRICS_PROVIDER_NETEASE, enabled) { copy(isNeteaseEnabled = it) }
+            "genius" -> updateBoolPref(PrefKeys.KEY_LYRICS_PROVIDER_GENIUS, enabled) { copy(isGeniusEnabled = it) }
         }
     }
 
-    fun reorderLyricsProviders(newOrder: List<String>) {
-        val orderStr = newOrder.joinToString(",")
-        PreferencesManager.setString(getApplication(), PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, orderStr)
-        _uiState.update { it.copy(lyricsProvidersOrder = newOrder) }
-    }
+    fun reorderLyricsProviders(newOrder: List<String>) =
+        updateStringPref(PrefKeys.KEY_LYRICS_PROVIDERS_ORDER, newOrder.joinToString(",")) { copy(lyricsProvidersOrder = newOrder) }
 
     fun showSettingsScreen() {
         _uiState.update { it.copy(showSettings = true, settingsSubpage = null) }

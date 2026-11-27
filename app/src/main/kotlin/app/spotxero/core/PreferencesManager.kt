@@ -419,152 +419,65 @@ object PreferencesManager {
 
     fun isStoredEnabled(key: String, default: Boolean): Boolean = isEnabledDirect(key, default)
 
-    private fun isEnabledDirect(key: String, default: Boolean): Boolean {
+    private inline fun <T> readPref(
+        key: String,
+        default: T,
+        cache: MutableMap<String, T>,
+        read: (SharedPreferences) -> T,
+    ): T {
         val tp = getTargetPrefs()
-        if (tp != null && tp.contains(key)) {
-            val v = tp.getBoolean(key, default)
-            inMemoryBooleans[key] = v
-            return v
-        }
-        inMemoryBooleans[key]?.let { return it }
+        if (tp != null && tp.contains(key)) return read(tp).also { cache[key] = it }
+        cache[key]?.let { return it }
         val rp = remotePrefs
-        if (rp != null && rp.contains(key)) {
-            val v = rp.getBoolean(key, default)
-            inMemoryBooleans[key] = v
-            return v
-        }
+        if (rp != null && rp.contains(key)) return read(rp).also { cache[key] = it }
         val lp = localPrefs
-        if (lp != null && lp.contains(key)) {
-            val v = lp.getBoolean(key, default)
-            inMemoryBooleans[key] = v
-            return v
-        }
+        if (lp != null && lp.contains(key)) return read(lp).also { cache[key] = it }
         return default
     }
 
-    fun setBoolean(context: Context? = null, key: String, value: Boolean) {
-        val changed = inMemoryBooleans.put(key, value) != value
-        updateFieldDirectly(key, value)
+    private inline fun <T> writePref(
+        context: Context?,
+        key: String,
+        value: T,
+        cache: MutableMap<String, T>,
+        updateField: (String, T) -> Unit,
+        skipSecretTarget: Boolean = false,
+        put: SharedPreferences.Editor.(String, T) -> SharedPreferences.Editor,
+    ) {
+        val changed = cache.put(key, value) != value
+        updateField(key, value)
         val tp = getTargetPrefs()
-        if (tp != null) {
-            runCatching {
-                tp.edit().putBoolean(key, value).commit()
-            }
-        }
         val rp = remotePrefs
+        if (tp != null && (!skipSecretTarget || key !in SECRET_KEYS || rp == null)) {
+            runCatching { tp.edit().put(key, value).commit() }
+        }
         if (rp != null) {
-            runCatching {
-                rp.edit().putBoolean(key, value).apply()
-            }
+            runCatching { rp.edit().put(key, value).apply() }
         }
         val prefs = runCatching { getPrefs(context) }.getOrNull()
         if (prefs != null && prefs != tp && prefs != rp) {
-            runCatching {
-                prefs.edit().putBoolean(key, value).apply()
-            }
+            runCatching { prefs.edit().put(key, value).apply() }
         }
-        if (changed) {
-            notifyPreferenceChanged()
-        }
+        if (changed) notifyPreferenceChanged()
     }
 
-    fun getString(key: String, default: String): String {
-        val tp = getTargetPrefs()
-        if (tp != null && tp.contains(key)) {
-            val v = tp.getString(key, default) ?: default
-            inMemoryStrings[key] = v
-            return v
-        }
-        inMemoryStrings[key]?.let { return it }
-        val rp = remotePrefs
-        if (rp != null && rp.contains(key)) {
-            val v = rp.getString(key, default) ?: default
-            inMemoryStrings[key] = v
-            return v
-        }
-        val lp = localPrefs
-        if (lp != null && lp.contains(key)) {
-            val v = lp.getString(key, default) ?: default
-            inMemoryStrings[key] = v
-            return v
-        }
-        return default
-    }
+    private fun isEnabledDirect(key: String, default: Boolean): Boolean =
+        readPref(key, default, inMemoryBooleans) { it.getBoolean(key, default) }
 
-    fun setString(context: Context? = null, key: String, value: String) {
-        val changed = inMemoryStrings.put(key, value) != value
-        updateStringFieldDirectly(key, value)
-        val tp = getTargetPrefs()
-        val rp = remotePrefs
-        if (tp != null && (key !in SECRET_KEYS || rp == null)) {
-            runCatching {
-                tp.edit().putString(key, value).commit()
-            }
-        }
-        if (rp != null) {
-            runCatching {
-                rp.edit().putString(key, value).apply()
-            }
-        }
-        val prefs = runCatching { getPrefs(context) }.getOrNull()
-        if (prefs != null && prefs != tp && prefs != rp) {
-            runCatching {
-                prefs.edit().putString(key, value).apply()
-            }
-        }
-        if (changed) {
-            notifyPreferenceChanged()
-        }
-    }
+    fun setBoolean(context: Context? = null, key: String, value: Boolean) =
+        writePref(context, key, value, inMemoryBooleans, ::updateFieldDirectly) { k, v -> putBoolean(k, v) }
 
-    fun getInt(key: String, default: Int): Int {
-        val tp = getTargetPrefs()
-        if (tp != null && tp.contains(key)) {
-            val v = tp.getInt(key, default)
-            inMemoryInts[key] = v
-            return v
-        }
-        inMemoryInts[key]?.let { return it }
-        val rp = remotePrefs
-        if (rp != null && rp.contains(key)) {
-            val v = rp.getInt(key, default)
-            inMemoryInts[key] = v
-            return v
-        }
-        val lp = localPrefs
-        if (lp != null && lp.contains(key)) {
-            val v = lp.getInt(key, default)
-            inMemoryInts[key] = v
-            return v
-        }
-        return default
-    }
+    fun getString(key: String, default: String): String =
+        readPref(key, default, inMemoryStrings) { it.getString(key, default) ?: default }
 
-    fun setInt(context: Context? = null, key: String, value: Int) {
-        val changed = inMemoryInts.put(key, value) != value
-        updateIntFieldDirectly(key, value)
-        val tp = getTargetPrefs()
-        if (tp != null) {
-            runCatching {
-                tp.edit().putInt(key, value).commit()
-            }
-        }
-        val rp = remotePrefs
-        if (rp != null) {
-            runCatching {
-                rp.edit().putInt(key, value).apply()
-            }
-        }
-        val prefs = runCatching { getPrefs(context) }.getOrNull()
-        if (prefs != null && prefs != tp && prefs != rp) {
-            runCatching {
-                prefs.edit().putInt(key, value).apply()
-            }
-        }
-        if (changed) {
-            notifyPreferenceChanged()
-        }
-    }
+    fun setString(context: Context? = null, key: String, value: String) =
+        writePref(context, key, value, inMemoryStrings, ::updateStringFieldDirectly, skipSecretTarget = true) { k, v -> putString(k, v) }
+
+    fun getInt(key: String, default: Int): Int =
+        readPref(key, default, inMemoryInts) { it.getInt(key, default) }
+
+    fun setInt(context: Context? = null, key: String, value: Int) =
+        writePref(context, key, value, inMemoryInts, ::updateIntFieldDirectly) { k, v -> putInt(k, v) }
 
     fun updateIntFieldDirectly(key: String, value: Int) {
         when (key) {
