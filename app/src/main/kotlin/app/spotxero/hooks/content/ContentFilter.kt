@@ -16,6 +16,8 @@ class ContentFilter private constructor(
 ) {
 
     private val fieldCache = ConcurrentHashMap<Pair<Class<*>, String>, Field>()
+    private val stringFieldsCache = ConcurrentHashMap<Class<*>, List<Field>>()
+    private val browseFieldsCache = ConcurrentHashMap<Class<*>, List<Field>>()
     private val sectionTypes = ConcurrentHashMap<Class<*>, Int>()
 
     fun filterItems(items: List<*>?): List<*>? {
@@ -120,40 +122,35 @@ class ContentFilter private constructor(
 
     private fun isHomeChip(chip: Any?): Boolean {
         if (chip == null) return false
-        return runCatching {
-            for (f in chip.javaClass.declaredFields) {
-                f.isAccessible = true
-                val v = f.get(chip) ?: continue
-                if (v is String && chipIds.contains(v)) {
-                    return@runCatching true
-                }
-            }
-            false
-        }.getOrDefault(false)
+        return stringFieldsOf(chip.javaClass).any { field ->
+            val v = runCatching { field.get(chip) as? String }.getOrNull()
+            v != null && chipIds.contains(v)
+        }
     }
 
     private fun isSearchChip(chip: Any?): Boolean {
         if (chip == null) return false
         return runCatching {
-            for (f in chip.javaClass.declaredFields) {
-                f.isAccessible = true
-                val v = f.get(chip) ?: continue
-                if (v is String && v.contains(keyword, ignoreCase = true)) {
+            for (f in stringFieldsOf(chip.javaClass)) {
+                val v = f.get(chip) as? String ?: continue
+                if (v.contains(keyword, ignoreCase = true)) {
                     return@runCatching true
                 }
-                if (v is android.os.Parcelable) {
-                    val parcel = android.os.Parcel.obtain()
-                    try {
-                        v.writeToParcel(parcel, 0)
-                        parcel.setDataPosition(0)
-                        val str = parcel.readString()
-                        if (str == parcelMarker) {
-                            return@runCatching true
-                        }
-                    } catch (_: Throwable) {
-                    } finally {
-                        parcel.recycle()
+            }
+            for (f in chip.javaClass.declaredFields) {
+                if (!android.os.Parcelable::class.java.isAssignableFrom(f.type)) continue
+                f.isAccessible = true
+                val v = f.get(chip) as? android.os.Parcelable ?: continue
+                val parcel = android.os.Parcel.obtain()
+                try {
+                    v.writeToParcel(parcel, 0)
+                    parcel.setDataPosition(0)
+                    if (parcel.readString() == parcelMarker) {
+                        return@runCatching true
                     }
+                } catch (_: Throwable) {
+                } finally {
+                    parcel.recycle()
                 }
             }
             false
@@ -167,36 +164,38 @@ class ContentFilter private constructor(
                 if (s.isNullOrEmpty()) return false
                 return s.contains(keyword, ignoreCase = true) || browsePrefixes.any { s.startsWith(it) }
             }
-            for (m in item.javaClass.methods) {
-                if (m.parameterCount == 0 && m.returnType == String::class.java) {
-                    val str = runCatching { m.invoke(item) as? String }.getOrNull()
-                    if (matches(str)) return@runCatching true
-                }
-            }
-            for (f in item.javaClass.declaredFields) {
-                f.isAccessible = true
+            for (f in browseFieldsOf(item.javaClass)) {
                 val v = f.get(item) ?: continue
-                if (v is String && matches(v)) return@runCatching true
-                if (v.javaClass.name.contains("ByteString")) {
-                    val s = runCatching { v.toString() }.getOrNull()
-                    if (matches(s)) return@runCatching true
-                }
-                if (!v.javaClass.isPrimitive && !v.javaClass.name.startsWith("java.") && !v.javaClass.name.startsWith("android.")) {
-                    for (innerM in v.javaClass.methods) {
-                        if (innerM.parameterCount == 0 && innerM.returnType == String::class.java) {
-                            val str = runCatching { innerM.invoke(v) as? String }.getOrNull()
-                            if (matches(str)) return@runCatching true
-                        }
-                    }
-                    for (innerF in v.javaClass.declaredFields) {
-                        innerF.isAccessible = true
-                        val innerV = innerF.get(v) ?: continue
-                        if (innerV is String && matches(innerV)) return@runCatching true
+                if (v is String) {
+                    if (matches(v)) return@runCatching true
+                } else if (v.javaClass.name.contains("ByteString")) {
+                    if (matches(runCatching { v.toString() }.getOrNull())) return@runCatching true
+                } else {
+                    for (innerF in stringFieldsOf(v.javaClass)) {
+                        val innerV = innerF.get(v) as? String
+                        if (matches(innerV)) return@runCatching true
                     }
                 }
             }
             false
         }.getOrDefault(false)
+    }
+
+    private fun stringFieldsOf(clazz: Class<*>): List<Field> = stringFieldsCache.computeIfAbsent(clazz) { type ->
+        type.declaredFields
+            .filter { !java.lang.reflect.Modifier.isStatic(it.modifiers) && it.type == String::class.java }
+            .onEach { it.isAccessible = true }
+    }
+
+    private fun browseFieldsOf(clazz: Class<*>): List<Field> = browseFieldsCache.computeIfAbsent(clazz) { type ->
+        type.declaredFields
+            .filter { f ->
+                !java.lang.reflect.Modifier.isStatic(f.modifiers) &&
+                    (f.type == String::class.java ||
+                        f.type.name.contains("ByteString") ||
+                        (!f.type.isPrimitive && !f.type.name.startsWith("java.") && !f.type.name.startsWith("android.")))
+            }
+            .onEach { it.isAccessible = true }
     }
 
     private fun isSectionType(section: Any?): Boolean {

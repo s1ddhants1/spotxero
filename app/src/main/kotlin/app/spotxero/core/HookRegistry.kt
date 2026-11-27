@@ -13,6 +13,7 @@ import app.spotxero.hooks.attestation.PackageSignatureHook
 import app.spotxero.hooks.content.ContentFilterHook
 import app.spotxero.hooks.lyrics.LyricsHook
 import app.spotxero.hooks.navigation.HidePremiumTabHook
+import app.spotxero.hooks.network.OkHttpBridge
 import app.spotxero.hooks.player.ArtworkSeekHook
 import app.spotxero.hooks.player.DisableSmartShuffleHook
 import app.spotxero.hooks.player.OnDemandInFreeHook
@@ -24,6 +25,7 @@ import app.spotxero.hooks.sharing.CleanSharingHook
 import app.spotxero.hooks.theme.SpotifyAmoledHook
 import app.spotxero.hooks.theme.SpotifyMonetHook
 import app.spotxero.hooks.theme.SpotifyRoundyUIHook
+import app.spotxero.hooks.theme.ThemeColorPipeline
 import app.spotxero.hooks.volume.ForceLocalPlaybackHook
 import io.github.libxposed.api.XposedModule
 import org.luckypray.dexkit.DexKitBridge
@@ -98,6 +100,8 @@ object HookRegistry {
             installedHooks.clear()
             failedHooks.clear()
             InAppSettingsHook.reset()
+            ThemeColorPipeline.reset()
+            OkHttpBridge.reset()
         }
     }
 

@@ -1,6 +1,5 @@
 package app.spotxero.hooks.attestation
 
-import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.ContextWrapper
@@ -139,15 +138,6 @@ object PackageSignatureHook {
     private var isInstallerHooked = false
 
     @Volatile
-    private var devPropsFalseFields: List<java.lang.reflect.Field> = emptyList()
-
-    @Volatile
-    private var devPropsTrueFields: List<java.lang.reflect.Field> = emptyList()
-
-    @Volatile
-    private var devPropsInstallSourceField: java.lang.reflect.Field? = null
-
-    @Volatile
     private var isRavelinHooked = false
 
     fun markBootstrapComplete() {
@@ -161,7 +151,6 @@ object PackageSignatureHook {
         installPackageManagerProxy(context)
         if (!isFrameworkHooked) {
             hookPackageManager(module)
-            hookStubProxy(module)
             hookOriginApkPaths(module)
             hookInstallSourceInfo(module)
             hookSigningInfo(module)
@@ -219,100 +208,71 @@ object PackageSignatureHook {
 
     private class PackageManagerInvocationHandler(private val base: Any) : InvocationHandler {
         override fun invoke(proxy: Any, method: Method, args: Array<out Any?>?): Any? {
-            val name = method.name
             val safeArgs = args ?: emptyArray()
-
-            when (name) {
+            return when (method.name) {
                 "getInstallerPackageName" -> {
                     val pkgName = safeArgs.getOrNull(0) as? String
                     if (isTargetPackage(pkgName)) {
-                        return PLAY_STORE_INSTALLER
+                        PLAY_STORE_INSTALLER
+                    } else {
+                        val real = invokeBase(method, safeArgs)
+                        if (real is String && isLspatchString(real)) PLAY_STORE_INSTALLER else real
                     }
-                    val real = invokeBase(method, safeArgs)
-                    return if (real is String && isLspatchString(real)) PLAY_STORE_INSTALLER else real
                 }
                 "getInstallSourceInfo" -> {
                     val pkgName = safeArgs.getOrNull(0) as? String
                     val real = invokeBase(method, safeArgs)
-                    if (isTargetPackage(pkgName)) {
-                        return createSpoofedInstallSourceInfo(real)
+                    if (isTargetPackage(pkgName) || (real != null && isLspatchInstallSource(real))) {
+                        createSpoofedInstallSourceInfo(real)
+                    } else {
+                        real
                     }
-                    if (real != null && isLspatchInstallSource(real)) {
-                        return createSpoofedInstallSourceInfo(real)
-                    }
-                    return real
                 }
                 "hasSigningCertificate" -> {
                     val pkgName = safeArgs.getOrNull(0) as? String
                     val cert = safeArgs.getOrNull(1) as? ByteArray
-                    if (isTargetPackage(pkgName)) {
-                        return matchesSpotifyCert(cert)
-                    }
-                    return invokeBase(method, safeArgs)
+                    if (isTargetPackage(pkgName)) matchesSpotifyCert(cert) else invokeBase(method, safeArgs)
                 }
                 "hasUidSigningCertificate" -> {
                     val uid = safeArgs.getOrNull(0) as? Int
                     val cert = safeArgs.getOrNull(1) as? ByteArray
-                    if (uid == android.os.Process.myUid()) {
-                        return matchesSpotifyCert(cert)
-                    }
-                    return invokeBase(method, safeArgs)
+                    if (uid == android.os.Process.myUid()) matchesSpotifyCert(cert) else invokeBase(method, safeArgs)
                 }
                 "checkSignatures" -> {
                     val pkg1 = safeArgs.getOrNull(0) as? String
                     val pkg2 = safeArgs.getOrNull(1) as? String
                     if (isTargetPackage(pkg1) && isTargetPackage(pkg2)) {
-                        return PackageManager.SIGNATURE_MATCH
+                        PackageManager.SIGNATURE_MATCH
+                    } else {
+                        invokeBase(method, safeArgs)
                     }
-                    return invokeBase(method, safeArgs)
                 }
                 "checkUidSignatures" -> {
                     val uid1 = safeArgs.getOrNull(0) as? Int
                     val uid2 = safeArgs.getOrNull(1) as? Int
                     val myUid = android.os.Process.myUid()
                     if (uid1 == myUid && uid2 == myUid) {
-                        return PackageManager.SIGNATURE_MATCH
+                        PackageManager.SIGNATURE_MATCH
+                    } else {
+                        invokeBase(method, safeArgs)
                     }
-                    return invokeBase(method, safeArgs)
                 }
                 "getPackageInfo" -> {
                     val pkgName = safeArgs.getOrNull(0) as? String
-                    if (isForbiddenPackage(pkgName)) {
-                        return null
-                    }
-                    val real = invokeBase(method, safeArgs) as? PackageInfo
-                    patchPackageInfo(pkgName, real)
-                    return real
+                    if (isForbiddenPackage(pkgName)) return null
+                    (invokeBase(method, safeArgs) as? PackageInfo)?.also { patchPackageInfo(pkgName, it) }
                 }
                 "getApplicationInfo" -> {
                     val pkgName = safeArgs.getOrNull(0) as? String
-                    if (isForbiddenPackage(pkgName)) {
-                        return null
-                    }
-                    val real = invokeBase(method, safeArgs) as? ApplicationInfo
-                    sanitizeApplicationInfo(pkgName, real)
-                    return real
+                    if (isForbiddenPackage(pkgName)) return null
+                    (invokeBase(method, safeArgs) as? ApplicationInfo)?.also { sanitizeApplicationInfo(pkgName, it) }
                 }
-                "getInstalledPackages" -> {
-                    val real = invokeBase(method, safeArgs)
-                    return filterParceledListSlice(real, true)
-                }
-                "getInstalledApplications" -> {
-                    val real = invokeBase(method, safeArgs)
-                    return filterParceledListSlice(real, false)
-                }
-                "equals" -> {
-                    return safeArgs.getOrNull(0) === proxy
-                }
-                "hashCode" -> {
-                    return System.identityHashCode(proxy)
-                }
-                "toString" -> {
-                    return base.toString()
-                }
-                else -> {
-                    return invokeBase(method, safeArgs)
-                }
+                "getInstalledPackages" -> filterParceledListSlice(invokeBase(method, safeArgs), true)
+                "getInstalledApplications" -> filterParceledListSlice(invokeBase(method, safeArgs), false)
+                "equals" -> safeArgs.getOrNull(0) === proxy
+                "hashCode" -> System.identityHashCode(proxy)
+                "toString" -> base.toString()
+                else -> invokeBase(method, safeArgs)
             }
         }
 
@@ -341,24 +301,21 @@ object PackageSignatureHook {
     }
 
     private fun isLspatchInstallSource(info: Any): Boolean {
-        if (info is InstallSourceInfo) {
-            val inst = info.installingPackageName
-            val init = info.initiatingPackageName
-            val orig = info.originatingPackageName
-            val owner = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                runCatching { info.updateOwnerPackageName }.getOrNull()
-            } else null
-            return isLspatchString(inst) || isLspatchString(init) || isLspatchString(orig) || isLspatchString(owner)
-        }
-        return false
+        if (info !is InstallSourceInfo) return false
+        val owner = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            runCatching { info.updateOwnerPackageName }.getOrNull()
+        } else null
+        return isLspatchString(info.installingPackageName) ||
+            isLspatchString(info.initiatingPackageName) ||
+            isLspatchString(info.originatingPackageName) ||
+            isLspatchString(owner)
     }
 
     private fun createSpoofedInstallSourceInfo(real: Any?): Any? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
         return runCatching {
             val isiClass = Class.forName("android.content.pm.InstallSourceInfo")
-            val realInfo = real as? InstallSourceInfo
-            val initSigningInfo = realInfo?.initiatingPackageSigningInfo
+            val initSigningInfo = (real as? InstallSourceInfo)?.initiatingPackageSigningInfo
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 val ctor6 = runCatching {
@@ -391,16 +348,8 @@ object PackageSignatureHook {
                     String::class.java
                 )
             }.getOrNull()
-            if (ctor4 != null) {
-                return@runCatching ctor4.newInstance(
-                    PLAY_STORE_INSTALLER,
-                    initSigningInfo,
-                    null,
-                    PLAY_STORE_INSTALLER
-                )
-            }
-
-            real?.also { patchInstallSourceInfo(it) }
+            ctor4?.newInstance(PLAY_STORE_INSTALLER, initSigningInfo, null, PLAY_STORE_INSTALLER)
+                ?: real?.also { patchInstallSourceInfo(it) }
         }.getOrElse {
             real?.also { patchInstallSourceInfo(it) }
         }
@@ -409,42 +358,34 @@ object PackageSignatureHook {
     private fun filterParceledListSlice(slice: Any?, isPackageInfo: Boolean): Any? {
         if (slice == null) return null
         return runCatching {
-            val getListMethod = slice.javaClass.getMethod("getList")
-            val list = getListMethod.invoke(slice) as? List<*> ?: return slice
-            val filteredList = ArrayList<Any?>()
+            val list = slice.javaClass.getMethod("getList").invoke(slice) as? List<*> ?: return slice
+            val filteredList = ArrayList<Any?>(list.size)
             for (item in list) {
-                if (item == null) continue
-                if (isPackageInfo && item is PackageInfo) {
-                    if (!isForbiddenPackage(item.packageName)) {
+                when {
+                    item == null -> continue
+                    isPackageInfo && item is PackageInfo -> if (!isForbiddenPackage(item.packageName)) {
                         patchPackageInfo(item.packageName, item)
                         filteredList.add(item)
                     }
-                } else if (!isPackageInfo && item is ApplicationInfo) {
-                    if (!isForbiddenPackage(item.packageName)) {
+                    !isPackageInfo && item is ApplicationInfo -> if (!isForbiddenPackage(item.packageName)) {
                         sanitizeApplicationInfo(item.packageName, item)
                         filteredList.add(item)
                     }
-                } else {
-                    filteredList.add(item)
+                    else -> filteredList.add(item)
                 }
             }
-            val sliceCtor = slice.javaClass.getConstructor(List::class.java)
-            sliceCtor.newInstance(filteredList)
+            slice.javaClass.getConstructor(List::class.java).newInstance(filteredList)
         }.getOrElse { slice }
     }
 
     private fun hookPackageManager(module: XposedModule) {
         val pmClass = runCatching { Class.forName("android.app.ApplicationPackageManager") }.getOrNull() ?: return
 
-        val getPkgInfoInt = pmClass.declaredMethods.firstOrNull {
-            it.name == "getPackageInfo" && it.parameterCount == 2 &&
-                it.parameterTypes[0] == String::class.java &&
-                it.parameterTypes[1] == Int::class.javaPrimitiveType
-        }
-        if (getPkgInfoInt != null) {
-            module.deoptimize(getPkgInfoInt)
-            module.hook(getPkgInfoInt)
-                .setId("pm_get_package_info_int")
+        fun hookInfoLookup(method: Method?, id: String, isPackageInfo: Boolean) {
+            if (method == null) return
+            module.deoptimize(method)
+            module.hook(method)
+                .setId(id)
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     val pkgName = chain.getArg(0) as? String
@@ -452,302 +393,114 @@ object PackageSignatureHook {
                         throw PackageManager.NameNotFoundException("Package not found: $pkgName")
                     }
                     val result = chain.proceed()
-                    patchPackageInfo(pkgName, result as? PackageInfo)
-                    result
-                }
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val getPkgInfoFlags = pmClass.declaredMethods.firstOrNull {
-                it.name == "getPackageInfo" && it.parameterCount == 2 &&
-                    it.parameterTypes[0] == String::class.java &&
-                    it.parameterTypes[1].name == "android.content.pm.PackageManager\$PackageInfoFlags"
-            }
-            if (getPkgInfoFlags != null) {
-                module.deoptimize(getPkgInfoFlags)
-                module.hook(getPkgInfoFlags)
-                    .setId("pm_get_package_info_flags")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        val pkgName = chain.getArg(0) as? String
-                        if (isForbiddenPackage(pkgName)) {
-                            throw PackageManager.NameNotFoundException("Package not found: $pkgName")
-                        }
-                        val result = chain.proceed()
+                    if (isPackageInfo) {
                         patchPackageInfo(pkgName, result as? PackageInfo)
-                        result
-                    }
-            }
-        }
-
-        val getInstaller = pmClass.declaredMethods.firstOrNull {
-            it.name == "getInstallerPackageName" && it.parameterCount == 1 &&
-                it.parameterTypes[0] == String::class.java
-        }
-        if (getInstaller != null) {
-            module.deoptimize(getInstaller)
-            module.hook(getInstaller)
-                .setId("pm_get_installer_package_name")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val pkgName = chain.getArg(0) as? String
-                    if (isTargetPackage(pkgName)) {
-                        PLAY_STORE_INSTALLER
                     } else {
-                        val result = chain.proceed()
-                        if (result is String && isLspatchString(result)) {
-                            PLAY_STORE_INSTALLER
-                        } else {
-                            result
-                        }
+                        sanitizeApplicationInfo(pkgName, result as? ApplicationInfo)
                     }
-                }
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val getInstallSource = pmClass.declaredMethods.firstOrNull {
-                it.name == "getInstallSourceInfo" && it.parameterCount == 1 &&
-                    it.parameterTypes[0] == String::class.java
-            }
-            if (getInstallSource != null) {
-                module.deoptimize(getInstallSource)
-                module.hook(getInstallSource)
-                    .setId("pm_get_install_source_info")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        val pkgName = chain.getArg(0) as? String
-                        if (isForbiddenPackage(pkgName)) {
-                            throw PackageManager.NameNotFoundException("Package not found: $pkgName")
-                        }
-                        val result = chain.proceed()
-                        if (result != null && isTargetPackage(pkgName)) {
-                            patchInstallSourceInfo(result)
-                            spotifyInstallSourceInfoSet.add(result)
-                        } else if (result != null) {
-                            runCatching {
-                                val field = result.javaClass.getDeclaredField("mInstallingPackageName").apply { isAccessible = true }
-                                val installing = field.get(result) as? String
-                                if (isLspatchString(installing)) {
-                                    patchInstallSourceInfo(result)
-                                    spotifyInstallSourceInfoSet.add(result)
-                                }
-                            }
-                        }
-                        result
-                    }
-            }
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            val hasSigningCert = pmClass.declaredMethods.firstOrNull {
-                it.name == "hasSigningCertificate" && it.parameterCount == 3 &&
-                    it.parameterTypes[0] == String::class.java &&
-                    it.parameterTypes[1] == ByteArray::class.java &&
-                    it.parameterTypes[2] == Int::class.javaPrimitiveType
-            }
-            if (hasSigningCert != null) {
-                module.deoptimize(hasSigningCert)
-                module.hook(hasSigningCert)
-                    .setId("pm_has_signing_certificate")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        val pkgName = chain.getArg(0) as? String
-                        if (isTargetPackage(pkgName)) {
-                            matchesSpotifyCert(chain.getArg(1) as? ByteArray)
-                        } else {
-                            chain.proceed()
-                        }
-                    }
-            }
-
-            val hasSigningCertUid = pmClass.declaredMethods.firstOrNull {
-                it.name == "hasSigningCertificate" && it.parameterCount == 3 &&
-                    it.parameterTypes[0] == Int::class.javaPrimitiveType &&
-                    it.parameterTypes[1] == ByteArray::class.java &&
-                    it.parameterTypes[2] == Int::class.javaPrimitiveType
-            }
-            if (hasSigningCertUid != null) {
-                module.deoptimize(hasSigningCertUid)
-                module.hook(hasSigningCertUid)
-                    .setId("pm_has_signing_certificate_uid")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        val uid = chain.getArg(0) as? Int
-                        if (uid == android.os.Process.myUid()) {
-                            matchesSpotifyCert(chain.getArg(1) as? ByteArray)
-                        } else {
-                            chain.proceed()
-                        }
-                    }
-            }
-        }
-
-        val checkSignaturesPkg = pmClass.declaredMethods.firstOrNull {
-            it.name == "checkSignatures" && it.parameterCount == 2 &&
-                it.parameterTypes[0] == String::class.java &&
-                it.parameterTypes[1] == String::class.java
-        }
-        if (checkSignaturesPkg != null) {
-            module.deoptimize(checkSignaturesPkg)
-            module.hook(checkSignaturesPkg)
-                .setId("pm_check_signatures_pkg")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val pkg1 = chain.getArg(0) as? String
-                    val pkg2 = chain.getArg(1) as? String
-                    if (isTargetPackage(pkg1) && isTargetPackage(pkg2)) {
-                        PackageManager.SIGNATURE_MATCH
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-
-        val checkSignaturesUid = pmClass.declaredMethods.firstOrNull {
-            it.name == "checkSignatures" && it.parameterCount == 2 &&
-                it.parameterTypes[0] == Int::class.javaPrimitiveType &&
-                it.parameterTypes[1] == Int::class.javaPrimitiveType
-        }
-        if (checkSignaturesUid != null) {
-            module.deoptimize(checkSignaturesUid)
-            module.hook(checkSignaturesUid)
-                .setId("pm_check_signatures_uid")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val uid1 = chain.getArg(0) as? Int
-                    val uid2 = chain.getArg(1) as? Int
-                    val myUid = android.os.Process.myUid()
-                    if (uid1 == myUid && uid2 == myUid) {
-                        PackageManager.SIGNATURE_MATCH
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-
-        val getInstalledPkgs = pmClass.declaredMethods.firstOrNull {
-            it.name == "getInstalledPackages" && it.parameterCount == 1 &&
-                it.parameterTypes[0] == Int::class.javaPrimitiveType
-        }
-        if (getInstalledPkgs != null) {
-            module.deoptimize(getInstalledPkgs)
-            module.hook(getInstalledPkgs)
-                .setId("pm_get_installed_packages")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val list = chain.proceed() as? List<*> ?: return@intercept chain.proceed()
-                    list.filterIsInstance<PackageInfo>()
-                        .filter { !isForbiddenPackage(it.packageName) }
-                        .onEach { patchPackageInfo(it.packageName, it) }
-                }
-        }
-
-        val getInstalledApps = pmClass.declaredMethods.firstOrNull {
-            it.name == "getInstalledApplications" && it.parameterCount == 1 &&
-                it.parameterTypes[0] == Int::class.javaPrimitiveType
-        }
-        if (getInstalledApps != null) {
-            module.deoptimize(getInstalledApps)
-            module.hook(getInstalledApps)
-                .setId("pm_get_installed_applications")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val list = chain.proceed() as? List<*> ?: return@intercept chain.proceed()
-                    list.filterIsInstance<ApplicationInfo>()
-                        .filter { !isForbiddenPackage(it.packageName) }
-                        .onEach { sanitizeApplicationInfo(it.packageName, it) }
-                }
-        }
-
-        val getAppInfoInt = pmClass.declaredMethods.firstOrNull {
-            it.name == "getApplicationInfo" && it.parameterCount == 2 &&
-                it.parameterTypes[0] == String::class.java &&
-                it.parameterTypes[1] == Int::class.javaPrimitiveType
-        }
-        if (getAppInfoInt != null) {
-            module.deoptimize(getAppInfoInt)
-            module.hook(getAppInfoInt)
-                .setId("pm_get_application_info_int")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val pkgName = chain.getArg(0) as? String
-                    if (isForbiddenPackage(pkgName)) {
-                        throw PackageManager.NameNotFoundException("Package not found: $pkgName")
-                    }
-                    val result = chain.proceed() as? ApplicationInfo
-                    sanitizeApplicationInfo(pkgName, result)
                     result
                 }
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val getAppInfoFlags = pmClass.declaredMethods.firstOrNull {
-                it.name == "getApplicationInfo" && it.parameterCount == 2 &&
-                    it.parameterTypes[0] == String::class.java &&
-                    it.parameterTypes[1].name == "android.content.pm.PackageManager\$ApplicationInfoFlags"
-            }
-            if (getAppInfoFlags != null) {
-                module.deoptimize(getAppInfoFlags)
-                module.hook(getAppInfoFlags)
-                    .setId("pm_get_application_info_flags")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        val pkgName = chain.getArg(0) as? String
-                        if (isForbiddenPackage(pkgName)) {
-                            throw PackageManager.NameNotFoundException("Package not found: $pkgName")
-                        }
-                        val result = chain.proceed() as? ApplicationInfo
-                        sanitizeApplicationInfo(pkgName, result)
-                        result
-                    }
-            }
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val getInstalledPkgsFlags = pmClass.declaredMethods.firstOrNull {
-                it.name == "getInstalledPackages" && it.parameterCount == 1 &&
-                    it.parameterTypes[0].name == "android.content.pm.PackageManager\$PackageInfoFlags"
-            }
-            if (getInstalledPkgsFlags != null) {
-                module.deoptimize(getInstalledPkgsFlags)
-                module.hook(getInstalledPkgsFlags)
-                    .setId("pm_get_installed_packages_flags")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        val list = chain.proceed() as? List<*> ?: return@intercept chain.proceed()
+        fun hookInstalledList(method: Method?, id: String, isPackageInfo: Boolean) {
+            if (method == null) return
+            module.deoptimize(method)
+            module.hook(method)
+                .setId(id)
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    val raw = chain.proceed()
+                    val list = raw as? List<*> ?: return@intercept raw
+                    if (isPackageInfo) {
                         list.filterIsInstance<PackageInfo>()
                             .filter { !isForbiddenPackage(it.packageName) }
                             .onEach { patchPackageInfo(it.packageName, it) }
+                    } else {
+                        list.filterIsInstance<ApplicationInfo>()
+                            .filter { !isForbiddenPackage(it.packageName) }
+                            .onEach { sanitizeApplicationInfo(it.packageName, it) }
                     }
-            }
+                }
+        }
 
-            val getInstalledAppsFlags = pmClass.declaredMethods.firstOrNull {
+        hookInfoLookup(
+            pmClass.declaredMethods.firstOrNull {
+                it.name == "getPackageInfo" && it.parameterCount == 2 &&
+                    it.parameterTypes[0] == String::class.java &&
+                    it.parameterTypes[1] == Int::class.javaPrimitiveType
+            },
+            "pm_get_package_info_int",
+            isPackageInfo = true
+        )
+        hookInfoLookup(
+            pmClass.declaredMethods.firstOrNull {
+                it.name == "getApplicationInfo" && it.parameterCount == 2 &&
+                    it.parameterTypes[0] == String::class.java &&
+                    it.parameterTypes[1] == Int::class.javaPrimitiveType
+            },
+            "pm_get_application_info_int",
+            isPackageInfo = false
+        )
+        hookInstalledList(
+            pmClass.declaredMethods.firstOrNull {
+                it.name == "getInstalledPackages" && it.parameterCount == 1 &&
+                    it.parameterTypes[0] == Int::class.javaPrimitiveType
+            },
+            "pm_get_installed_packages",
+            isPackageInfo = true
+        )
+        hookInstalledList(
+            pmClass.declaredMethods.firstOrNull {
                 it.name == "getInstalledApplications" && it.parameterCount == 1 &&
-                    it.parameterTypes[0].name == "android.content.pm.PackageManager\$ApplicationInfoFlags"
-            }
-            if (getInstalledAppsFlags != null) {
-                module.deoptimize(getInstalledAppsFlags)
-                module.hook(getInstalledAppsFlags)
-                    .setId("pm_get_installed_applications_flags")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        val list = chain.proceed() as? List<*> ?: return@intercept chain.proceed()
-                        list.filterIsInstance<ApplicationInfo>().filter { !isForbiddenPackage(it.packageName) }
-                    }
-            }
-        }
-    }
+                    it.parameterTypes[0] == Int::class.javaPrimitiveType
+            },
+            "pm_get_installed_applications",
+            isPackageInfo = false
+        )
 
-    private fun hookStubProxy(module: XposedModule) {
-        val stubProxyClass = runCatching { Class.forName("android.content.pm.IPackageManager\$Stub\$Proxy") }.getOrNull() ?: return
-        val getInstaller = stubProxyClass.declaredMethods.firstOrNull {
-            it.name == "getInstallerPackageName" && it.parameterCount == 1 &&
-                it.parameterTypes[0] == String::class.java
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            hookInfoLookup(
+                pmClass.declaredMethods.firstOrNull {
+                    it.name == "getPackageInfo" && it.parameterCount == 2 &&
+                        it.parameterTypes[0] == String::class.java &&
+                        it.parameterTypes[1].name == "android.content.pm.PackageManager\$PackageInfoFlags"
+                },
+                "pm_get_package_info_flags",
+                isPackageInfo = true
+            )
+            hookInfoLookup(
+                pmClass.declaredMethods.firstOrNull {
+                    it.name == "getApplicationInfo" && it.parameterCount == 2 &&
+                        it.parameterTypes[0] == String::class.java &&
+                        it.parameterTypes[1].name == "android.content.pm.PackageManager\$ApplicationInfoFlags"
+                },
+                "pm_get_application_info_flags",
+                isPackageInfo = false
+            )
+            hookInstalledList(
+                pmClass.declaredMethods.firstOrNull {
+                    it.name == "getInstalledPackages" && it.parameterCount == 1 &&
+                        it.parameterTypes[0].name == "android.content.pm.PackageManager\$PackageInfoFlags"
+                },
+                "pm_get_installed_packages_flags",
+                isPackageInfo = true
+            )
+            hookInstalledList(
+                pmClass.declaredMethods.firstOrNull {
+                    it.name == "getInstalledApplications" && it.parameterCount == 1 &&
+                        it.parameterTypes[0].name == "android.content.pm.PackageManager\$ApplicationInfoFlags"
+                },
+                "pm_get_installed_applications_flags",
+                isPackageInfo = false
+            )
         }
-        if (getInstaller != null) {
-            module.deoptimize(getInstaller)
-            module.hook(getInstaller)
-                .setId("stub_proxy_get_installer")
+
+        pmClass.declaredMethods.firstOrNull {
+            it.name == "getInstallerPackageName" && it.parameterCount == 1 && it.parameterTypes[0] == String::class.java
+        }?.let { method ->
+            module.deoptimize(method)
+            module.hook(method)
+                .setId("pm_get_installer_package_name")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     val pkgName = chain.getArg(0) as? String
@@ -761,75 +514,78 @@ object PackageSignatureHook {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val getInstallSource = stubProxyClass.declaredMethods.firstOrNull {
-                it.name == "getInstallSourceInfo" && it.parameterCount == 2 &&
-                    it.parameterTypes[0] == String::class.java &&
-                    it.parameterTypes[1] == Int::class.javaPrimitiveType
-            }
-            if (getInstallSource != null) {
-                module.deoptimize(getInstallSource)
-                module.hook(getInstallSource)
-                    .setId("stub_proxy_get_install_source")
+            pmClass.declaredMethods.firstOrNull {
+                it.name == "getInstallSourceInfo" && it.parameterCount == 1 && it.parameterTypes[0] == String::class.java
+            }?.let { method ->
+                module.deoptimize(method)
+                module.hook(method)
+                    .setId("pm_get_install_source_info")
                     .setExceptionMode(ExceptionMode.PROTECTIVE)
                     .intercept { chain ->
                         val pkgName = chain.getArg(0) as? String
                         if (isForbiddenPackage(pkgName)) {
-                            return@intercept null
+                            throw PackageManager.NameNotFoundException("Package not found: $pkgName")
                         }
                         val result = chain.proceed()
-                        if (result != null && isTargetPackage(pkgName)) {
+                        if (result != null && (isTargetPackage(pkgName) || isLspatchInstallSource(result))) {
                             patchInstallSourceInfo(result)
                             spotifyInstallSourceInfoSet.add(result)
-                        } else if (result != null) {
-                            runCatching {
-                                val field = result.javaClass.getDeclaredField("mInstallingPackageName").apply { isAccessible = true }
-                                val installing = field.get(result) as? String
-                                if (isLspatchString(installing)) {
-                                    patchInstallSourceInfo(result)
-                                    spotifyInstallSourceInfoSet.add(result)
-                                }
-                            }
                         }
                         result
                     }
             }
         }
 
-        val hasSigningCert = stubProxyClass.declaredMethods.firstOrNull {
-            it.name == "hasSigningCertificate" && it.parameterCount == 3 &&
-                it.parameterTypes[0] == String::class.java &&
-                it.parameterTypes[1] == ByteArray::class.java &&
-                it.parameterTypes[2] == Int::class.javaPrimitiveType
-        }
-        if (hasSigningCert != null) {
-            module.deoptimize(hasSigningCert)
-            module.hook(hasSigningCert)
-                .setId("stub_proxy_has_signing_cert")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val pkgName = chain.getArg(0) as? String
-                    if (isTargetPackage(pkgName)) {
-                        matchesSpotifyCert(chain.getArg(1) as? ByteArray)
-                    } else {
-                        chain.proceed()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            pmClass.declaredMethods.firstOrNull {
+                it.name == "hasSigningCertificate" && it.parameterCount == 3 &&
+                    it.parameterTypes[0] == String::class.java &&
+                    it.parameterTypes[1] == ByteArray::class.java &&
+                    it.parameterTypes[2] == Int::class.javaPrimitiveType
+            }?.let { method ->
+                module.deoptimize(method)
+                module.hook(method)
+                    .setId("pm_has_signing_certificate")
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        if (isTargetPackage(chain.getArg(0) as? String)) {
+                            matchesSpotifyCert(chain.getArg(1) as? ByteArray)
+                        } else {
+                            chain.proceed()
+                        }
                     }
-                }
+            }
+
+            pmClass.declaredMethods.firstOrNull {
+                it.name == "hasSigningCertificate" && it.parameterCount == 3 &&
+                    it.parameterTypes[0] == Int::class.javaPrimitiveType &&
+                    it.parameterTypes[1] == ByteArray::class.java &&
+                    it.parameterTypes[2] == Int::class.javaPrimitiveType
+            }?.let { method ->
+                module.deoptimize(method)
+                module.hook(method)
+                    .setId("pm_has_signing_certificate_uid")
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        if ((chain.getArg(0) as? Int) == android.os.Process.myUid()) {
+                            matchesSpotifyCert(chain.getArg(1) as? ByteArray)
+                        } else {
+                            chain.proceed()
+                        }
+                    }
+            }
         }
 
-        val checkSigs = stubProxyClass.declaredMethods.firstOrNull {
+        pmClass.declaredMethods.firstOrNull {
             it.name == "checkSignatures" && it.parameterCount == 2 &&
-                it.parameterTypes[0] == String::class.java &&
-                it.parameterTypes[1] == String::class.java
-        }
-        if (checkSigs != null) {
-            module.deoptimize(checkSigs)
-            module.hook(checkSigs)
-                .setId("stub_proxy_check_signatures")
+                it.parameterTypes[0] == String::class.java && it.parameterTypes[1] == String::class.java
+        }?.let { method ->
+            module.deoptimize(method)
+            module.hook(method)
+                .setId("pm_check_signatures_pkg")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
-                    val pkg1 = chain.getArg(0) as? String
-                    val pkg2 = chain.getArg(1) as? String
-                    if (isTargetPackage(pkg1) && isTargetPackage(pkg2)) {
+                    if (isTargetPackage(chain.getArg(0) as? String) && isTargetPackage(chain.getArg(1) as? String)) {
                         PackageManager.SIGNATURE_MATCH
                     } else {
                         chain.proceed()
@@ -837,47 +593,21 @@ object PackageSignatureHook {
                 }
         }
 
-        val getPkgInfo = stubProxyClass.declaredMethods.firstOrNull {
-            it.name == "getPackageInfo" && it.parameterCount == 3 &&
-                it.parameterTypes[0] == String::class.java &&
-                it.parameterTypes[1] == Long::class.javaPrimitiveType &&
-                it.parameterTypes[2] == Int::class.javaPrimitiveType
-        }
-        if (getPkgInfo != null) {
-            module.deoptimize(getPkgInfo)
-            module.hook(getPkgInfo)
-                .setId("stub_proxy_get_package_info")
+        pmClass.declaredMethods.firstOrNull {
+            it.name == "checkSignatures" && it.parameterCount == 2 &&
+                it.parameterTypes[0] == Int::class.javaPrimitiveType && it.parameterTypes[1] == Int::class.javaPrimitiveType
+        }?.let { method ->
+            module.deoptimize(method)
+            module.hook(method)
+                .setId("pm_check_signatures_uid")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
-                    val pkgName = chain.getArg(0) as? String
-                    if (isForbiddenPackage(pkgName)) {
-                        return@intercept null
+                    val myUid = android.os.Process.myUid()
+                    if ((chain.getArg(0) as? Int) == myUid && (chain.getArg(1) as? Int) == myUid) {
+                        PackageManager.SIGNATURE_MATCH
+                    } else {
+                        chain.proceed()
                     }
-                    val result = chain.proceed()
-                    patchPackageInfo(pkgName, result as? PackageInfo)
-                    result
-                }
-        }
-
-        val getAppInfo = stubProxyClass.declaredMethods.firstOrNull {
-            it.name == "getApplicationInfo" && it.parameterCount == 3 &&
-                it.parameterTypes[0] == String::class.java &&
-                it.parameterTypes[1] == Long::class.javaPrimitiveType &&
-                it.parameterTypes[2] == Int::class.javaPrimitiveType
-        }
-        if (getAppInfo != null) {
-            module.deoptimize(getAppInfo)
-            module.hook(getAppInfo)
-                .setId("stub_proxy_get_application_info")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val pkgName = chain.getArg(0) as? String
-                    if (isForbiddenPackage(pkgName)) {
-                        return@intercept null
-                    }
-                    val result = chain.proceed() as? ApplicationInfo
-                    sanitizeApplicationInfo(pkgName, result)
-                    result
                 }
         }
     }
@@ -915,16 +645,17 @@ object PackageSignatureHook {
     private fun hookInstallSourceInfo(module: XposedModule) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         val clazz = runCatching { Class.forName("android.content.pm.InstallSourceInfo") }.getOrNull() ?: return
-        val getInstalling = clazz.declaredMethods.firstOrNull { it.name == "getInstallingPackageName" && it.parameterCount == 0 }
-        if (getInstalling != null) {
-            module.deoptimize(getInstalling)
-            module.hook(getInstalling)
-                .setId("install_source_installing")
+
+        fun hookPackageGetter(methodName: String, hookId: String, spoofValue: String?) {
+            val method = clazz.declaredMethods.firstOrNull { it.name == methodName && it.parameterCount == 0 } ?: return
+            module.deoptimize(method)
+            module.hook(method)
+                .setId(hookId)
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     val target = chain.getThisObject()
                     if (target != null && spotifyInstallSourceInfoSet.contains(target)) {
-                        PLAY_STORE_INSTALLER
+                        spoofValue
                     } else {
                         val result = chain.proceed()
                         if (result is String && isLspatchString(result)) {
@@ -932,90 +663,23 @@ object PackageSignatureHook {
                                 patchInstallSourceInfo(it)
                                 spotifyInstallSourceInfoSet.add(it)
                             }
-                            PLAY_STORE_INSTALLER
+                            spoofValue
                         } else {
                             result
                         }
                     }
                 }
         }
-        val getInitiating = clazz.declaredMethods.firstOrNull { it.name == "getInitiatingPackageName" && it.parameterCount == 0 }
-        if (getInitiating != null) {
-            module.deoptimize(getInitiating)
-            module.hook(getInitiating)
-                .setId("install_source_initiating")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val target = chain.getThisObject()
-                    if (target != null && spotifyInstallSourceInfoSet.contains(target)) {
-                        PLAY_STORE_INSTALLER
-                    } else {
-                        val result = chain.proceed()
-                        if (result is String && isLspatchString(result)) {
-                            target?.let {
-                                patchInstallSourceInfo(it)
-                                spotifyInstallSourceInfoSet.add(it)
-                            }
-                            PLAY_STORE_INSTALLER
-                        } else {
-                            result
-                        }
-                    }
-                }
-        }
-        val getOriginating = clazz.declaredMethods.firstOrNull { it.name == "getOriginatingPackageName" && it.parameterCount == 0 }
-        if (getOriginating != null) {
-            module.deoptimize(getOriginating)
-            module.hook(getOriginating)
-                .setId("install_source_originating")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val target = chain.getThisObject()
-                    if (target != null && spotifyInstallSourceInfoSet.contains(target)) {
-                        null
-                    } else {
-                        val result = chain.proceed()
-                        if (result is String && isLspatchString(result)) {
-                            target?.let {
-                                patchInstallSourceInfo(it)
-                                spotifyInstallSourceInfoSet.add(it)
-                            }
-                            null
-                        } else {
-                            result
-                        }
-                    }
-                }
-        }
+
+        hookPackageGetter("getInstallingPackageName", "install_source_installing", PLAY_STORE_INSTALLER)
+        hookPackageGetter("getInitiatingPackageName", "install_source_initiating", PLAY_STORE_INSTALLER)
+        hookPackageGetter("getOriginatingPackageName", "install_source_originating", null)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            val getUpdateOwner = clazz.declaredMethods.firstOrNull { it.name == "getUpdateOwnerPackageName" && it.parameterCount == 0 }
-            if (getUpdateOwner != null) {
-                module.deoptimize(getUpdateOwner)
-                module.hook(getUpdateOwner)
-                    .setId("install_source_update_owner")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        val target = chain.getThisObject()
-                        if (target != null && spotifyInstallSourceInfoSet.contains(target)) {
-                            PLAY_STORE_INSTALLER
-                        } else {
-                            val result = chain.proceed()
-                            if (result is String && isLspatchString(result)) {
-                                target?.let {
-                                    patchInstallSourceInfo(it)
-                                    spotifyInstallSourceInfoSet.add(it)
-                                }
-                                PLAY_STORE_INSTALLER
-                            } else {
-                                result
-                            }
-                        }
-                    }
-            }
-            val getSource = clazz.declaredMethods.firstOrNull { it.name == "getPackageSource" && it.parameterCount == 0 }
-            if (getSource != null) {
-                module.deoptimize(getSource)
-                module.hook(getSource)
+            hookPackageGetter("getUpdateOwnerPackageName", "install_source_update_owner", PLAY_STORE_INSTALLER)
+            clazz.declaredMethods.firstOrNull { it.name == "getPackageSource" && it.parameterCount == 0 }?.let { method ->
+                module.deoptimize(method)
+                module.hook(method)
                     .setId("install_source_package_source")
                     .setExceptionMode(ExceptionMode.PROTECTIVE)
                     .intercept { chain ->
@@ -1035,31 +699,19 @@ object PackageSignatureHook {
         if (info == null) return
         runCatching {
             val clazz = info.javaClass
-            runCatching {
-                clazz.getDeclaredField("mInstallingPackageName").apply {
-                    isAccessible = true
-                    set(info, PLAY_STORE_INSTALLER)
-                }
-            }
-            runCatching {
-                clazz.getDeclaredField("mInitiatingPackageName").apply {
-                    isAccessible = true
-                    set(info, PLAY_STORE_INSTALLER)
-                }
-            }
-            runCatching {
-                clazz.getDeclaredField("mOriginatingPackageName").apply {
-                    isAccessible = true
-                    set(info, null)
-                }
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            fun setField(name: String, value: Any?) {
                 runCatching {
-                    clazz.getDeclaredField("mUpdateOwnerPackageName").apply {
+                    clazz.getDeclaredField(name).apply {
                         isAccessible = true
-                        set(info, PLAY_STORE_INSTALLER)
+                        set(info, value)
                     }
                 }
+            }
+            setField("mInstallingPackageName", PLAY_STORE_INSTALLER)
+            setField("mInitiatingPackageName", PLAY_STORE_INSTALLER)
+            setField("mOriginatingPackageName", null)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                setField("mUpdateOwnerPackageName", PLAY_STORE_INSTALLER)
                 runCatching {
                     clazz.getDeclaredField("mPackageSource").apply {
                         isAccessible = true
@@ -1073,11 +725,15 @@ object PackageSignatureHook {
     private fun hookSigningInfo(module: XposedModule) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         val clazz = runCatching { Class.forName("android.content.pm.SigningInfo") }.getOrNull() ?: return
-        val getHistory = clazz.declaredMethods.firstOrNull { it.name == "getSigningCertificateHistory" && it.parameterCount == 0 }
-        if (getHistory != null) {
-            module.deoptimize(getHistory)
-            module.hook(getHistory)
-                .setId("signing_info_history")
+
+        for ((methodName, hookId) in listOf(
+            "getSigningCertificateHistory" to "signing_info_history",
+            "getApkContentsSigners" to "signing_info_signers"
+        )) {
+            val method = clazz.declaredMethods.firstOrNull { it.name == methodName && it.parameterCount == 0 } ?: continue
+            module.deoptimize(method)
+            module.hook(method)
+                .setId(hookId)
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     val target = chain.getThisObject()
@@ -1086,67 +742,27 @@ object PackageSignatureHook {
                     }
                     val result = chain.proceed()
                     val array = result as? Array<*>
-                    if (array != null && array.isNotEmpty()) {
-                        val firstSig = array[0] as? Signature
-                        if (firstSig != null && isInstalledSpotifySignature(firstSig)) {
-                            target?.let { spotifySigningInfoSet.add(it) }
-                            return@intercept arrayOf(cachedSignature)
-                        }
-                    }
-                    result
-                }
-        }
-        val getSigners = clazz.declaredMethods.firstOrNull { it.name == "getApkContentsSigners" && it.parameterCount == 0 }
-        if (getSigners != null) {
-            module.deoptimize(getSigners)
-            module.hook(getSigners)
-                .setId("signing_info_signers")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val target = chain.getThisObject()
-                    if (target != null && spotifySigningInfoSet.contains(target)) {
+                    val firstSig = array?.firstOrNull() as? Signature
+                    if (firstSig != null && isInstalledSpotifySignature(firstSig)) {
+                        target?.let { spotifySigningInfoSet.add(it) }
                         return@intercept arrayOf(cachedSignature)
                     }
-                    val result = chain.proceed()
-                    val array = result as? Array<*>
-                    if (array != null && array.isNotEmpty()) {
-                        val firstSig = array[0] as? Signature
-                        if (firstSig != null && isInstalledSpotifySignature(firstSig)) {
-                            target?.let { spotifySigningInfoSet.add(it) }
-                            return@intercept arrayOf(cachedSignature)
-                        }
-                    }
                     result
                 }
         }
-        val hasMultiple = clazz.declaredMethods.firstOrNull { it.name == "hasMultipleSigners" && it.parameterCount == 0 }
-        if (hasMultiple != null) {
-            module.deoptimize(hasMultiple)
-            module.hook(hasMultiple)
-                .setId("signing_info_multiple")
+
+        for ((methodName, hookId) in listOf(
+            "hasMultipleSigners" to "signing_info_multiple",
+            "hasPastSigningCertificates" to "signing_info_past"
+        )) {
+            val method = clazz.declaredMethods.firstOrNull { it.name == methodName && it.parameterCount == 0 } ?: continue
+            module.deoptimize(method)
+            module.hook(method)
+                .setId(hookId)
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     val target = chain.getThisObject()
-                    if (target != null && spotifySigningInfoSet.contains(target)) {
-                        false
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-        val hasPast = clazz.declaredMethods.firstOrNull { it.name == "hasPastSigningCertificates" && it.parameterCount == 0 }
-        if (hasPast != null) {
-            module.deoptimize(hasPast)
-            module.hook(hasPast)
-                .setId("signing_info_past")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val target = chain.getThisObject()
-                    if (target != null && spotifySigningInfoSet.contains(target)) {
-                        false
-                    } else {
-                        chain.proceed()
-                    }
+                    if (target != null && spotifySigningInfoSet.contains(target)) false else chain.proceed()
                 }
         }
     }
@@ -1162,63 +778,43 @@ object PackageSignatureHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val result = chain.proceed() as? Uri
-                if (result == null || isLspatchString(result.toString())) {
-                    Uri.parse(defaultLauncherUri)
-                } else {
-                    result
-                }
+                if (result == null || isLspatchString(result.toString())) Uri.parse(defaultLauncherUri) else result
             }
     }
 
     private fun hookIntentReferrer(module: XposedModule) {
         val intentClass = runCatching { Class.forName("android.content.Intent") }.getOrNull() ?: return
         for (method in intentClass.declaredMethods) {
-            if (method.name == "getParcelableExtra") {
-                if (method.parameterCount == 1 && method.parameterTypes[0] == String::class.java) {
-                    module.deoptimize(method)
-                    module.hook(method)
-                        .setId("intent_get_parcelable_extra_1")
-                        .setExceptionMode(ExceptionMode.PROTECTIVE)
-                        .intercept { chain ->
-                            val key = chain.getArg(0) as? String
-                            val result = chain.proceed()
-                            if (key == Intent.EXTRA_REFERRER) {
-                                val uri = result as? Uri
-                                if (uri == null || isLspatchString(uri.toString())) {
-                                    return@intercept Uri.parse(defaultLauncherUri)
-                                }
+            if (method.name == "getParcelableExtra" &&
+                (method.parameterCount == 1 || method.parameterCount == 2) &&
+                method.parameterTypes[0] == String::class.java
+            ) {
+                module.deoptimize(method)
+                module.hook(method)
+                    .setId("intent_get_parcelable_extra_${method.parameterCount}")
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        val result = chain.proceed()
+                        if (chain.getArg(0) == Intent.EXTRA_REFERRER) {
+                            val uri = result as? Uri
+                            if (uri == null || isLspatchString(uri.toString())) {
+                                return@intercept Uri.parse(defaultLauncherUri)
                             }
-                            result
                         }
-                } else if (method.parameterCount == 2 && method.parameterTypes[0] == String::class.java) {
-                    module.deoptimize(method)
-                    module.hook(method)
-                        .setId("intent_get_parcelable_extra_2")
-                        .setExceptionMode(ExceptionMode.PROTECTIVE)
-                        .intercept { chain ->
-                            val key = chain.getArg(0) as? String
-                            val result = chain.proceed()
-                            if (key == Intent.EXTRA_REFERRER) {
-                                val uri = result as? Uri
-                                if (uri == null || isLspatchString(uri.toString())) {
-                                    return@intercept Uri.parse(defaultLauncherUri)
-                                }
-                            }
-                            result
-                        }
-                }
-            } else if (method.name == "getStringExtra" && method.parameterCount == 1 && method.parameterTypes[0] == String::class.java) {
+                        result
+                    }
+            } else if (method.name == "getStringExtra" &&
+                method.parameterCount == 1 &&
+                method.parameterTypes[0] == String::class.java
+            ) {
                 module.deoptimize(method)
                 module.hook(method)
                     .setId("intent_get_string_extra")
                     .setExceptionMode(ExceptionMode.PROTECTIVE)
                     .intercept { chain ->
-                        val key = chain.getArg(0) as? String
                         val result = chain.proceed() as? String
-                        if (key == Intent.EXTRA_REFERRER_NAME) {
-                            if (result == null || isLspatchString(result)) {
-                                return@intercept defaultLauncherUri
-                            }
+                        if (chain.getArg(0) == Intent.EXTRA_REFERRER_NAME && (result == null || isLspatchString(result))) {
+                            return@intercept defaultLauncherUri
                         }
                         result
                     }
@@ -1226,73 +822,51 @@ object PackageSignatureHook {
         }
     }
 
+    private fun sanitizePrefString(key: String?, value: String?): String? = when {
+        key == "ADAPTIVE_AUTH_METADATA_REFERRER" ->
+            if (value == null || isLspatchString(value)) defaultLauncherUri else value
+        key == "registration_app_attribution_referrer" || key == "registration_install_attribution_referrer" ->
+            if (value == null || isLspatchString(value)) PLAY_STORE_REFERRER else value
+        value != null && isLspatchString(value) ->
+            if (key?.contains("referrer", ignoreCase = true) == true) defaultLauncherUri else ""
+        else -> value
+    }
+
     private fun hookSharedPreferences(module: XposedModule) {
         val spClass = runCatching { Class.forName("android.app.SharedPreferencesImpl") }.getOrNull()
-        if (spClass != null) {
-            val getStringMethod = spClass.declaredMethods.firstOrNull {
-                it.name == "getString" && it.parameterCount == 2 &&
-                    it.parameterTypes[0] == String::class.java &&
-                    it.parameterTypes[1] == String::class.java
-            }
-            if (getStringMethod != null) {
-                module.deoptimize(getStringMethod)
-                module.hook(getStringMethod)
-                    .setId("sp_get_string")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        val key = chain.getArg(0) as? String
-                        val result = chain.proceed() as? String
-                        when {
-                            key == "ADAPTIVE_AUTH_METADATA_REFERRER" -> {
-                                if (result == null || isLspatchString(result)) defaultLauncherUri else result
-                            }
-                            key == "registration_app_attribution_referrer" || key == "registration_install_attribution_referrer" -> {
-                                if (result == null || isLspatchString(result)) PLAY_STORE_REFERRER else result
-                            }
-                            result != null && isLspatchString(result) -> {
-                                if (key?.contains("referrer", ignoreCase = true) == true) defaultLauncherUri else ""
-                            }
-                            else -> result
-                        }
-                    }
-            }
+        spClass?.declaredMethods?.firstOrNull {
+            it.name == "getString" && it.parameterCount == 2 &&
+                it.parameterTypes[0] == String::class.java && it.parameterTypes[1] == String::class.java
+        }?.let { getStringMethod ->
+            module.deoptimize(getStringMethod)
+            module.hook(getStringMethod)
+                .setId("sp_get_string")
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    sanitizePrefString(chain.getArg(0) as? String, chain.proceed() as? String)
+                }
         }
 
         val editorClass = runCatching { Class.forName("android.app.SharedPreferencesImpl\$EditorImpl") }.getOrNull()
-        if (editorClass != null) {
-            val putStringMethod = editorClass.declaredMethods.firstOrNull {
-                it.name == "putString" && it.parameterCount == 2 &&
-                    it.parameterTypes[0] == String::class.java &&
-                    it.parameterTypes[1] == String::class.java
-            }
-            if (putStringMethod != null) {
-                module.deoptimize(putStringMethod)
-                module.hook(putStringMethod)
-                    .setId("sp_put_string")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        val key = chain.getArg(0) as? String
-                        val value = chain.getArg(1) as? String
-                        val sanitizedValue = when {
-                            key == "ADAPTIVE_AUTH_METADATA_REFERRER" -> {
-                                if (value == null || isLspatchString(value)) defaultLauncherUri else value
-                            }
-                            key == "registration_app_attribution_referrer" || key == "registration_install_attribution_referrer" -> {
-                                if (value == null || isLspatchString(value)) PLAY_STORE_REFERRER else value
-                            }
-                            value != null && isLspatchString(value) -> {
-                                if (key?.contains("referrer", ignoreCase = true) == true) defaultLauncherUri else ""
-                            }
-                            else -> value
-                        }
-                        if (sanitizedValue != value) {
-                            val args = chain.args.toTypedArray().also { it[1] = sanitizedValue }
-                            chain.proceed(args)
-                        } else {
-                            chain.proceed()
-                        }
+        editorClass?.declaredMethods?.firstOrNull {
+            it.name == "putString" && it.parameterCount == 2 &&
+                it.parameterTypes[0] == String::class.java && it.parameterTypes[1] == String::class.java
+        }?.let { putStringMethod ->
+            module.deoptimize(putStringMethod)
+            module.hook(putStringMethod)
+                .setId("sp_put_string")
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    val key = chain.getArg(0) as? String
+                    val value = chain.getArg(1) as? String
+                    val sanitizedValue = sanitizePrefString(key, value)
+                    if (sanitizedValue != value) {
+                        val args = chain.args.toTypedArray().also { it[1] = sanitizedValue }
+                        chain.proceed(args)
+                    } else {
+                        chain.proceed()
                     }
-            }
+                }
         }
     }
 
@@ -1316,7 +890,7 @@ object PackageSignatureHook {
             module.hook(nameMethod)
                 .setId("installer_package_method_hook")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain -> PLAY_STORE_INSTALLER }
+                .intercept { PLAY_STORE_INSTALLER }
         }
         val allowlistMethod = DexKitResolver.get<Method>(DexKitResolver.KEY_INSTALLER_ALLOWLIST_METHOD)
         if (allowlistMethod != null) {
@@ -1324,7 +898,7 @@ object PackageSignatureHook {
             module.hook(allowlistMethod)
                 .setId("installer_allowlist_method_hook")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain -> true }
+                .intercept { true }
         }
         isInstallerHooked = nameMethod != null || allowlistMethod != null
     }
@@ -1335,15 +909,13 @@ object PackageSignatureHook {
             Class.forName("com.ravelin.core.util.security.RootCheckerNative", false, cl)
         }.getOrNull()
 
-        if (rootClass != null) {
-            rootClass.declaredMethods.forEach { method ->
-                if (method.returnType == Boolean::class.javaPrimitiveType) {
-                    module.deoptimize(method)
-                    module.hook(method)
-                        .setId("ravelin_${method.name}")
-                        .setExceptionMode(ExceptionMode.PROTECTIVE)
-                        .intercept { _ -> false }
-                }
+        rootClass?.declaredMethods?.forEach { method ->
+            if (method.returnType == Boolean::class.javaPrimitiveType) {
+                module.deoptimize(method)
+                module.hook(method)
+                    .setId("ravelin_${method.name}")
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { false }
             }
         }
 
@@ -1351,109 +923,34 @@ object PackageSignatureHook {
             Class.forName("com.ravelin.core.model.DeviceProperties", false, cl)
         }.getOrNull()
 
-        if (devPropsClass != null) {
-            resolveDevicePropertyFields(devPropsClass)
-            devPropsClass.declaredConstructors.forEachIndexed { index, ctor ->
-                module.deoptimize(ctor)
-                module.hook(ctor)
-                    .setId("ravelin_dev_props_$index")
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        val args = chain.args
-                        val paramTypes = ctor.parameterTypes
-                        val newArgs = if (paramTypes.isNotEmpty() && paramTypes[0] == Int::class.javaPrimitiveType) {
-                            if (args.size >= 11) {
-                                args.toTypedArray().also {
-                                    it[1] = java.lang.Boolean.FALSE
-                                    it[2] = java.lang.Boolean.FALSE
-                                    it[3] = java.lang.Boolean.FALSE
-                                    it[4] = "Google Play Store"
-                                    it[5] = java.lang.Boolean.TRUE
-                                    it[6] = java.lang.Boolean.FALSE
-                                    it[7] = java.lang.Boolean.FALSE
-                                    it[8] = java.lang.Boolean.FALSE
-                                    it[9] = java.lang.Boolean.FALSE
-                                    it[10] = java.lang.Boolean.FALSE
-                                }
-                            } else null
-                        } else if (args.size >= 10) {
-                            args.toTypedArray().also {
-                                it[0] = java.lang.Boolean.FALSE
-                                it[1] = java.lang.Boolean.FALSE
-                                it[2] = java.lang.Boolean.FALSE
-                                it[3] = "Google Play Store"
-                                it[4] = java.lang.Boolean.TRUE
-                                it[5] = java.lang.Boolean.FALSE
-                                it[6] = java.lang.Boolean.FALSE
-                                it[7] = java.lang.Boolean.FALSE
-                                it[8] = java.lang.Boolean.FALSE
-                                it[9] = java.lang.Boolean.FALSE
-                            }
-                        } else null
-
-                        val result = if (newArgs != null) chain.proceed(newArgs) else chain.proceed()
-                        val instance = chain.getThisObject()
-                        if (instance != null) {
-                            sanitizeDeviceProperties(instance)
+        devPropsClass?.declaredConstructors?.forEachIndexed { index, ctor ->
+            module.deoptimize(ctor)
+            module.hook(ctor)
+                .setId("ravelin_dev_props_$index")
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    val args = chain.args
+                    val paramTypes = ctor.parameterTypes
+                    val offset = if (paramTypes.isNotEmpty() && paramTypes[0] == Int::class.javaPrimitiveType) 1 else 0
+                    val newArgs = if (args.size >= 10 + offset) {
+                        args.toTypedArray().also {
+                            it[offset + 0] = java.lang.Boolean.FALSE
+                            it[offset + 1] = java.lang.Boolean.FALSE
+                            it[offset + 2] = java.lang.Boolean.FALSE
+                            it[offset + 3] = "Google Play Store"
+                            it[offset + 4] = java.lang.Boolean.TRUE
+                            it[offset + 5] = java.lang.Boolean.FALSE
+                            it[offset + 6] = java.lang.Boolean.FALSE
+                            it[offset + 7] = java.lang.Boolean.FALSE
+                            it[offset + 8] = java.lang.Boolean.FALSE
+                            it[offset + 9] = java.lang.Boolean.FALSE
                         }
-                        result
-                    }
-            }
+                    } else null
+
+                    if (newArgs != null) chain.proceed(newArgs) else chain.proceed()
+                }
         }
         isRavelinHooked = true
-    }
-
-    private fun resolveDevicePropertyFields(devPropsClass: Class<*>) {
-        runCatching {
-            val ctor = devPropsClass.declaredConstructors.firstOrNull { c ->
-                val p = c.parameterTypes
-                p.size >= 10 &&
-                    p[0] == java.lang.Boolean::class.java &&
-                    p[3] == String::class.java &&
-                    p[p.size - 1] == java.lang.Boolean::class.java
-            }?.apply { isAccessible = true } ?: return
-
-            val pTypes = ctor.parameterTypes
-            val allFields = devPropsClass.declaredFields.onEach { it.isAccessible = true }
-            val boolFields = allFields.filter { it.type == java.lang.Boolean::class.java }
-            val stringFields = allFields.filter { it.type == String::class.java }
-
-            fun findBoolFieldAt(paramIndex: Int): java.lang.reflect.Field? {
-                if (paramIndex !in pTypes.indices || pTypes[paramIndex] != java.lang.Boolean::class.java) return null
-                val args = arrayOfNulls<Any>(pTypes.size)
-                for (i in pTypes.indices) {
-                    if (pTypes[i] == java.lang.Boolean::class.java) {
-                        args[i] = if (i == paramIndex) java.lang.Boolean.TRUE else java.lang.Boolean.FALSE
-                    }
-                }
-                val probe = ctor.newInstance(*args)
-                return boolFields.firstOrNull { it.get(probe) == java.lang.Boolean.TRUE }
-            }
-
-            val falseIndices = buildList {
-                addAll(listOf(0, 1, 2, 5, 6, 7, 8, 9))
-                if (pTypes.size > 20) add(pTypes.size - 1)
-            }
-            devPropsFalseFields = falseIndices.mapNotNull { findBoolFieldAt(it) }
-            devPropsTrueFields = listOfNotNull(findBoolFieldAt(4))
-
-            val srcArgs = arrayOfNulls<Any>(pTypes.size)
-            srcArgs[3] = "__spotxero_install_source__"
-            val srcProbe = ctor.newInstance(*srcArgs)
-            devPropsInstallSourceField = stringFields.firstOrNull { it.get(srcProbe) == "__spotxero_install_source__" }
-        }
-    }
-
-    private fun sanitizeDeviceProperties(instance: Any) {
-        runCatching {
-            for (field in devPropsFalseFields) {
-                field.set(instance, java.lang.Boolean.FALSE)
-            }
-            for (field in devPropsTrueFields) {
-                field.set(instance, java.lang.Boolean.TRUE)
-            }
-            devPropsInstallSourceField?.set(instance, "Google Play Store")
-        }
     }
 
     private fun resolveOriginApkPath(context: Context): String? {

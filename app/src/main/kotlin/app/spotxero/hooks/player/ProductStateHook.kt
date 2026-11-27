@@ -116,7 +116,8 @@ object ProductStateHook {
 
     private val RCS_ALL_OVERRIDES: Map<String, Any> = RCS_SCOPED_OVERRIDES + RCS_INTEGRITY_OVERRIDES
 
-    private fun rcsScopedOverrides(): Map<String, Any> = RCS_ALL_OVERRIDES
+    private fun isPremiumActive(): Boolean =
+        PreferencesManager.isUserLoggedIn() && PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)
 
     private val RCS_INT_BY_NAME: Map<String, Int> = mapOf(
         "pick_and_shuffle_timecap" to 1440,
@@ -158,7 +159,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val map = result as? Map<*, *> ?: return@intercept result
-                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || map.isEmpty()) {
+                if (!isPremiumActive() || map.isEmpty()) {
                     return@intercept result
                 }
                 @Suppress("UNCHECKED_CAST")
@@ -183,7 +184,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val map = result as? Map<*, *> ?: return@intercept result
-                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || map.isEmpty()) {
+                if (!isPremiumActive() || map.isEmpty()) {
                     return@intercept result
                 }
                 val allSpoofs = typedSpoofs() + PLAYER_LOCAL_SPOOFS
@@ -217,7 +218,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val originalMap = result as? Map<*, *> ?: return@intercept result
-                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) || originalMap.isEmpty()) {
+                if (!isPremiumActive() || originalMap.isEmpty()) {
                     return@intercept result
                 }
                 val mutableMap = originalMap.toMutableMap()
@@ -298,7 +299,7 @@ object ProductStateHook {
             .intercept { chain ->
                 val result = chain.proceed()
                 val list = result as? List<*> ?: return@intercept result
-                if (!PreferencesManager.isUserLoggedIn() || !PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                if (!isPremiumActive()) {
                     return@intercept result
                 }
                 val filtered = ProtoLists.filter(list) { assignedValue ->
@@ -374,8 +375,8 @@ object ProductStateHook {
                 val origHeader = headerField.get(snapshot) ?: return@intercept snapshot
                 @Suppress("UNCHECKED_CAST")
                 val origMap = mapField.get(snapshot) as? Map<String, Any?> ?: return@intercept snapshot
-                val applyPremium = PreferencesManager.isUserLoggedIn() && PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)
-                val overrides = if (applyPremium) rcsScopedOverrides() else RCS_INTEGRITY_OVERRIDES
+                val applyPremium = isPremiumActive()
+                val overrides = if (applyPremium) RCS_ALL_OVERRIDES else RCS_INTEGRITY_OVERRIDES
                 val patched = HashMap<String, Any?>(origMap.size + overrides.size)
                 patched.putAll(origMap)
 
@@ -425,7 +426,7 @@ object ProductStateHook {
                 val scopedKey = "$scope:$name"
                 val overrideVal = RCS_INTEGRITY_OVERRIDES[scopedKey]
                     ?: RCS_INTEGRITY_OVERRIDES[name]
-                    ?: if (PreferencesManager.isUserLoggedIn() && PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    ?: if (isPremiumActive()) {
                         RCS_SCOPED_OVERRIDES[scopedKey] ?: RCS_SCOPED_OVERRIDES[name]
                     } else {
                         null

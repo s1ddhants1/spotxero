@@ -2,12 +2,12 @@ package app.spotxero.hooks.attestation
 
 import android.net.Uri
 import app.spotxero.core.DexKitResolver
+import app.spotxero.hooks.network.OkHttpBridge
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
-import java.net.URI
 
 object LoginClientTokenHook {
 
@@ -102,9 +102,8 @@ object LoginClientTokenHook {
                 it.returnType == responseClass
         }?.apply { isAccessible = true } ?: error("Missing OkHttp chain proceed method")
 
-        val urlField = requestClass.declaredFields.firstOrNull { f ->
-            !f.type.isPrimitive && f.type.declaredMethods.any { m -> m.returnType == URI::class.java }
-        }?.apply { isAccessible = true } ?: error("Missing OkHttp request URL field")
+        val urlField = OkHttpBridge.findRequestUrlField(requestClass)
+            ?: error("Missing OkHttp request URL field")
 
         val headersField = requestClass.declaredFields.singleOrNull { f ->
             !Modifier.isStatic(f.modifiers) &&

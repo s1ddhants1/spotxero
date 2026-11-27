@@ -6,10 +6,10 @@ import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
+import app.spotxero.hooks.network.OkHttpBridge
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Method
-import java.net.URI
 import java.util.Collections
 import java.util.LinkedHashMap
 
@@ -88,57 +88,9 @@ object LyricsHook {
     }
 
     private fun hookThirdPartyLyrics(module: XposedModule) {
-        val realCallChain = DexKitResolver.require<Method>(DexKitResolver.KEY_OKHTTP_REAL_CALL_CHAIN)
-        val reqToString = DexKitResolver.require<Method>(DexKitResolver.KEY_OKHTTP_REQUEST_TO_STRING)
-        val respBuild = DexKitResolver.require<Method>(DexKitResolver.KEY_OKHTTP_RESPONSE_BUILDER_BUILD)
-
-        Log.i(TAG, "hookThirdPartyLyrics: realCallChain=$realCallChain, reqToString=$reqToString, respBuild=$respBuild")
-
-        val requestClass = reqToString.declaringClass
-        val responseClass = respBuild.returnType
-        val callRequestField = realCallChain.declaringClass.declaredFields.firstOrNull {
-            it.type == requestClass
-        }?.apply { isAccessible = true }
-        val urlField = requestClass.declaredFields.firstOrNull { f ->
-            !f.type.isPrimitive && f.type.declaredMethods.any { m -> m.returnType == URI::class.java }
-        }?.apply { isAccessible = true }
-
-        Log.i(TAG, "hookThirdPartyLyrics: callRequestField=$callRequestField, urlField=$urlField")
-        if (callRequestField == null || urlField == null) return
-
-        val builderClass = respBuild.declaringClass
-        val builderCtor = runCatching {
-            builderClass.getDeclaredConstructor().apply { isAccessible = true }
-        }.getOrNull()
-        val bReqField = builderClass.declaredFields.firstOrNull { it.type == requestClass }?.apply { isAccessible = true }
-        val bCodeField = builderClass.declaredFields.firstOrNull { it.type == Int::class.javaPrimitiveType }?.apply { isAccessible = true }
-        val bMsgField = builderClass.declaredFields.firstOrNull { it.type == String::class.java }?.apply { isAccessible = true }
-        val bProtoField = builderClass.declaredFields.firstOrNull {
-            it.type.isEnum && it.type.enumConstants?.any { c -> c.toString() == "http/1.1" } == true
-        }?.apply { isAccessible = true }
-        val http11 = bProtoField?.type?.enumConstants?.firstOrNull { it.toString() == "http/1.1" }
-
-        Log.i(TAG, "hookThirdPartyLyrics: builderCtor=$builderCtor, bReqField=$bReqField, http11=$http11")
-        if (builderCtor == null || bReqField == null || bCodeField == null || bMsgField == null || bProtoField == null || http11 == null) return
-
-        val responseBodyClass = runCatching { Class.forName("okhttp3.ResponseBody", false, builderClass.classLoader) }.getOrNull()
-            ?: builderClass.declaredFields.firstOrNull { f ->
-                java.io.Closeable::class.java.isAssignableFrom(f.type) &&
-                    java.lang.reflect.Modifier.isAbstract(f.type.modifiers) &&
-                    f.type != requestClass &&
-                    f.type != responseClass
-            }?.type
-            ?: responseClass.declaredMethods.firstOrNull { m ->
-                !java.lang.reflect.Modifier.isStatic(m.modifiers) &&
-                    m.parameterCount == 0 &&
-                    java.io.Closeable::class.java.isAssignableFrom(m.returnType) &&
-                    java.lang.reflect.Modifier.isAbstract(m.returnType.modifiers) &&
-                    m.returnType != responseClass
-            }?.returnType
-
-        val bBodyField = builderClass.declaredFields.firstOrNull { it.type == responseBodyClass }?.apply { isAccessible = true }
-        Log.i(TAG, "hookThirdPartyLyrics: responseBodyClass=$responseBodyClass, bBodyField=$bBodyField")
-        if (responseBodyClass == null || bBodyField == null) return
+        val factory = OkHttpBridge.getFactory()
+        val responseClass = factory.responseClass
+        val responseBodyClass = factory.responseBodyClass ?: return
 
         val respBodyMethod = responseClass.declaredMethods.firstOrNull {
             !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
@@ -184,7 +136,6 @@ object LyricsHook {
         val concreteBodyClass = DexKitResolver.require<Class<*>>(DexKitResolver.KEY_LYRICS_CONCRETE_BODY_CLASS)
 
         try {
-
             val concreteBodyCtor = concreteBodyClass.declaredConstructors.firstOrNull {
                 it.parameterCount == 3 && it.parameterTypes[1] == Long::class.javaPrimitiveType
             }?.apply { isAccessible = true }
@@ -194,33 +145,12 @@ object LyricsHook {
                 return
             }
 
-            Log.i(TAG, "concreteBodyClass: $concreteBodyClass")
-
             val mediaTypeClass = concreteBodyCtor.parameterTypes.getOrNull(0)
             val bufferClass = concreteBodyCtor.parameterTypes.getOrNull(2)
-
-            Log.i(TAG, "mediaTypeClass: $mediaTypeClass, bufferClass: $bufferClass")
-
             val mediaTypeCtor = mediaTypeClass?.declaredConstructors?.firstOrNull { it.parameterCount == 4 }?.apply { isAccessible = true }
             val bufferWrite = bufferClass?.declaredMethods?.firstOrNull {
                 it.name == "write" && it.parameterCount == 1 && it.parameterTypes[0] == ByteArray::class.java
             }?.apply { isAccessible = true }
-
-            val bHeadersField = builderClass.declaredFields.firstOrNull { f ->
-                !f.type.isPrimitive && !f.type.name.startsWith("java.") &&
-                    f.type != requestClass && f.type != responseClass && f.type != responseBodyClass &&
-                    runCatching {
-                        f.type.declaredMethods.any { m ->
-                            m.parameterCount == 2 && m.parameterTypes[0] == String::class.java && m.parameterTypes[1] == String::class.java
-                        }
-                    }.getOrDefault(false)
-            }?.apply { isAccessible = true }
-
-            val headerAddMethod = runCatching {
-                bHeadersField?.type?.declaredMethods?.firstOrNull {
-                    it.parameterCount == 2 && it.parameterTypes[0] == String::class.java && it.parameterTypes[1] == String::class.java
-                }?.apply { isAccessible = true }
-            }.getOrNull()
 
             fun createBuffer(): Any? {
                 val fromCtor = runCatching {
@@ -237,15 +167,9 @@ object LyricsHook {
                 }.getOrNull()
             }
 
-            Log.i(TAG, "hookThirdPartyLyrics: concreteBodyCtor=$concreteBodyCtor, bufferWrite=$bufferWrite, bHeadersField=${bHeadersField?.name}, headerAddMethod=${headerAddMethod?.name}")
-
             fun createBody(bytes: ByteArray, contentType: String): Any? {
                 if (bufferWrite == null) return null
-                val buffer = createBuffer()
-                if (buffer == null) {
-                    Log.w(TAG, "createBuffer returned null")
-                    return null
-                }
+                val buffer = createBuffer() ?: return null
                 return runCatching {
                     val mediaType = runCatching {
                         if (contentType.contains("protobuf")) {
@@ -269,178 +193,118 @@ object LyricsHook {
                 }.onFailure { Log.w(TAG, "concrete createBody failed: ${it.message}", it) }.getOrNull()
             }
 
-            fun buildResponse(request: Any, body: Any, contentType: String): Any? {
-                return runCatching {
-                    val builder = builderCtor.newInstance()
-                    bReqField.set(builder, request)
-                    bProtoField.set(builder, http11)
-                    bCodeField.setInt(builder, 200)
-                    bMsgField.set(builder, "OK")
-                    bBodyField.set(builder, body)
-
-                    if (bHeadersField != null && headerAddMethod != null) {
-                        val headersObj = bHeadersField.get(builder)
-                        if (headersObj != null) {
-                            headerAddMethod.invoke(headersObj, "content-type", contentType)
-                        }
-                    }
-
-                    respBuild.invoke(builder)
-                }.onFailure { Log.w(TAG, "buildResponse failed: ${it.message}", it) }.getOrNull()
+            fun buildLyricsResponse(request: Any, bytes: ByteArray): Any? {
+                val body = createBody(bytes, "application/protobuf") ?: return null
+                return factory.buildResponse(request, 200, "OK", body, "application/protobuf")
             }
 
-            respBuild.isAccessible = true
-            module.deoptimize(realCallChain)
-            module.hook(realCallChain)
-                .setId("lyrics_third_party_interceptor")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val callObj = chain.getThisObject() ?: return@intercept chain.proceed()
-                    val request = runCatching { callRequestField.get(callObj) }.getOrNull() ?: return@intercept chain.proceed()
-                    val url = runCatching { urlField.get(request)?.toString() }.getOrNull().orEmpty()
-
-                    if (url.contains("color-lyrics/") || url.contains("lyrics")) {
-                        Log.i(TAG, "Intercepted candidate lyrics request: $url")
-                    }
-
-                    if (!url.contains("color-lyrics/")) {
-                        return@intercept chain.proceed()
-                    }
-
-                    val externalEnabled = PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false)
-                    val force = PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_EXTERNAL_LYRICS, false)
-                    val aiTranslationEnabled = PreferencesManager.isEnabled(PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, false)
-
-                    val trackId = if (url.contains("/track/")) {
-                        url.substringAfter("/track/").substringBefore("?").substringBefore("/")
-                    } else null
-
-                    Log.i(TAG, "Color-lyrics requested: trackId=$trackId, externalEnabled=$externalEnabled, force=$force, aiTranslationEnabled=$aiTranslationEnabled")
-
-                    if (aiTranslationEnabled && trackId != null) {
-                        val stockCacheKey = getStockCacheKey(trackId)
-                        val cachedStock = PersistentLyricsCache.getProtobuf(stockCacheKey) ?: stockTranslatedCache[stockCacheKey]
-                        if (cachedStock != null) {
-                            stockTranslatedCache[stockCacheKey] = cachedStock
-                            val body = createBody(cachedStock, "application/protobuf")
-                            if (body != null) {
-                                val response = buildResponse(request, body, "application/protobuf")
-                                if (response != null) {
-                                    Log.i(TAG, "===> INJECTED CACHED TRANSLATED STOCK LYRICS FOR $trackId <===")
-                                    return@intercept response
-                                }
-                            }
-                        }
-                    }
-
-                    if (externalEnabled && (force || aiTranslationEnabled)) {
-                        val protoBytes = LyricsManager.getLyricsProto(trackId)
-                        Log.i(TAG, "LyricsManager proto returned: ${if (protoBytes != null) "${protoBytes.size} bytes" else "null"}")
-                        if (protoBytes != null) {
-                            val body = createBody(protoBytes, "application/protobuf")
-                            Log.i(TAG, "createBody returned: $body")
-                            if (body != null) {
-                                val response = buildResponse(request, body, "application/protobuf")
-                                Log.i(TAG, "buildResponse returned: $response")
-                                if (response != null) {
-                                    Log.i(TAG, "===> INJECTED THIRD-PARTY PROTOBUF LYRICS FOR $trackId <===")
-                                    return@intercept response
-                                }
-                            }
-                        }
-                    }
-
-                    val originalResponse = chain.proceed()
-                    val statusCode = runCatching {
-                        val codeMethod = originalResponse?.javaClass?.declaredMethods?.firstOrNull {
-                            !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
-                                it.parameterCount == 0 &&
-                                it.returnType == Int::class.javaPrimitiveType
-                        }
-                        if (codeMethod != null) {
-                            codeMethod.invoke(originalResponse) as? Int
-                        } else {
-                            val codeField = originalResponse?.javaClass?.declaredFields?.firstOrNull {
-                                it.type == Int::class.javaPrimitiveType
-                            }?.apply { isAccessible = true }
-                            codeField?.getInt(originalResponse)
-                        }
-                    }.getOrNull() ?: 200
-
-                    Log.d(TAG, "Original color-lyrics response code: $statusCode for $trackId")
-
-                    if (statusCode == 200 && aiTranslationEnabled && trackId != null) {
-                        val rawBytes = extractBodyBytes(originalResponse)
-                        if (rawBytes != null && rawBytes.isNotEmpty()) {
-                            val parsed = runCatching { LyricsProtobuf.parseColorLyricsResponse(rawBytes) }.getOrNull()
-                            if (parsed != null && parsed.lyrics.lines.isNotEmpty()) {
-                                Log.i(TAG, "Stock Spotify lyrics parsed: ${parsed.lyrics.lines.size} lines from ${parsed.providerDisplayName}. Translating...")
-                                val translatedLyrics = runCatching {
-                                    AiLyricsTranslator.translateLyrics(parsed.lyrics, trackKey = trackId)
-                                }.getOrDefault(parsed.lyrics)
-
-                                val hasTranslated = translatedLyrics !== parsed.lyrics &&
-                                    translatedLyrics.lines.isNotEmpty() &&
-                                    translatedLyrics.lines != parsed.lyrics.lines
-
-                                if (hasTranslated) {
-                                    val targetLang = PreferencesManager.aiTranslationTargetLang.ifBlank { parsed.language }
-                                    val isRtl = LyricsProtobuf.isRtlLanguage(targetLang) || LyricsProtobuf.isRtlText(translatedLyrics.lines.joinToString(" ") { it.words })
-                                    val translatedProtoBytes = LyricsProtobuf.buildColorLyricsResponse(
-                                        lyrics = translatedLyrics,
-                                        providerName = parsed.provider,
-                                        providerDisplayName = "${parsed.providerDisplayName} (Translated)",
-                                        customColorData = parsed.colorDataBytes,
-                                        backgroundColor = LyricsManager.currentTrackColor,
-                                        hasVocalRemoval = parsed.hasVocalRemoval,
-                                        language = targetLang,
-                                        isRtl = isRtl
-                                    )
-
-                                    val stockCacheKey = getStockCacheKey(trackId)
-                                    stockTranslatedCache[stockCacheKey] = translatedProtoBytes
-                                    PersistentLyricsCache.putProtobuf(stockCacheKey, translatedProtoBytes)
-
-                                    val newBody = createBody(translatedProtoBytes, "application/protobuf")
-                                    if (newBody != null) {
-                                        val replacement = buildResponse(request, newBody, "application/protobuf")
-                                        if (replacement != null) {
-                                            runCatching { (originalResponse as? java.io.Closeable)?.close() }
-                                            Log.i(TAG, "===> INJECTED TRANSLATED STOCK SPOTIFY PROTOBUF LYRICS FOR $trackId <===")
-                                            return@intercept replacement
-                                        }
-                                    }
-                                }
-                            }
-
-                            val fallbackBody = createBody(rawBytes, "application/protobuf")
-                            if (fallbackBody != null) {
-                                val fallbackResp = buildResponse(request, fallbackBody, "application/protobuf")
-                                if (fallbackResp != null) {
-                                    runCatching { (originalResponse as? java.io.Closeable)?.close() }
-                                    return@intercept fallbackResp
-                                }
-                            }
-                        }
-                    }
-
-                    if (externalEnabled && statusCode != 200) {
-                        val protoBytes = LyricsManager.getLyricsProto(trackId)
-                        if (protoBytes != null) {
-                            val body = createBody(protoBytes, "application/protobuf")
-                            if (body != null) {
-                                val response = buildResponse(request, body, "application/protobuf")
-                                if (response != null) {
-                                    runCatching { (originalResponse as? java.io.Closeable)?.close() }
-                                    Log.i(TAG, "===> INJECTED THIRD-PARTY FALLBACK PROTOBUF LYRICS FOR $trackId <===")
-                                    return@intercept response
-                                }
-                            }
-                        }
-                    }
-
-                    originalResponse
+            OkHttpBridge.registerRealCallInterceptor(module, "lyrics_third_party") { request, url, _, proceed ->
+                if (!url.contains("color-lyrics/")) {
+                    return@registerRealCallInterceptor false to null
                 }
+
+                val externalEnabled = PreferencesManager.isEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false)
+                val force = PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_EXTERNAL_LYRICS, false)
+                val aiTranslationEnabled = PreferencesManager.isEnabled(PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED, false)
+
+                val trackId = if (url.contains("/track/")) {
+                    url.substringAfter("/track/").substringBefore("?").substringBefore("/")
+                } else null
+
+                if (aiTranslationEnabled && trackId != null) {
+                    val stockCacheKey = getStockCacheKey(trackId)
+                    val cachedStock = PersistentLyricsCache.getProtobuf(stockCacheKey) ?: stockTranslatedCache[stockCacheKey]
+                    if (cachedStock != null) {
+                        stockTranslatedCache[stockCacheKey] = cachedStock
+                        buildLyricsResponse(request, cachedStock)?.let {
+                            return@registerRealCallInterceptor true to it
+                        }
+                    }
+                }
+
+                if (externalEnabled && (force || aiTranslationEnabled)) {
+                    val protoBytes = LyricsManager.getLyricsProto(trackId)
+                    if (protoBytes != null) {
+                        buildLyricsResponse(request, protoBytes)?.let {
+                            return@registerRealCallInterceptor true to it
+                        }
+                    }
+                }
+
+                val originalResponse = proceed()
+                val statusCode = runCatching {
+                    val codeMethod = originalResponse?.javaClass?.declaredMethods?.firstOrNull {
+                        !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                            it.parameterCount == 0 &&
+                            it.returnType == Int::class.javaPrimitiveType
+                    }
+                    if (codeMethod != null) {
+                        codeMethod.invoke(originalResponse) as? Int
+                    } else {
+                        val codeField = originalResponse?.javaClass?.declaredFields?.firstOrNull {
+                            it.type == Int::class.javaPrimitiveType
+                        }?.apply { isAccessible = true }
+                        codeField?.getInt(originalResponse)
+                    }
+                }.getOrNull() ?: 200
+
+                if (statusCode == 200 && aiTranslationEnabled && trackId != null) {
+                    val rawBytes = extractBodyBytes(originalResponse)
+                    if (rawBytes != null && rawBytes.isNotEmpty()) {
+                        val parsed = runCatching { LyricsProtobuf.parseColorLyricsResponse(rawBytes) }.getOrNull()
+                        if (parsed != null && parsed.lyrics.lines.isNotEmpty()) {
+                            val translatedLyrics = runCatching {
+                                AiLyricsTranslator.translateLyrics(parsed.lyrics, trackKey = trackId)
+                            }.getOrDefault(parsed.lyrics)
+
+                            val hasTranslated = translatedLyrics !== parsed.lyrics &&
+                                translatedLyrics.lines.isNotEmpty() &&
+                                translatedLyrics.lines != parsed.lyrics.lines
+
+                            if (hasTranslated) {
+                                val targetLang = PreferencesManager.aiTranslationTargetLang.ifBlank { parsed.language }
+                                val isRtl = LyricsProtobuf.isRtlLanguage(targetLang) || LyricsProtobuf.isRtlText(translatedLyrics.lines.joinToString(" ") { it.words })
+                                val translatedProtoBytes = LyricsProtobuf.buildColorLyricsResponse(
+                                    lyrics = translatedLyrics,
+                                    providerName = parsed.provider,
+                                    providerDisplayName = "${parsed.providerDisplayName} (Translated)",
+                                    customColorData = parsed.colorDataBytes,
+                                    backgroundColor = LyricsManager.currentTrackColor,
+                                    hasVocalRemoval = parsed.hasVocalRemoval,
+                                    language = targetLang,
+                                    isRtl = isRtl
+                                )
+
+                                val stockCacheKey = getStockCacheKey(trackId)
+                                stockTranslatedCache[stockCacheKey] = translatedProtoBytes
+                                PersistentLyricsCache.putProtobuf(stockCacheKey, translatedProtoBytes)
+
+                                buildLyricsResponse(request, translatedProtoBytes)?.let { replacement ->
+                                    runCatching { (originalResponse as? java.io.Closeable)?.close() }
+                                    return@registerRealCallInterceptor true to replacement
+                                }
+                            }
+                        }
+
+                        buildLyricsResponse(request, rawBytes)?.let { fallbackResp ->
+                            runCatching { (originalResponse as? java.io.Closeable)?.close() }
+                            return@registerRealCallInterceptor true to fallbackResp
+                        }
+                    }
+                }
+
+                if (externalEnabled && statusCode != 200) {
+                    val protoBytes = LyricsManager.getLyricsProto(trackId)
+                    if (protoBytes != null) {
+                        buildLyricsResponse(request, protoBytes)?.let { response ->
+                            runCatching { (originalResponse as? java.io.Closeable)?.close() }
+                            return@registerRealCallInterceptor true to response
+                        }
+                    }
+                }
+
+                true to originalResponse
+            }
             Log.i(TAG, "hookThirdPartyLyrics installed successfully")
         } catch (t: Throwable) {
             Log.e(TAG, "hookThirdPartyLyrics failed: ${t.message}", t)

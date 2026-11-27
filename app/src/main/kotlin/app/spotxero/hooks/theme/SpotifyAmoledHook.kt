@@ -4,15 +4,12 @@ import android.content.res.ColorStateList
 import android.content.res.Resources
 import android.content.res.TypedArray
 import android.graphics.Color
-import android.graphics.Paint
 import android.graphics.drawable.ColorDrawable
-import android.graphics.drawable.GradientDrawable
 import android.view.View
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
-import java.lang.reflect.Method
 import kotlin.math.abs
 
 object SpotifyAmoledHook {
@@ -31,7 +28,7 @@ object SpotifyAmoledHook {
         0xFF333333.toInt()
     )
 
-    private fun isAmoledEnabled(): Boolean =
+    fun isEnabled(): Boolean =
         PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_AMOLED, false)
 
     private fun isDarkColor(color: Int): Boolean {
@@ -45,38 +42,19 @@ object SpotifyAmoledHook {
             abs(r - g) <= 8 && abs(g - b) <= 8 && abs(r - b) <= 8
     }
 
-    private fun mapColor(color: Int): Int {
-        if (!isAmoledEnabled()) return color
-        return if (isDarkColor(color)) Color.BLACK else color
-    }
+    fun mapColor(color: Int): Int =
+        if (isDarkColor(color)) Color.BLACK else color
 
     fun install(module: XposedModule) {
-        if (!isAmoledEnabled()) {
-            return
-        }
+        if (!isEnabled()) return
+        ThemeColorPipeline.installShared(module)
         hookResources(module)
         hookTypedArray(module)
-        hookDrawables(module)
+        hookColorDrawables(module)
         hookViews(module)
-        hookPaint(module)
-        hookCanvas(module)
     }
 
     private fun hookResources(module: XposedModule) {
-        for (method in listOfNotNull(
-            runCatching { Resources::class.java.getMethod("getColor", Int::class.javaPrimitiveType) }.getOrNull(),
-            runCatching { Resources::class.java.getMethod("getColor", Int::class.javaPrimitiveType, Resources.Theme::class.java) }.getOrNull()
-        )) {
-            module.deoptimize(method)
-            module.hook(method)
-                .setId("spotify_amoled_res_color_${method.parameterTypes.size}")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    (result as? Int)?.let { mapColor(it) } ?: result
-                }
-        }
-
         for (method in listOfNotNull(
             runCatching { Resources::class.java.getMethod("getColorStateList", Int::class.javaPrimitiveType) }.getOrNull(),
             runCatching { Resources::class.java.getMethod("getColorStateList", Int::class.javaPrimitiveType, Resources.Theme::class.java) }.getOrNull()
@@ -88,7 +66,7 @@ object SpotifyAmoledHook {
                 .intercept { chain ->
                     val result = chain.proceed()
                     val csl = result as? ColorStateList
-                    if (csl != null && isAmoledEnabled() && isDarkColor(csl.defaultColor)) {
+                    if (csl != null && isEnabled() && isDarkColor(csl.defaultColor)) {
                         ColorStateList.valueOf(Color.BLACK)
                     } else {
                         result
@@ -106,7 +84,7 @@ object SpotifyAmoledHook {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     val result = chain.proceed()
-                    if (isAmoledEnabled() && result is ColorDrawable && isDarkColor(result.color)) {
+                    if (isEnabled() && result is ColorDrawable && isDarkColor(result.color)) {
                         result.color = Color.BLACK
                     }
                     result
@@ -115,20 +93,6 @@ object SpotifyAmoledHook {
     }
 
     private fun hookTypedArray(module: XposedModule) {
-        val getColorMethod = runCatching {
-            TypedArray::class.java.getMethod("getColor", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
-        }.getOrNull()
-        if (getColorMethod != null) {
-            module.deoptimize(getColorMethod)
-            module.hook(getColorMethod)
-                .setId("spotify_amoled_ta_get_color")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    (result as? Int)?.let { mapColor(it) } ?: result
-                }
-        }
-
         val getCslMethod = runCatching {
             TypedArray::class.java.getMethod("getColorStateList", Int::class.javaPrimitiveType)
         }.getOrNull()
@@ -140,7 +104,7 @@ object SpotifyAmoledHook {
                 .intercept { chain ->
                     val result = chain.proceed()
                     val csl = result as? ColorStateList
-                    if (csl != null && isAmoledEnabled() && isDarkColor(csl.defaultColor)) {
+                    if (csl != null && isEnabled() && isDarkColor(csl.defaultColor)) {
                         ColorStateList.valueOf(Color.BLACK)
                     } else {
                         result
@@ -158,7 +122,7 @@ object SpotifyAmoledHook {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     val result = chain.proceed()
-                    if (isAmoledEnabled() && result is ColorDrawable && isDarkColor(result.color)) {
+                    if (isEnabled() && result is ColorDrawable && isDarkColor(result.color)) {
                         result.color = Color.BLACK
                     }
                     result
@@ -166,7 +130,7 @@ object SpotifyAmoledHook {
         }
     }
 
-    private fun hookDrawables(module: XposedModule) {
+    private fun hookColorDrawables(module: XposedModule) {
         val colorDrawableCtor = runCatching {
             ColorDrawable::class.java.getConstructor(Int::class.javaPrimitiveType)
         }.getOrNull()
@@ -177,7 +141,7 @@ object SpotifyAmoledHook {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     val color = chain.getArg(0) as? Int
-                    if (isAmoledEnabled() && color != null && isDarkColor(color)) {
+                    if (isEnabled() && color != null && isDarkColor(color)) {
                         chain.proceed(arrayOf(Color.BLACK))
                     } else {
                         chain.proceed()
@@ -196,56 +160,8 @@ object SpotifyAmoledHook {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     val color = chain.getArg(0) as? Int
-                    if (isAmoledEnabled() && color != null && isDarkColor(color)) {
+                    if (isEnabled() && color != null && isDarkColor(color)) {
                         chain.proceed(arrayOf(Color.BLACK))
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-
-        val gradientSetColor = runCatching {
-            GradientDrawable::class.java.getMethod("setColor", Int::class.javaPrimitiveType)
-        }.getOrNull()
-        if (gradientSetColor != null) {
-            module.deoptimize(gradientSetColor)
-            module.hook(gradientSetColor)
-                .setId("spotify_amoled_gradient_set_color")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val color = chain.getArg(0) as? Int
-                    if (isAmoledEnabled() && color != null && isDarkColor(color)) {
-                        chain.proceed(arrayOf(Color.BLACK))
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-
-        val gradientSetColors = runCatching {
-            GradientDrawable::class.java.getMethod("setColors", IntArray::class.java)
-        }.getOrNull()
-        if (gradientSetColors != null) {
-            module.deoptimize(gradientSetColors)
-            module.hook(gradientSetColors)
-                .setId("spotify_amoled_gradient_set_colors")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val colors = chain.getArg(0) as? IntArray
-                    if (isAmoledEnabled() && colors != null) {
-                        var changed = false
-                        val newColors = colors.clone()
-                        for (i in newColors.indices) {
-                            if (isDarkColor(newColors[i])) {
-                                newColors[i] = Color.BLACK
-                                changed = true
-                            }
-                        }
-                        if (changed) {
-                            chain.proceed(arrayOf(newColors))
-                        } else {
-                            chain.proceed()
-                        }
                     } else {
                         chain.proceed()
                     }
@@ -256,148 +172,19 @@ object SpotifyAmoledHook {
     private fun hookViews(module: XposedModule) {
         val setBgColorMethod = runCatching {
             View::class.java.getMethod("setBackgroundColor", Int::class.javaPrimitiveType)
-        }.getOrNull()
-        if (setBgColorMethod != null) {
-            module.deoptimize(setBgColorMethod)
-            module.hook(setBgColorMethod)
-                .setId("spotify_amoled_view_set_bg_color")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val color = chain.getArg(0) as? Int
-                    if (isAmoledEnabled() && color != null && isDarkColor(color)) {
-                        chain.proceed(arrayOf(Color.BLACK))
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-    }
+        }.getOrNull() ?: return
 
-    private fun hookPaint(module: XposedModule) {
-        val paintSetColor = runCatching {
-            Paint::class.java.getMethod("setColor", Int::class.javaPrimitiveType)
-        }.getOrNull()
-        if (paintSetColor != null) {
-            module.deoptimize(paintSetColor)
-            module.hook(paintSetColor)
-                .setId("spotify_amoled_paint_set_color")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val color = chain.getArg(0) as? Int
-                    if (isAmoledEnabled() && color != null && isDarkColor(color)) {
-                        chain.proceed(arrayOf(Color.BLACK))
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-
-        val paintSetColorLong = runCatching {
-            Paint::class.java.getMethod("setColor", Long::class.javaPrimitiveType)
-        }.getOrNull()
-        if (paintSetColorLong != null) {
-            module.deoptimize(paintSetColorLong)
-            module.hook(paintSetColorLong)
-                .setId("spotify_amoled_paint_set_color_long")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val colorLong = chain.getArg(0) as? Long
-                    if (isAmoledEnabled() && colorLong != null) {
-                        val argb = runCatching { Color.toArgb(colorLong) }.getOrNull()
-                        if (argb != null && isDarkColor(argb)) {
-                            chain.proceed(arrayOf(Color.pack(Color.BLACK)))
-                        } else {
-                            chain.proceed()
-                        }
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-    }
-
-    private fun hookCanvas(module: XposedModule) {
-        val canvasClasses = listOfNotNull(
-            android.graphics.Canvas::class.java,
-            runCatching { Class.forName("android.graphics.BaseRecordingCanvas") }.getOrNull(),
-            runCatching { Class.forName("android.graphics.RecordingCanvas") }.getOrNull()
-        )
-
-        val hookedMethods = mutableSetOf<String>()
-
-        for (clazz in canvasClasses) {
-            for (method in clazz.declaredMethods) {
-                val name = method.name
-                val params = method.parameterTypes
-
-                if (name in listOf("drawRect", "drawRoundRect", "drawPath", "drawPaint")) {
-                    if (params.isNotEmpty() && params.last() == Paint::class.java) {
-                        val key = "${clazz.name}.${method.name}(${params.joinToString { it.simpleName }})"
-                        if (hookedMethods.add(key)) {
-                            hookCanvasDrawWithPaint(module, method, key)
-                        }
-                    }
-                } else if (name == "drawColor") {
-                    val key = "${clazz.name}.${method.name}(${params.joinToString { it.simpleName }})"
-                    if (hookedMethods.add(key)) {
-                        hookCanvasDrawColor(module, method, key, params)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun hookCanvasDrawWithPaint(module: XposedModule, method: Method, key: String) {
-        runCatching {
-            module.deoptimize(method)
-            module.hook(method)
-                .setId("spotify_amoled_canvas_paint_${key.hashCode()}")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val paint = chain.args.lastOrNull() as? Paint
-                    if (isAmoledEnabled() && paint != null && isDarkColor(paint.color)) {
-                        val oldColor = paint.color
-                        paint.color = Color.BLACK
-                        val result = chain.proceed()
-                        paint.color = oldColor
-                        result
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-    }
-
-    private fun hookCanvasDrawColor(module: XposedModule, method: Method, key: String, params: Array<Class<*>>) {
-        if (params.isEmpty()) return
-        val firstType = params[0]
-        runCatching {
-            module.deoptimize(method)
-            module.hook(method)
-                .setId("spotify_amoled_canvas_color_${key.hashCode()}")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!isAmoledEnabled()) return@intercept chain.proceed()
-                    if (firstType == Int::class.javaPrimitiveType) {
-                        val color = chain.getArg(0) as? Int
-                        if (color != null && isDarkColor(color)) {
-                            val newArgs = chain.args.toTypedArray()
-                            newArgs[0] = Color.BLACK
-                            return@intercept chain.proceed(newArgs)
-                        }
-                    } else if (firstType == Long::class.javaPrimitiveType) {
-                        val colorLong = chain.getArg(0) as? Long
-                        if (colorLong != null) {
-                            val argb = runCatching { Color.toArgb(colorLong) }.getOrNull()
-                            if (argb != null && isDarkColor(argb)) {
-                                val newArgs = chain.args.toTypedArray()
-                                newArgs[0] = Color.pack(Color.BLACK)
-                                return@intercept chain.proceed(newArgs)
-                            }
-                        }
-                    }
+        module.deoptimize(setBgColorMethod)
+        module.hook(setBgColorMethod)
+            .setId("spotify_amoled_view_set_bg_color")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val color = chain.getArg(0) as? Int
+                if (isEnabled() && color != null && isDarkColor(color)) {
+                    chain.proceed(arrayOf(Color.BLACK))
+                } else {
                     chain.proceed()
                 }
-        }
+            }
     }
 }

@@ -2,22 +2,18 @@ package app.spotxero.hooks.theme
 
 import android.content.res.ColorStateList
 import android.content.res.Resources
-import android.content.res.TypedArray
 import android.graphics.BlendMode
 import android.graphics.BlendModeColorFilter
-import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
-import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.view.View
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
-import java.lang.reflect.Method
 import java.util.concurrent.ConcurrentHashMap
 
 object SpotifyMonetHook {
@@ -27,24 +23,22 @@ object SpotifyMonetHook {
 
     private val colorCache = ConcurrentHashMap<Int, Int>()
 
-    private fun isMonetEnabled(): Boolean =
+    fun isEnabled(): Boolean =
         PreferencesManager.isEnabled(PrefKeys.KEY_SPOTIFY_MONET, false)
 
-    private fun getMonetAccent(): Int {
-        return runCatching {
+    private fun getMonetAccent(): Int =
+        runCatching {
             val sysRes = Resources.getSystem()
             val id = sysRes.getIdentifier("system_accent1_200", "color", "android")
             if (id != 0) sysRes.getColor(id, null) else DEFAULT_SPOTIFY_GREEN
         }.getOrNull() ?: DEFAULT_SPOTIFY_GREEN
-    }
 
-    private fun getMonetAccentPressed(): Int {
-        return runCatching {
+    private fun getMonetAccentPressed(): Int =
+        runCatching {
             val sysRes = Resources.getSystem()
             val id = sysRes.getIdentifier("system_accent1_400", "color", "android")
             if (id != 0) sysRes.getColor(id, null) else DEFAULT_SPOTIFY_GREEN_DARK
         }.getOrNull() ?: DEFAULT_SPOTIFY_GREEN_DARK
-    }
 
     private fun isSpotifyGreen(color: Int): Boolean {
         if (color == DEFAULT_SPOTIFY_GREEN ||
@@ -62,10 +56,8 @@ object SpotifyMonetHook {
         return g > 110 && g > (r * 1.25).toInt() && g > (b * 1.25).toInt() && r < 100
     }
 
-    private fun replaceGreenWithMonet(color: Int): Int {
-        if (!isMonetEnabled()) return color
+    fun mapColor(color: Int): Int {
         colorCache[color]?.let { return it }
-
         val result = if (isSpotifyGreen(color)) {
             val alpha = Color.alpha(color)
             val accent = getMonetAccent()
@@ -73,180 +65,119 @@ object SpotifyMonetHook {
         } else {
             color
         }
-
         colorCache[color] = result
         return result
     }
 
     fun install(module: XposedModule) {
-        if (!isMonetEnabled()) {
-            return
-        }
-        hookPorterDuff(module)
-        hookBlendModeColorFilter(module)
+        if (!isEnabled()) return
+        ThemeColorPipeline.installShared(module)
+        hookColorFilters(module)
         hookColorStateList(module)
         hookColorParse(module)
-        hookPaint(module)
-        hookCanvas(module)
-        hookDrawables(module)
-        hookResources(module)
-        hookTypedArray(module)
+        hookPaintSetArgb(module)
         hookViewsAndOverlays(module)
     }
 
-    private fun hookPorterDuff(module: XposedModule) {
-        val ctor = runCatching {
-            PorterDuffColorFilter::class.java.getConstructor(
-                Int::class.javaPrimitiveType,
-                PorterDuff.Mode::class.java
-            )
+    private fun hookColorFilters(module: XposedModule) {
+        val porterDuffCtor = runCatching {
+            PorterDuffColorFilter::class.java.getConstructor(Int::class.javaPrimitiveType, PorterDuff.Mode::class.java)
         }.getOrNull()
-        if (ctor != null) {
-            module.deoptimize(ctor)
-            module.hook(ctor)
+        if (porterDuffCtor != null) {
+            module.deoptimize(porterDuffCtor)
+            module.hook(porterDuffCtor)
                 .setId("spotify_monet_porterduff_ctor")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     val color = chain.getArg(0) as? Int
-                    if (isMonetEnabled() && color != null && isSpotifyGreen(color)) {
-                        val newArgs = arrayOf(replaceGreenWithMonet(color), chain.getArg(1))
-                        chain.proceed(newArgs)
+                    if (isEnabled() && color != null && isSpotifyGreen(color)) {
+                        chain.proceed(arrayOf(mapColor(color), chain.getArg(1)))
                     } else {
                         chain.proceed()
                     }
                     null
                 }
         }
-    }
 
-    private fun hookBlendModeColorFilter(module: XposedModule) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
-        val ctor = runCatching {
-            BlendModeColorFilter::class.java.getConstructor(
-                Int::class.javaPrimitiveType,
-                BlendMode::class.java
-            )
-        }.getOrNull() ?: return
-        module.deoptimize(ctor)
-        module.hook(ctor)
-            .setId("spotify_monet_blendmode_cf_ctor")
-            .setExceptionMode(ExceptionMode.PROTECTIVE)
-            .intercept { chain ->
-                val color = chain.getArg(0) as? Int
-                if (isMonetEnabled() && color != null && isSpotifyGreen(color)) {
-                    chain.proceed(arrayOf(replaceGreenWithMonet(color), chain.getArg(1)))
-                } else {
-                    chain.proceed()
-                }
-                null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val blendModeCtor = runCatching {
+                BlendModeColorFilter::class.java.getConstructor(Int::class.javaPrimitiveType, BlendMode::class.java)
+            }.getOrNull()
+            if (blendModeCtor != null) {
+                module.deoptimize(blendModeCtor)
+                module.hook(blendModeCtor)
+                    .setId("spotify_monet_blendmode_cf_ctor")
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        val color = chain.getArg(0) as? Int
+                        if (isEnabled() && color != null && isSpotifyGreen(color)) {
+                            chain.proceed(arrayOf(mapColor(color), chain.getArg(1)))
+                        } else {
+                            chain.proceed()
+                        }
+                        null
+                    }
             }
+        }
     }
 
     private fun hookColorStateList(module: XposedModule) {
         val method = runCatching {
-            ColorStateList::class.java.getMethod(
-                "getColorForState",
-                IntArray::class.java,
-                Int::class.javaPrimitiveType
-            )
-        }.getOrNull()
-        if (method != null) {
-            module.deoptimize(method)
-            module.hook(method)
-                .setId("spotify_monet_csl_getcolor")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    if (!isMonetEnabled()) return@intercept result
-                    val originalColor = result as? Int ?: return@intercept result
-                    val states = chain.getArg(0) as? IntArray ?: return@intercept result
+            ColorStateList::class.java.getMethod("getColorForState", IntArray::class.java, Int::class.javaPrimitiveType)
+        }.getOrNull() ?: return
 
-                    val isPressed = states.contains(android.R.attr.state_pressed)
-                    val isFocused = states.contains(android.R.attr.state_focused)
-                    val isSelected = states.contains(android.R.attr.state_selected)
+        module.deoptimize(method)
+        module.hook(method)
+            .setId("spotify_monet_csl_getcolor")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val result = chain.proceed()
+                if (!isEnabled()) return@intercept result
+                val originalColor = result as? Int ?: return@intercept result
+                val states = chain.getArg(0) as? IntArray ?: return@intercept result
 
-                    val accent = getMonetAccent()
-                    val accentPressed = getMonetAccentPressed()
+                val isPressed = states.contains(android.R.attr.state_pressed)
+                val isFocused = states.contains(android.R.attr.state_focused)
+                val isSelected = states.contains(android.R.attr.state_selected)
 
-                    if (isSpotifyGreen(originalColor) || originalColor == accent) {
-                        when {
-                            isPressed || isFocused -> Color.argb(
-                                77,
-                                Color.red(accentPressed),
-                                Color.green(accentPressed),
-                                Color.blue(accentPressed)
-                            )
-                            isSelected -> accent
-                            else -> replaceGreenWithMonet(originalColor)
-                        }
-                    } else {
-                        result
+                val accent = getMonetAccent()
+                val accentPressed = getMonetAccentPressed()
+
+                if (isSpotifyGreen(originalColor) || originalColor == accent) {
+                    when {
+                        isPressed || isFocused -> Color.argb(
+                            77,
+                            Color.red(accentPressed),
+                            Color.green(accentPressed),
+                            Color.blue(accentPressed)
+                        )
+                        isSelected -> accent
+                        else -> mapColor(originalColor)
                     }
+                } else {
+                    result
                 }
-        }
+            }
     }
 
     private fun hookColorParse(module: XposedModule) {
         val method = runCatching {
             Color::class.java.getMethod("parseColor", String::class.java)
-        }.getOrNull()
-        if (method != null) {
-            module.deoptimize(method)
-            module.hook(method)
-                .setId("spotify_monet_color_parse")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    if (!isMonetEnabled()) return@intercept result
-                    val color = result as? Int ?: return@intercept result
-                    replaceGreenWithMonet(color)
-                }
-        }
+        }.getOrNull() ?: return
+
+        module.deoptimize(method)
+        module.hook(method)
+            .setId("spotify_monet_color_parse")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val result = chain.proceed()
+                if (!isEnabled()) return@intercept result
+                val color = result as? Int ?: return@intercept result
+                mapColor(color)
+            }
     }
 
-    private fun hookPaint(module: XposedModule) {
-        val paintSetColor = runCatching {
-            Paint::class.java.getMethod("setColor", Int::class.javaPrimitiveType)
-        }.getOrNull()
-        if (paintSetColor != null) {
-            module.deoptimize(paintSetColor)
-            module.hook(paintSetColor)
-                .setId("spotify_monet_paint_set_color")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val color = chain.getArg(0) as? Int
-                    if (isMonetEnabled() && color != null && isSpotifyGreen(color)) {
-                        chain.proceed(arrayOf(replaceGreenWithMonet(color)))
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-
-        val paintSetColorLong = runCatching {
-            Paint::class.java.getMethod("setColor", Long::class.javaPrimitiveType)
-        }.getOrNull()
-        if (paintSetColorLong != null) {
-            module.deoptimize(paintSetColorLong)
-            module.hook(paintSetColorLong)
-                .setId("spotify_monet_paint_set_color_long")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val colorLong = chain.getArg(0) as? Long
-                    if (isMonetEnabled() && colorLong != null) {
-                        val argb = runCatching { Color.toArgb(colorLong) }.getOrNull()
-                        if (argb != null && isSpotifyGreen(argb)) {
-                            val newColor = replaceGreenWithMonet(argb)
-                            chain.proceed(arrayOf(Color.pack(newColor)))
-                        } else {
-                            chain.proceed()
-                        }
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-
+    private fun hookPaintSetArgb(module: XposedModule) {
         val paintSetArgb = runCatching {
             Paint::class.java.getMethod(
                 "setARGB",
@@ -255,254 +186,71 @@ object SpotifyMonetHook {
                 Int::class.javaPrimitiveType,
                 Int::class.javaPrimitiveType
             )
-        }.getOrNull()
-        if (paintSetArgb != null) {
-            module.deoptimize(paintSetArgb)
-            module.hook(paintSetArgb)
-                .setId("spotify_monet_paint_set_argb")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val a = chain.getArg(0) as? Int
-                    val r = chain.getArg(1) as? Int
-                    val g = chain.getArg(2) as? Int
-                    val b = chain.getArg(3) as? Int
-                    if (isMonetEnabled() && a != null && r != null && g != null && b != null) {
-                        val color = Color.argb(a, r, g, b)
-                        if (isSpotifyGreen(color)) {
-                            val mapped = replaceGreenWithMonet(color)
-                            chain.proceed(
-                                arrayOf(
-                                    Color.alpha(mapped),
-                                    Color.red(mapped),
-                                    Color.green(mapped),
-                                    Color.blue(mapped)
-                                )
+        }.getOrNull() ?: return
+
+        module.deoptimize(paintSetArgb)
+        module.hook(paintSetArgb)
+            .setId("spotify_monet_paint_set_argb")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val a = chain.getArg(0) as? Int
+                val r = chain.getArg(1) as? Int
+                val g = chain.getArg(2) as? Int
+                val b = chain.getArg(3) as? Int
+                if (isEnabled() && a != null && r != null && g != null && b != null) {
+                    val color = Color.argb(a, r, g, b)
+                    if (isSpotifyGreen(color)) {
+                        val mapped = mapColor(color)
+                        return@intercept chain.proceed(
+                            arrayOf(
+                                Color.alpha(mapped),
+                                Color.red(mapped),
+                                Color.green(mapped),
+                                Color.blue(mapped)
                             )
-                        } else {
-                            chain.proceed()
-                        }
-                    } else {
-                        chain.proceed()
+                        )
                     }
                 }
-        }
-    }
-
-    private fun hookCanvas(module: XposedModule) {
-        val canvasClasses = listOfNotNull(
-            Canvas::class.java,
-            runCatching { Class.forName("android.graphics.BaseRecordingCanvas") }.getOrNull(),
-            runCatching { Class.forName("android.graphics.RecordingCanvas") }.getOrNull()
-        )
-        val drawPaintMethods = setOf(
-            "drawRect",
-            "drawRoundRect",
-            "drawCircle",
-            "drawOval",
-            "drawArc",
-            "drawLine",
-            "drawPath",
-            "drawPaint"
-        )
-        val hookedMethods = mutableSetOf<String>()
-
-        for (clazz in canvasClasses) {
-            for (method in clazz.declaredMethods) {
-                val name = method.name
-                val params = method.parameterTypes
-                val key = "${clazz.name}.$name(${params.joinToString { it.simpleName }})"
-                if (name in drawPaintMethods && params.isNotEmpty() && params.last() == Paint::class.java) {
-                    if (hookedMethods.add(key)) {
-                        hookCanvasDrawWithPaint(module, method, key)
-                    }
-                } else if (name == "drawColor" && hookedMethods.add(key)) {
-                    hookCanvasDrawColor(module, method, key, params)
-                }
+                chain.proceed()
             }
-        }
-    }
-
-    private fun hookCanvasDrawWithPaint(module: XposedModule, method: Method, key: String) {
-        runCatching {
-            module.deoptimize(method)
-            module.hook(method)
-                .setId("spotify_monet_canvas_paint_${key.hashCode()}")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val paint = chain.args.lastOrNull() as? Paint
-                    if (isMonetEnabled() && paint != null && paint.shader == null) {
-                        val oldColor = paint.color
-                        if (isSpotifyGreen(oldColor)) {
-                            paint.color = replaceGreenWithMonet(oldColor)
-                            return@intercept try {
-                                chain.proceed()
-                            } finally {
-                                paint.color = oldColor
-                            }
-                        }
-                    }
-                    chain.proceed()
-                }
-        }
-    }
-
-    private fun hookCanvasDrawColor(module: XposedModule, method: Method, key: String, params: Array<Class<*>>) {
-        if (params.isEmpty()) return
-        val firstType = params[0]
-        runCatching {
-            module.deoptimize(method)
-            module.hook(method)
-                .setId("spotify_monet_canvas_color_${key.hashCode()}")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!isMonetEnabled()) return@intercept chain.proceed()
-                    when (firstType) {
-                        Int::class.javaPrimitiveType -> {
-                            val color = chain.getArg(0) as? Int
-                            if (color != null && isSpotifyGreen(color)) {
-                                val newArgs = chain.args.toTypedArray()
-                                newArgs[0] = replaceGreenWithMonet(color)
-                                chain.proceed(newArgs)
-                            } else {
-                                chain.proceed()
-                            }
-                        }
-                        Long::class.javaPrimitiveType -> {
-                            val colorLong = chain.getArg(0) as? Long
-                            val argb = colorLong?.let { runCatching { Color.toArgb(it) }.getOrNull() }
-                            if (argb != null && isSpotifyGreen(argb)) {
-                                val newArgs = chain.args.toTypedArray()
-                                newArgs[0] = Color.pack(replaceGreenWithMonet(argb))
-                                chain.proceed(newArgs)
-                            } else {
-                                chain.proceed()
-                            }
-                        }
-                        else -> chain.proceed()
-                    }
-                }
-        }
-    }
-
-    private fun hookDrawables(module: XposedModule) {
-        val gradientSetColor = runCatching {
-            GradientDrawable::class.java.getMethod("setColor", Int::class.javaPrimitiveType)
-        }.getOrNull()
-        if (gradientSetColor != null) {
-            module.deoptimize(gradientSetColor)
-            module.hook(gradientSetColor)
-                .setId("spotify_monet_gradient_set_color")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val color = chain.getArg(0) as? Int
-                    if (isMonetEnabled() && color != null && isSpotifyGreen(color)) {
-                        chain.proceed(arrayOf(replaceGreenWithMonet(color)))
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-
-        val gradientSetColors = runCatching {
-            GradientDrawable::class.java.getMethod("setColors", IntArray::class.java)
-        }.getOrNull()
-        if (gradientSetColors != null) {
-            module.deoptimize(gradientSetColors)
-            module.hook(gradientSetColors)
-                .setId("spotify_monet_gradient_set_colors")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val colors = chain.getArg(0) as? IntArray
-                    if (isMonetEnabled() && colors != null) {
-                        var changed = false
-                        val newColors = colors.clone()
-                        for (i in newColors.indices) {
-                            if (isSpotifyGreen(newColors[i])) {
-                                newColors[i] = replaceGreenWithMonet(newColors[i])
-                                changed = true
-                            }
-                        }
-                        if (changed) {
-                            chain.proceed(arrayOf(newColors))
-                        } else {
-                            chain.proceed()
-                        }
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-    }
-
-    private fun hookResources(module: XposedModule) {
-        for (method in listOfNotNull(
-            runCatching { Resources::class.java.getMethod("getColor", Int::class.javaPrimitiveType) }.getOrNull(),
-            runCatching { Resources::class.java.getMethod("getColor", Int::class.javaPrimitiveType, Resources.Theme::class.java) }.getOrNull()
-        )) {
-            module.deoptimize(method)
-            module.hook(method)
-                .setId("spotify_monet_res_color_${method.parameterTypes.size}")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    (result as? Int)?.let { replaceGreenWithMonet(it) } ?: result
-                }
-        }
-    }
-
-    private fun hookTypedArray(module: XposedModule) {
-        val getColorMethod = runCatching {
-            TypedArray::class.java.getMethod("getColor", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
-        }.getOrNull()
-        if (getColorMethod != null) {
-            module.deoptimize(getColorMethod)
-            module.hook(getColorMethod)
-                .setId("spotify_monet_ta_get_color")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    (result as? Int)?.let { replaceGreenWithMonet(it) } ?: result
-                }
-        }
     }
 
     private fun hookViewsAndOverlays(module: XposedModule) {
         val attachMethod = runCatching {
             View::class.java.getDeclaredMethod("onAttachedToWindow")
-        }.getOrNull()
-        if (attachMethod != null) {
-            module.deoptimize(attachMethod)
-            module.hook(attachMethod)
-                .setId("spotify_monet_view_attached")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    if (!isMonetEnabled()) return@intercept result
+        }.getOrNull() ?: return
 
-                    val view = chain.getThisObject() as? View ?: return@intercept result
-                    val resName = if (view.id > 0) runCatching {
-                        view.resources.getResourceEntryName(view.id).lowercase()
-                    }.getOrDefault("") else ""
+        module.deoptimize(attachMethod)
+        module.hook(attachMethod)
+            .setId("spotify_monet_view_attached")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val result = chain.proceed()
+                if (!isEnabled()) return@intercept result
 
-                    val isShadowOrFade = resName.contains("shadow") ||
-                        resName.contains("fade") ||
-                        resName.contains("gradient")
+                val view = chain.getThisObject() as? View ?: return@intercept result
+                val resName = if (view.id > 0) runCatching {
+                    view.resources.getResourceEntryName(view.id).lowercase()
+                }.getOrDefault("") else ""
 
-                    if (isShadowOrFade && view.javaClass.name == "android.view.View") {
-                        view.visibility = View.GONE
-                        view.layoutParams?.let {
-                            it.width = 0
-                            it.height = 0
-                        }
+                val isShadowOrFade = resName.contains("shadow") ||
+                    resName.contains("fade") ||
+                    resName.contains("gradient")
+
+                if (isShadowOrFade && view.javaClass.name == "android.view.View") {
+                    view.visibility = View.GONE
+                    view.layoutParams?.let {
+                        it.width = 0
+                        it.height = 0
                     }
-
-                    if (view.javaClass.name.contains("RecyclerView")) {
-                        view.isHorizontalFadingEdgeEnabled = false
-                        view.isVerticalFadingEdgeEnabled = false
-                    }
-
-                    result
                 }
-        }
+
+                if (view.javaClass.name.contains("RecyclerView")) {
+                    view.isHorizontalFadingEdgeEnabled = false
+                    view.isVerticalFadingEdgeEnabled = false
+                }
+
+                result
+            }
     }
 }

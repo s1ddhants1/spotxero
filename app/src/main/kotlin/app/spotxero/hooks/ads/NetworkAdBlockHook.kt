@@ -5,11 +5,10 @@ import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
+import app.spotxero.hooks.network.OkHttpBridge
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
-import java.lang.reflect.Field
 import java.lang.reflect.Method
-import java.net.URI
 
 object NetworkAdBlockHook {
 
@@ -69,11 +68,6 @@ object NetworkAdBlockHook {
         }
         hookOkHttpRealCall(module)
     }
-
-    private fun findRequestUrlField(requestClass: Class<*>): Field? =
-        requestClass.declaredFields.firstOrNull { f ->
-            !f.type.isPrimitive && f.type.declaredMethods.any { m -> m.returnType == URI::class.java }
-        }?.apply { isAccessible = true }
 
     private val AUTH_BYPASS_KEYWORDS = listOf(
         "/login",
@@ -162,61 +156,17 @@ object NetworkAdBlockHook {
     }
 
     private fun hookOkHttpRealCall(module: XposedModule) {
-        val realCallChain = DexKitResolver.require<Method>(DexKitResolver.KEY_OKHTTP_REAL_CALL_CHAIN)
-        val reqToString = DexKitResolver.require<Method>(DexKitResolver.KEY_OKHTTP_REQUEST_TO_STRING)
-        val respBuild = DexKitResolver.require<Method>(DexKitResolver.KEY_OKHTTP_RESPONSE_BUILDER_BUILD)
-
-        val requestClass = reqToString.declaringClass
-        val callRequestField = realCallChain.declaringClass.declaredFields.firstOrNull {
-            it.type == requestClass
-        }?.apply { isAccessible = true } ?: error("Missing OkHttp call request field")
-        val urlField = findRequestUrlField(requestClass) ?: error("Missing OkHttp request URL field")
-
-        val builderClass = respBuild.declaringClass
-        val builderCtor = builderClass.getDeclaredConstructor().apply { isAccessible = true }
-        val bReqField: Field = builderClass.declaredFields.firstOrNull { it.type == requestClass }?.apply { isAccessible = true }
-            ?: error("Missing OkHttp builder request field")
-        val bCodeField: Field = builderClass.declaredFields.firstOrNull { it.type == Int::class.javaPrimitiveType }?.apply { isAccessible = true }
-            ?: error("Missing OkHttp builder code field")
-        val bMsgField: Field = builderClass.declaredFields.firstOrNull { it.type == String::class.java }?.apply { isAccessible = true }
-            ?: error("Missing OkHttp builder message field")
-        val bProtoField: Field = builderClass.declaredFields.firstOrNull {
-            it.type.isEnum && it.type.enumConstants?.any { c -> c.toString() == "http/1.1" } == true
-        }?.apply { isAccessible = true } ?: error("Missing OkHttp builder protocol field")
-        val http11 = bProtoField.type.enumConstants?.firstOrNull { it.toString() == "http/1.1" }
-            ?: error("Missing http/1.1 enum constant")
-
-        val longFields = builderClass.declaredFields.filter { it.type == Long::class.javaPrimitiveType }.onEach { it.isAccessible = true }
-        val bSentField = longFields.firstOrNull { it.name.contains("sent", ignoreCase = true) } ?: longFields.getOrNull(0)
-        val bReceivedField = longFields.firstOrNull { it.name.contains("received", ignoreCase = true) }
-            ?: longFields.firstOrNull { it != bSentField }
-
-        respBuild.isAccessible = true
-        module.deoptimize(realCallChain)
-        module.hook(realCallChain)
-            .setId("okhttp_ad_blocker")
-            .setExceptionMode(ExceptionMode.PROTECTIVE)
-            .intercept { chain ->
-                if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                    val callObj = chain.getThisObject()
-                    val request = callObj?.let { runCatching { callRequestField.get(it) }.getOrNull() }
-                    val url = request?.let { runCatching { urlField.get(it)?.toString() }.getOrNull() }
-                    val code = blockedStatusCode(url)
-                    if (code != null && request != null) {
-                        val builder = builderCtor.newInstance()
-                        bReqField.set(builder, request)
-                        bProtoField.set(builder, http11)
-                        bCodeField.setInt(builder, code)
-                        bMsgField.set(builder, if (code == 200) "OK" else "Blocked")
-                        val now = System.currentTimeMillis()
-                        runCatching {
-                            bSentField?.setLong(builder, now)
-                            bReceivedField?.setLong(builder, now)
-                        }
-                        return@intercept respBuild.invoke(builder)
-                    }
-                }
-                chain.proceed()
+        OkHttpBridge.registerRealCallInterceptor(module, "network_ad_block") { request, url, factory, _ ->
+            if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                return@registerRealCallInterceptor false to null
             }
+            val code = blockedStatusCode(url) ?: return@registerRealCallInterceptor false to null
+            val response = factory.buildResponse(
+                request = request,
+                code = code,
+                message = if (code == 200) "OK" else "Blocked"
+            )
+            (response != null) to response
+        }
     }
 }
