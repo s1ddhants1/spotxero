@@ -16,13 +16,13 @@ object PlayerAdCardsHook {
             return
         }
 
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_IMAGE_AD_PREDICATE)
-        if (method == null ||
-            method.declaringClass.name != PLAYER_SECTION ||
-            method.parameterCount != 0 ||
-            method.returnType != Boolean::class.javaPrimitiveType
+        val method = DexKitResolver.require<Method>(DexKitResolver.KEY_IMAGE_AD_PREDICATE)
+        check(
+            method.declaringClass.name == PLAYER_SECTION &&
+                method.parameterCount == 0 &&
+                method.returnType == Boolean::class.javaPrimitiveType
         ) {
-            return
+            "Unexpected image ad predicate signature: $method"
         }
 
         module.deoptimize(method)

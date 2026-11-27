@@ -21,7 +21,7 @@ object PendragonHook {
             return
         }
 
-        val retrofitCreate = DexKitResolver.get<Method>(DexKitResolver.KEY_RETROFIT_CREATE) ?: return
+        val retrofitCreate = DexKitResolver.require<Method>(DexKitResolver.KEY_RETROFIT_CREATE)
 
         module.deoptimize(retrofitCreate)
         module.hook(retrofitCreate)

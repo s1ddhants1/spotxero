@@ -149,11 +149,7 @@ object ProductStateHook {
     }
 
     private fun installMapSeam(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_PRODUCT_STATE_MAP)
-        if (method == null) {
-            Log.w(TAG, "Product state map unresolved; map seam disabled")
-            return
-        }
+        val method = DexKitResolver.require<Method>(DexKitResolver.KEY_PRODUCT_STATE_MAP)
 
         module.deoptimize(method)
         module.hook(method)
@@ -175,12 +171,8 @@ object ProductStateHook {
     }
 
     private fun installAttributeSeam(module: XposedModule) {
-        val accessor = DexKitResolver.get<Method>(DexKitResolver.KEY_PRODUCT_STATE_ATTRIBUTE_OBJECTS)
-        val valueField = DexKitResolver.get<Field>(DexKitResolver.KEY_PRODUCT_STATE_ATTRIBUTE_VALUE_FIELD)
-        if (accessor == null || valueField == null) {
-            Log.w(TAG, "Product state attribute seam unresolved; disabled")
-            return
-        }
+        val accessor = DexKitResolver.require<Method>(DexKitResolver.KEY_PRODUCT_STATE_ATTRIBUTE_OBJECTS)
+        val valueField = DexKitResolver.require<Field>(DexKitResolver.KEY_PRODUCT_STATE_ATTRIBUTE_VALUE_FIELD)
 
         val accessors = attributeAccessorsOf(valueField.declaringClass, valueField)
 
@@ -217,11 +209,7 @@ object ProductStateHook {
     }
 
     private fun installUcsAttributeSeam(module: XposedModule) {
-        val getter = DexKitResolver.get<Method>(DexKitResolver.KEY_UCS_ACCOUNT_ATTRIBUTES_GETTER)
-        if (getter == null) {
-            Log.w(TAG, "UCS account attributes getter unresolved; seam disabled")
-            return
-        }
+        val getter = DexKitResolver.require<Method>(DexKitResolver.KEY_UCS_ACCOUNT_ATTRIBUTES_GETTER)
         module.deoptimize(getter)
         module.hook(getter)
             .setId("ucs_account_attributes_getter")
@@ -302,11 +290,7 @@ object ProductStateHook {
     }
 
     private fun installRcsConfigurationSeam(module: XposedModule) {
-        val getter = DexKitResolver.get<Method>(DexKitResolver.KEY_RCS_CONFIGURATION_ASSIGNED_VALUES)
-        if (getter == null) {
-            Log.w(TAG, "RCS assigned values getter unresolved; seam disabled")
-            return
-        }
+        val getter = DexKitResolver.require<Method>(DexKitResolver.KEY_RCS_CONFIGURATION_ASSIGNED_VALUES)
         module.deoptimize(getter)
         module.hook(getter)
             .setId("rcs_configuration_assigned_values")
@@ -349,8 +333,8 @@ object ProductStateHook {
         )
     }.getOrNull()
 
-    private fun resolveRcsValueConstructor(): java.lang.reflect.Constructor<*>? {
-        val lookup = DexKitResolver.get<Method>(DexKitResolver.KEY_RCS_PROPERTY_LOOKUP) ?: return null
+    private fun resolveRcsValueConstructor(): java.lang.reflect.Constructor<*> {
+        val lookup = DexKitResolver.require<Method>(DexKitResolver.KEY_RCS_PROPERTY_LOOKUP)
         return lookup.returnType.declaredConstructors.firstOrNull { c ->
             val p = c.parameterTypes
             p.size == 7 &&
@@ -361,23 +345,25 @@ object ProductStateHook {
                 p[4] == String::class.java &&
                 p[5] == Long::class.javaPrimitiveType &&
                 p[6] == Long::class.javaPrimitiveType
-        }?.apply { isAccessible = true }
+        }?.apply { isAccessible = true } ?: error("Missing RCS value constructor")
     }
 
     private fun installRcsMapSeam(module: XposedModule) {
-        val loader = DexKitResolver.get<Method>(DexKitResolver.KEY_RCS_MAP_LOADER) ?: return
-        val r27Ctor = resolveRcsValueConstructor() ?: return
-        val r27Class = r27Ctor.declaringClass
-        val boolField = r27Class.declaredFields.firstOrNull { it.type == Boolean::class.javaObjectType }?.apply { isAccessible = true }
-        val intField = r27Class.declaredFields.firstOrNull { it.type == Int::class.javaObjectType }?.apply { isAccessible = true }
-        val stringFields = r27Class.declaredFields.filter { it.type == String::class.java }.onEach { it.isAccessible = true }
+        val loader = DexKitResolver.require<Method>(DexKitResolver.KEY_RCS_MAP_LOADER)
+        val rcsValueCtor = resolveRcsValueConstructor()
+        val rcsValueClass = rcsValueCtor.declaringClass
+        val boolField = rcsValueClass.declaredFields.firstOrNull { it.type == Boolean::class.javaObjectType }?.apply { isAccessible = true }
+        val intField = rcsValueClass.declaredFields.firstOrNull { it.type == Int::class.javaObjectType }?.apply { isAccessible = true }
+        val stringFields = rcsValueClass.declaredFields.filter { it.type == String::class.java }.onEach { it.isAccessible = true }
 
         val snapshotClass = loader.returnType
         val snapshotCtor = snapshotClass.declaredConstructors.firstOrNull { c ->
             c.parameterCount == 2 && !c.parameterTypes[0].isPrimitive && Map::class.java.isAssignableFrom(c.parameterTypes[1])
-        }?.apply { isAccessible = true } ?: return
-        val headerField = snapshotClass.declaredFields.firstOrNull { it.type == snapshotCtor.parameterTypes[0] }?.apply { isAccessible = true } ?: return
-        val mapField = snapshotClass.declaredFields.firstOrNull { Map::class.java.isAssignableFrom(it.type) }?.apply { isAccessible = true } ?: return
+        }?.apply { isAccessible = true } ?: error("Missing RCS snapshot constructor")
+        val headerField = snapshotClass.declaredFields.firstOrNull { it.type == snapshotCtor.parameterTypes[0] }?.apply { isAccessible = true }
+            ?: error("Missing RCS snapshot header field")
+        val mapField = snapshotClass.declaredFields.firstOrNull { Map::class.java.isAssignableFrom(it.type) }?.apply { isAccessible = true }
+            ?: error("Missing RCS snapshot map field")
 
         module.deoptimize(loader)
         module.hook(loader)
@@ -407,7 +393,7 @@ object ProductStateHook {
                             else -> null
                         }
                         if (overrideVal != null) {
-                            buildRcsValue(r27Ctor, name, scope, overrideVal)?.let { patched[fullKey] = it }
+                            buildRcsValue(rcsValueCtor, name, scope, overrideVal)?.let { patched[fullKey] = it }
                         }
                     }
                 }
@@ -417,7 +403,7 @@ object ProductStateHook {
                     if (sep <= 0) continue
                     val scope = fullKey.substring(0, sep)
                     val name = fullKey.substring(sep + 1)
-                    buildRcsValue(r27Ctor, name, scope, value)?.let { patched[fullKey] = it }
+                    buildRcsValue(rcsValueCtor, name, scope, value)?.let { patched[fullKey] = it }
                 }
 
                 snapshotCtor.newInstance(origHeader, java.util.Collections.unmodifiableMap(patched))
@@ -425,8 +411,8 @@ object ProductStateHook {
     }
 
     private fun installRcsLookupSeam(module: XposedModule) {
-        val lookup = DexKitResolver.get<Method>(DexKitResolver.KEY_RCS_PROPERTY_LOOKUP) ?: return
-        val r27Ctor = resolveRcsValueConstructor() ?: return
+        val lookup = DexKitResolver.require<Method>(DexKitResolver.KEY_RCS_PROPERTY_LOOKUP)
+        val rcsValueCtor = resolveRcsValueConstructor()
 
         module.deoptimize(lookup)
         module.hook(lookup)
@@ -445,7 +431,7 @@ object ProductStateHook {
                         null
                     }
                     ?: return@intercept result
-                buildRcsValue(r27Ctor, name, scope, overrideVal) ?: result
+                buildRcsValue(rcsValueCtor, name, scope, overrideVal) ?: result
             }
     }
 }

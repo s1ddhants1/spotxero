@@ -166,11 +166,11 @@ class SpotXeroModule : XposedModule() {
                 InAppSettingsHook.onActivityResumed(activity)
             }
 
-            override fun onActivityPaused(activity: Activity) {
-                InAppSettingsHook.onActivityPaused(activity)
-            }
+            override fun onActivityPaused(activity: Activity) {}
 
-            override fun onActivityStopped(activity: Activity) {}
+            override fun onActivityStopped(activity: Activity) {
+                InAppSettingsHook.onActivityStopped(activity)
+            }
 
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
 

@@ -10,12 +10,9 @@ import java.lang.reflect.Method
 object HidePremiumTabHook {
 
     fun install(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_PREMIUM_TAB_FLAG)
-        if (method == null ||
-            method.parameterCount != 0 ||
-            method.returnType != Boolean::class.javaPrimitiveType
-        ) {
-            return
+        val method = DexKitResolver.require<Method>(DexKitResolver.KEY_PREMIUM_TAB_FLAG)
+        check(method.parameterCount == 0 && method.returnType == Boolean::class.javaPrimitiveType) {
+            "Unexpected premium tab flag signature: $method"
         }
 
         module.deoptimize(method)
@@ -27,7 +24,7 @@ object HidePremiumTabHook {
                 if (PreferencesManager.isEnabled(PrefKeys.KEY_HIDE_PREMIUM_TAB, true)) {
                     false
                 } else {
-                    true
+                    chain.proceed()
                 }
             }
     }

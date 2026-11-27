@@ -168,7 +168,7 @@ object PreferencesManager {
     )
 
     private val changeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
-        if (key != null && key != "pref_force_stop") {
+        if (key != null) {
             if (!updateMemoryCache(prefs, key)) return@OnSharedPreferenceChangeListener
             val lp = localPrefs
             if (lp != null && prefs != lp) {
@@ -280,16 +280,9 @@ object PreferencesManager {
                 ?.getSharedPreferences(PrefKeys.PREFS_NAME, Context.MODE_PRIVATE)
             if (lp != null) {
                 localPrefs = lp
-                if (lp.contains("pref_force_stop")) {
-                    lp.edit().remove("pref_force_stop").apply()
-                }
-                if (rp.contains("pref_force_stop")) {
-                    rp.edit().remove("pref_force_stop").apply()
-                }
                 if (rp.all.isEmpty()) {
                     val remoteEditor = rp.edit()
                     for ((k, v) in lp.all) {
-                        if (k == "pref_force_stop") continue
                         when (v) {
                             is Boolean -> remoteEditor.putBoolean(k, v)
                             is String -> remoteEditor.putString(k, v)

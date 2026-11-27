@@ -8,6 +8,7 @@ import app.spotxero.hooks.ads.ContextMenuAdBlockHook
 import app.spotxero.hooks.ads.NetworkAdBlockHook
 import app.spotxero.hooks.ads.PendragonHook
 import app.spotxero.hooks.ads.PlayerAdCardsHook
+import app.spotxero.hooks.attestation.LoginClientTokenHook
 import app.spotxero.hooks.attestation.PackageSignatureHook
 import app.spotxero.hooks.content.ContentFilterHook
 import app.spotxero.hooks.lyrics.LyricsHook
@@ -229,7 +230,7 @@ object HookRegistry {
                 HookEntry("CleanSharing", { PreferencesManager.isEnabled(PrefKeys.KEY_CLEAN_SHARING, true) }) { CleanSharingHook.install(module) },
                 HookEntry("HidePremiumTab", { true }) { HidePremiumTabHook.install(module) },
                 HookEntry("AdResponse", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { AdResponseHook.install(module) },
-                HookEntry("NetworkAdBlock", { true }) { NetworkAdBlockHook.install(module, startupAppInfo, startupClassLoader) },
+                HookEntry("NetworkAdBlock", { true }) { NetworkAdBlockHook.install(module) },
                 HookEntry("BrandAds", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { BrandAdsHook.install(module) },
                 HookEntry("PlayerAdCards", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { PlayerAdCardsHook.install(module) },
                 HookEntry("ContextMenuAdBlock", { PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true) }) { ContextMenuAdBlockHook.install(module) },
@@ -248,6 +249,7 @@ object HookRegistry {
                 HookEntry("Lyrics", { true }) { LyricsHook.install(module) },
                 HookEntry("InAppSettings", { inAppSettingsSupported }) { InAppSettingsHook.install(module) },
                 HookEntry("PackageSignature", { true }) { PackageSignatureHook.install(module) },
+                HookEntry("LoginClientToken", { true }) { LoginClientTokenHook.install(module) },
             )
 
             installHooks(module, hooks)

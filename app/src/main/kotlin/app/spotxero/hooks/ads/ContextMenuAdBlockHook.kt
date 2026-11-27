@@ -30,7 +30,7 @@ object ContextMenuAdBlockHook {
             return
         }
 
-        val ctor = DexKitResolver.get<Constructor<*>>(DexKitResolver.KEY_CONTEXT_MENU_VIEW_MODEL_CTOR) ?: return
+        val ctor = DexKitResolver.require<Constructor<*>>(DexKitResolver.KEY_CONTEXT_MENU_VIEW_MODEL_CTOR)
 
         module.deoptimize(ctor)
         module.hook(ctor)

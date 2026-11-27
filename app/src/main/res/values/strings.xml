@@ -94,7 +94,6 @@
     <string name="title_ai_lyrics_translation">AI Lyrics Translation</string>
     <string name="ai_lyrics_translation_desc">Translation languages, providers and models</string>
     <string name="lyrics_providers_header">Providers &amp; Priority</string>
-    <string name="lyrics_providers_desc">Drag or move items to configure fallback priority</string>
     <string name="provider_spicylyrics_title">SpicyLyrics</string>
     <string name="provider_betterlyrics_title">BetterLyrics</string>
     <string name="provider_lrcred_title">lrc.red</string>
@@ -158,7 +157,6 @@
     <string name="refresh">Refresh</string>
     <string name="settings_translation_model_summary">Model for translating or transcribing lyrics</string>
     <string name="ai_prompt">Prompt</string>
-    <string name="ai_prompt_line_count_description">Optional. Use {lineCount} to include the exact input line count in your prompt.</string>
     <string name="ai_system_prompt_label">System prompt</string>
     <string name="ai_default_json_array_prompt">Default</string>
     <string name="ai_test_connection">Test connection</string>

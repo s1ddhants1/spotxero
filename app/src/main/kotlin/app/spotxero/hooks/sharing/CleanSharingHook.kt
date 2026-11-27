@@ -23,15 +23,11 @@ object CleanSharingHook {
     }
 
     private fun hookOutboundSharing(module: XposedModule) {
-        val targets = buildList {
-            DexKitResolver.get<Method>(DexKitResolver.KEY_SHARE_URL_BUILDER)
-                ?.takeIf(::carriesUrl)
-                ?.let(::add)
-            DexKitResolver.get<List<Method>>(DexKitResolver.KEY_SHARE_RESPONSE_URLS)?.let(::addAll)
-        }
-        if (targets.isEmpty()) {
-            return
-        }
+        val shareUrlBuilder = DexKitResolver.require<Method>(DexKitResolver.KEY_SHARE_URL_BUILDER)
+        check(carriesUrl(shareUrlBuilder)) { "Unexpected share URL builder signature: $shareUrlBuilder" }
+        val shareResponseUrls = DexKitResolver.require<List<Method>>(DexKitResolver.KEY_SHARE_RESPONSE_URLS)
+            .ifEmpty { error("Empty share response URL methods") }
+        val targets = listOf(shareUrlBuilder) + shareResponseUrls
 
         for (method in targets) {
             val id = "clean_sharing_${method.declaringClass.simpleName}_${method.name}"

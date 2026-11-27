@@ -26,7 +26,7 @@ object ContentFilterHook {
     }
 
     private fun hookProvidedItems(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_PROVIDED_ITEMS_LIST) ?: return
+        val method = DexKitResolver.require<Method>(DexKitResolver.KEY_PROVIDED_ITEMS_LIST)
         module.deoptimize(method)
         module.hook(method)
             .setId("hide_provided_items")
@@ -37,7 +37,7 @@ object ContentFilterHook {
     }
 
     private fun hookHomeSections(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_HOME_SECTION_LIST) ?: return
+        val method = DexKitResolver.require<Method>(DexKitResolver.KEY_HOME_SECTION_LIST)
         module.deoptimize(method)
         module.hook(method)
             .setId("hide_home_sections")
@@ -48,7 +48,7 @@ object ContentFilterHook {
     }
 
     private fun hookHomeChips(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_HOME_CHIPS_MAPPER) ?: return
+        val method = DexKitResolver.require<Method>(DexKitResolver.KEY_HOME_CHIPS_MAPPER)
         module.deoptimize(method)
         module.hook(method)
             .setId("hide_home_chips")
@@ -62,7 +62,7 @@ object ContentFilterHook {
     }
 
     private fun hookSearchChips(module: XposedModule) {
-        val ctor = DexKitResolver.get<Constructor<*>>(DexKitResolver.KEY_SEARCH_CHIPS_CTOR) ?: return
+        val ctor = DexKitResolver.require<Constructor<*>>(DexKitResolver.KEY_SEARCH_CHIPS_CTOR)
         module.hook(ctor)
             .setId("hide_search_chips")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
@@ -76,7 +76,7 @@ object ContentFilterHook {
     }
 
     private fun hookSearchResponse(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_SEARCH_RESPONSE_MAPPER) ?: return
+        val method = DexKitResolver.require<Method>(DexKitResolver.KEY_SEARCH_RESPONSE_MAPPER)
         module.deoptimize(method)
         module.hook(method)
             .setId("hide_search_response")
@@ -107,7 +107,7 @@ object ContentFilterHook {
     }
 
     private fun hookBrowseSections(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_BROWSE_SECTION_LIST) ?: return
+        val method = DexKitResolver.require<Method>(DexKitResolver.KEY_BROWSE_SECTION_LIST)
         module.deoptimize(method)
         module.hook(method)
             .setId("hide_browse_sections")
@@ -118,7 +118,7 @@ object ContentFilterHook {
     }
 
     private fun hookBrowseItems(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_CONTENT_CATEGORY_ITEMS_LIST) ?: return
+        val method = DexKitResolver.require<Method>(DexKitResolver.KEY_CONTENT_CATEGORY_ITEMS_LIST)
         module.deoptimize(method)
         module.hook(method)
             .setId("hide_browse_items")

@@ -3,6 +3,8 @@ package app.spotxero.hooks.settings
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.content.res.Resources
@@ -18,10 +20,8 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
-import app.spotxero.BuildConfig
 import app.spotxero.R
 import app.spotxero.core.DexKitResolver
-import app.spotxero.core.HookRegistry
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
 import io.github.libxposed.api.XposedInterface.ExceptionMode
@@ -46,11 +46,13 @@ object InAppSettingsHook {
     private const val PRIVATE_ROUTE_PREFIX = "spotify:spotxero:private:"
     private const val SHORTCUT_ID = "spotxero_settings"
     private const val EXTRA_SHORTCUT = "spotxero_shortcut"
+    private const val RUNTIME_PREFS_NAME = "spotxero_inapp_runtime"
+    private const val KEY_REOPEN_AFTER_RESTART_AT = "reopen_spotxero_at"
     private const val PENDING_ROUTE_TIMEOUT_MS = 60_000L
     private val routeToken = UUID.randomUUID().toString()
-    private const val L2C1_DEFAULT_MASK = 2 or 16 or 4096 or 16384 or 65536
-    private const val ND71_HEADERLESS_MASK = 253
-    private const val ND71_TITLED_MASK = 249
+    private const val DEFAULT_ITEM_MASK = 2 or 16 or 4096 or 16384 or 65536
+    private const val HEADERLESS_SECTION_MASK = 253
+    private const val TITLED_SECTION_MASK = 249
 
     private data class ToggleSpec(
         val id: String,
@@ -69,8 +71,7 @@ object InAppSettingsHook {
         val titleRes: Int? = null,
         val fallbackTitle: String? = null,
         val toggles: List<ToggleSpec> = emptyList(),
-        val seekDurationAfterToggleId: String? = null,
-        val includeLyricsDialogs: Boolean = false
+        val seekDurationAfterToggleId: String? = null
     )
 
     private data class ToggleBinding(
@@ -163,28 +164,8 @@ object InAppSettingsHook {
                     subtitleRes = R.string.feature_uncapped_lyrics_desc,
                     fallbackSubtitle = "Remove monthly lyrics viewing limit",
                     defaultValue = true
-                ),
-                ToggleSpec(
-                    id = "spotxero_external_lyrics",
-                    key = PrefKeys.KEY_EXTERNAL_LYRICS,
-                    titleRes = R.string.pref_external_lyrics_title,
-                    fallbackTitle = "Enable Third-Party Lyrics",
-                    subtitleRes = R.string.pref_external_lyrics_desc,
-                    fallbackSubtitle = "Fetch third-party lyrics when missing",
-                    defaultValue = false
-                ),
-                ToggleSpec(
-                    id = "spotxero_force_external_lyrics",
-                    key = PrefKeys.KEY_FORCE_EXTERNAL_LYRICS,
-                    titleRes = R.string.pref_force_external_lyrics_title,
-                    fallbackTitle = "Force Third-Party Lyrics",
-                    subtitleRes = R.string.pref_force_external_lyrics_desc,
-                    fallbackSubtitle = "Prefer third-party lyrics over Spotify",
-                    defaultValue = false,
-                    dependsOnKey = PrefKeys.KEY_EXTERNAL_LYRICS
                 )
-            ),
-            includeLyricsDialogs = true
+            )
         ),
         SectionSpec(
             syntheticTitleId = SECTION_PRIVACY,
@@ -291,6 +272,12 @@ object InAppSettingsHook {
     private var currentActivity: WeakReference<Activity>? = null
 
     @Volatile
+    private var pendingRestartParent: WeakReference<Activity>? = null
+
+    @Volatile
+    private var restartRequestedAt: Long = 0L
+
+    @Volatile
     private var cachedItemGroup: Any? = null
 
     @Volatile
@@ -349,13 +336,13 @@ object InAppSettingsHook {
     private lateinit var toggleCallbackInterface: Class<*>
     private lateinit var itemGroupMethod: Method
 
-    private lateinit var kc71Interface: Class<*>
-    private lateinit var kc71FactoryMethod: Method
-    private lateinit var kc71ViewUriMethod: Method
-    private lateinit var p3z0Interface: Class<*>
-    private lateinit var p3z0GetMethod: Method
-    private lateinit var sb71Interface: Class<*>
-    private lateinit var sb71CreateMethod: Method
+    private lateinit var pageDefInterface: Class<*>
+    private lateinit var pageDefFactoryMethod: Method
+    private lateinit var pageDefViewUriMethod: Method
+    private lateinit var pageFactoryProviderInterface: Class<*>
+    private lateinit var pageFactoryProviderGetMethod: Method
+    private lateinit var pageFactoryInterface: Class<*>
+    private lateinit var pageFactoryCreateMethod: Method
     private lateinit var viewUriField: Field
     private var hostPropsField: Field? = null
     private var hostPropsUpdateMethod: Method? = null
@@ -391,17 +378,27 @@ object InAppSettingsHook {
                 }
             }
 
-        val routeIndex = routerNavigate.parameterTypes.indexOfFirst { it == String::class.java }
-        if (routeIndex >= 0) {
-            val restartRoute = privateRoute("restart")
-            val seekRoute = privateRoute("seek-duration")
-            val lyricsProvidersRoute = privateRoute("lyrics-providers")
-            val aiTranslationRoute = privateRoute("ai-translation")
-            val diagnosticsRoute = privateRoute("diagnostics")
+        val restartRoute = privateRoute("restart")
+        val seekRoute = privateRoute("seek-duration")
+        val routerMethods = routerNavigate.declaringClass.declaredMethods
+            .filter { method ->
+                !Modifier.isStatic(method.modifiers) &&
+                    method.returnType == Void.TYPE &&
+                    method.parameterCount in 1..3 &&
+                    method.parameterTypes.count { it == String::class.java } == 1 &&
+                    method.parameterTypes.all { p ->
+                        p == String::class.java ||
+                            p == Bundle::class.java ||
+                            android.os.Parcelable::class.java.isAssignableFrom(p)
+                    }
+            }
+            .ifEmpty { listOf(routerNavigate) }
 
-            module.deoptimize(routerNavigate)
-            module.hook(routerNavigate)
-                .setId("inapp_settings_router_navigate")
+        for ((methodIdx, routerMethod) in routerMethods.withIndex()) {
+            val routeIndex = routerMethod.parameterTypes.indexOfFirst { it == String::class.java }
+            module.deoptimize(routerMethod)
+            module.hook(routerMethod)
+                .setId("inapp_settings_router_navigate_$methodIdx")
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .intercept { chain ->
                     when (val uri = chain.args[routeIndex] as? String) {
@@ -413,24 +410,6 @@ object InAppSettingsHook {
                             withActiveActivity(
                                 onActive = { InAppSettingsSheets.showSeekDurationBottomSheet(it) },
                                 onMissing = { cycleSeekDuration() }
-                            )
-                            null
-                        }
-                        lyricsProvidersRoute -> {
-                            withActiveActivity(
-                                onActive = { InAppSettingsSheets.showLyricsProvidersBottomSheet(it) }
-                            )
-                            null
-                        }
-                        aiTranslationRoute -> {
-                            withActiveActivity(
-                                onActive = { InAppSettingsSheets.showAiTranslationBottomSheet(it) }
-                            )
-                            null
-                        }
-                        diagnosticsRoute -> {
-                            withActiveActivity(
-                                onActive = { InAppSettingsSheets.showDiagnosticsBottomSheet(it, ::restartSpotify) }
                             )
                             null
                         }
@@ -450,8 +429,6 @@ object InAppSettingsHook {
                         }
                     }
                 }
-        } else {
-            Log.w(TAG, "Router navigate has no string route argument")
         }
 
         val onNewIntent = Activity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
@@ -470,7 +447,7 @@ object InAppSettingsHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val pageDef = chain.args[1]
-                val viewUriObj = runCatching { kc71ViewUriMethod.invoke(pageDef) }.getOrNull()
+                val viewUriObj = runCatching { pageDefViewUriMethod.invoke(pageDef) }.getOrNull()
                 val viewUriStr = runCatching {
                     viewUriField.get(viewUriObj) as? String ?: viewUriObj?.toString()
                 }.getOrNull()
@@ -529,6 +506,7 @@ object InAppSettingsHook {
         ensureModuleResources(activity)
         ensureLauncherShortcut(activity)
         hookNewIntentOverride(activity.javaClass)
+        armSpotXeroIfRestarted(activity)
         rewriteDeepLinkIfNeeded(activity.intent)
     }
 
@@ -538,13 +516,32 @@ object InAppSettingsHook {
         ensureModuleResources(activity)
     }
 
-    fun onActivityPaused(activity: Activity) {
-    }
-
     fun onActivityDestroyed(activity: Activity) {
         if (currentActivity?.get() == activity) {
             currentActivity = null
         }
+        if (pendingRestartParent?.get() == activity) {
+            pendingRestartParent = null
+        }
+    }
+
+    fun onActivityStopped(activity: Activity) {
+        if (pendingRestartParent?.get() != activity) return
+        val requestedAt = restartRequestedAt
+        if (requestedAt == 0L || SystemClock.elapsedRealtime() - requestedAt > 5_000L) {
+            pendingRestartParent = null
+            restartRequestedAt = 0L
+            return
+        }
+        pendingRestartParent = null
+        restartRequestedAt = 0L
+        activity.window?.decorView?.postDelayed({
+            Process.killProcess(Process.myPid())
+            exitProcess(0)
+        }, 120) ?: android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            Process.killProcess(Process.myPid())
+            exitProcess(0)
+        }, 120)
     }
 
     private fun ensureModuleResources(context: Context) {
@@ -834,15 +831,15 @@ object InAppSettingsHook {
             ?.get(null)
 
         val modelClass = modelCtor.declaringClass
-        val r2yClass = modelCtor.parameterTypes[0]
-        val xf31Class = modelCtor.parameterTypes[1]
-        modelGroupField = modelClass.declaredFields.first { it.type == r2yClass }.apply { isAccessible = true }
-        modelHeaderField = modelClass.declaredFields.first { it.type == xf31Class }.apply { isAccessible = true }
+        val iconType = modelCtor.parameterTypes[0]
+        val headerType = modelCtor.parameterTypes[1]
+        modelGroupField = modelClass.declaredFields.first { it.type == iconType }.apply { isAccessible = true }
+        modelHeaderField = modelClass.declaredFields.first { it.type == headerType }.apply { isAccessible = true }
         val listFields = modelClass.declaredFields.filter { List::class.java.isAssignableFrom(it.type) }
         modelSectionsField = listFields.first().apply { isAccessible = true }
 
-        val se80Class = sectionCtor.parameterTypes[4]
-        sectionItemsField = sectionCtor.declaringClass.declaredFields.first { it.type == se80Class }.apply { isAccessible = true }
+        val itemsListClass = sectionCtor.parameterTypes[4]
+        sectionItemsField = sectionCtor.declaringClass.declaredFields.first { it.type == itemsListClass }.apply { isAccessible = true }
 
         val toggleItemClass = toggleItemCtor.declaringClass
         val subtitleTextClass = subtitleTextCtor.declaringClass
@@ -860,18 +857,18 @@ object InAppSettingsHook {
         }
 
         toggleCallbackInterface = reactiveToggleCtor.parameterTypes[1]
-        val g2gInterface = toggleItemCtor.parameterTypes[8]
-        val la71Interface = toggleItemClass.interfaces.first()
-        itemGroupMethod = la71Interface.methods.first { m ->
-            !Modifier.isStatic(m.modifiers) && m.parameterCount == 0 && m.returnType == g2gInterface
+        val itemGroupInterface = toggleItemCtor.parameterTypes[8]
+        val itemInterface = toggleItemClass.interfaces.first()
+        itemGroupMethod = itemInterface.methods.first { m ->
+            !Modifier.isStatic(m.modifiers) && m.parameterCount == 0 && m.returnType == itemGroupInterface
         }
 
-        kc71Interface = pageHostCtor.parameterTypes[1]
-        sb71Interface = rootFactory.declaringClass.interfaces.single()
-        sb71CreateMethod = sb71Interface.methods.first {
+        pageDefInterface = pageHostCtor.parameterTypes[1]
+        pageFactoryInterface = rootFactory.declaringClass.interfaces.single()
+        pageFactoryCreateMethod = pageFactoryInterface.methods.first {
             !Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && it.returnType == rootFactory.returnType
         }
-        kc71FactoryMethod = kc71Interface.methods.firstOrNull { m ->
+        pageDefFactoryMethod = pageDefInterface.methods.firstOrNull { m ->
             !Modifier.isStatic(m.modifiers) &&
                 m.parameterCount == 0 &&
                 m.returnType.isInterface &&
@@ -880,15 +877,15 @@ object InAppSettingsHook {
                     !Modifier.isStatic(inner.modifiers) && inner.parameterCount == 0 && inner.returnType == Any::class.java
                 }
         } ?: error("Unable to locate page factory provider method on settings definition")
-        p3z0Interface = kc71FactoryMethod.returnType
-        p3z0GetMethod = p3z0Interface.methods.first {
+        pageFactoryProviderInterface = pageDefFactoryMethod.returnType
+        pageFactoryProviderGetMethod = pageFactoryProviderInterface.methods.first {
             !Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && it.returnType == Any::class.java
         }
 
-        val q5l1Class = actionUriCtor.declaringClass.declaredConstructors
+        val viewUriClass = actionUriCtor.declaringClass.declaredConstructors
             .firstOrNull { it.parameterCount == 2 && it.parameterTypes[0] != String::class.java && it.parameterTypes[1] == Bundle::class.java }
             ?.parameterTypes?.get(0)
-            ?: kc71Interface.methods.first {
+            ?: pageDefInterface.methods.first {
                 !Modifier.isStatic(it.modifiers) &&
                     it.parameterCount == 0 &&
                     !it.returnType.isInterface &&
@@ -897,10 +894,10 @@ object InAppSettingsHook {
                     it.returnType != String::class.java
             }.returnType
 
-        kc71ViewUriMethod = kc71Interface.methods.first {
-            !Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && it.returnType == q5l1Class
+        pageDefViewUriMethod = pageDefInterface.methods.first {
+            !Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && it.returnType == viewUriClass
         }
-        viewUriField = q5l1Class.declaredFields.first { !Modifier.isStatic(it.modifiers) && it.type == String::class.java }
+        viewUriField = viewUriClass.declaredFields.first { !Modifier.isStatic(it.modifiers) && it.type == String::class.java }
             .apply { isAccessible = true }
 
         val propInterface = headerPropCtor?.declaringClass?.interfaces?.singleOrNull()
@@ -920,27 +917,27 @@ object InAppSettingsHook {
         }
     }
 
-    private fun wrapSpotXeroPageDefinition(realKc71: Any): Any {
+    private fun wrapSpotXeroPageDefinition(realPageDef: Any): Any {
         return Proxy.newProxyInstance(
-            kc71Interface.classLoader,
-            arrayOf(kc71Interface)
+            pageDefInterface.classLoader,
+            arrayOf(pageDefInterface)
         ) { proxy, method, args ->
             when {
-                method == kc71FactoryMethod -> {
-                    val realProvider = method.invoke(realKc71)
+                method == pageDefFactoryMethod -> {
+                    val realProvider = method.invoke(realPageDef)
                     Proxy.newProxyInstance(
-                        p3z0Interface.classLoader,
-                        arrayOf(p3z0Interface)
+                        pageFactoryProviderInterface.classLoader,
+                        arrayOf(pageFactoryProviderInterface)
                     ) { pProxy, pMethod, pArgs ->
                         when {
-                            pMethod == p3z0GetMethod -> {
+                            pMethod == pageFactoryProviderGetMethod -> {
                                 val realFactory = pMethod.invoke(realProvider)
                                 Proxy.newProxyInstance(
-                                    sb71Interface.classLoader,
-                                    arrayOf(sb71Interface)
+                                    pageFactoryInterface.classLoader,
+                                    arrayOf(pageFactoryInterface)
                                 ) { fProxy, fMethod, fArgs ->
                                     when {
-                                        fMethod == sb71CreateMethod -> {
+                                        fMethod == pageFactoryCreateMethod -> {
                                             val template = fMethod.invoke(realFactory)
                                             if (template == null) {
                                                 null
@@ -969,7 +966,7 @@ object InAppSettingsHook {
                 method.name == "equals" -> args?.get(0) === proxy
                 method.name == "hashCode" -> System.identityHashCode(proxy)
                 method.name == "toString" -> "SpotXeroPageDefinition"
-                else -> method.invoke(realKc71, *(args ?: emptyArray()))
+                else -> method.invoke(realPageDef, *(args ?: emptyArray()))
             }
         }
     }
@@ -988,25 +985,25 @@ object InAppSettingsHook {
             }
             if (match != null) {
                 return runCatching { maskField.getInt(match) }.getOrElse {
-                    if (headerless) ND71_HEADERLESS_MASK else ND71_TITLED_MASK
+                    if (headerless) HEADERLESS_SECTION_MASK else TITLED_SECTION_MASK
                 }
             }
         }
-        return if (headerless) ND71_HEADERLESS_MASK else ND71_TITLED_MASK
+        return if (headerless) HEADERLESS_SECTION_MASK else TITLED_SECTION_MASK
     }
 
     private fun extractLiveItemMask(templateModel: Any): Int {
         val sections = modelSectionsField.get(templateModel) as? List<*> ?: emptyList<Any>()
         val toggleClass = toggleItemCtor.declaringClass
         val maskField = toggleClass.declaredFields.lastOrNull { !Modifier.isStatic(it.modifiers) && it.type == Int::class.javaPrimitiveType }
-            ?.apply { isAccessible = true } ?: return L2C1_DEFAULT_MASK
+            ?.apply { isAccessible = true } ?: return DEFAULT_ITEM_MASK
         for (section in sections) {
             if (section == null) continue
             val items = sectionItemsField.get(section) as? List<*> ?: continue
             val sample = items.firstOrNull { toggleClass.isInstance(it) } ?: continue
-            return runCatching { maskField.getInt(sample) }.getOrDefault(L2C1_DEFAULT_MASK)
+            return runCatching { maskField.getInt(sample) }.getOrDefault(DEFAULT_ITEM_MASK)
         }
-        return L2C1_DEFAULT_MASK
+        return DEFAULT_ITEM_MASK
     }
 
     private fun buildSpotXeroPageModel(templateModel: Any): Any {
@@ -1031,10 +1028,6 @@ object InAppSettingsHook {
                         add(createSeekDurationItem(itemGroup, itemMask))
                     }
                 }
-                if (section.includeLyricsDialogs) {
-                    add(createLyricsProvidersItem(itemGroup, itemMask))
-                    add(createAiTranslationItem(itemGroup, itemMask))
-                }
             }
             val persistentItems = listFactory.invoke(null, rows.toTypedArray())
             sectionCtor.newInstance(
@@ -1050,23 +1043,6 @@ object InAppSettingsHook {
         val allSections = buildList {
             addAll(standardSections)
             val footerRows = buildList {
-                val installedCount = HookRegistry.installedHookNames().size
-                val failedCount = HookRegistry.failedHookNames().size
-                val versionSubtitle = if (failedCount == 0) {
-                    "${BuildConfig.VERSION_NAME} • $installedCount hooks active"
-                } else {
-                    "${BuildConfig.VERSION_NAME} • $failedCount failed"
-                }
-                add(
-                    createActionItem(
-                        id = "spotxero_version",
-                        title = "SpotXero Diagnostics",
-                        subtitle = versionSubtitle,
-                        uri = privateRoute("diagnostics"),
-                        itemGroup = itemGroup,
-                        itemMask = itemMask
-                    )
-                )
                 add(createExternalLinkItem("spotxero_github", "GitHub", "https://github.com/s1ddhants1/SpotXero", itemGroup, itemMask))
                 add(createExternalLinkItem("spotxero_telegram", "Telegram Group", "https://t.me/SpotXero", itemGroup, itemMask))
                 add(createActionItem("spotxero_restart", "Restart Spotify", "Apply changes that need a fresh session", privateRoute("restart"), itemGroup, itemMask))
@@ -1085,7 +1061,6 @@ object InAppSettingsHook {
         return when (dependsOnKey) {
             null -> true
             PrefKeys.KEY_DOUBLE_TAP_TO_SEEK -> PreferencesManager.isStoredEnabled(PrefKeys.KEY_DOUBLE_TAP_TO_SEEK, true)
-            PrefKeys.KEY_EXTERNAL_LYRICS -> PreferencesManager.isStoredEnabled(PrefKeys.KEY_EXTERNAL_LYRICS, false)
             else -> PreferencesManager.isStoredEnabled(dependsOnKey, false)
         }
     }
@@ -1201,38 +1176,6 @@ object InAppSettingsHook {
                 str(R.string.settings_seconds_value, "$secs seconds", secs)
             },
             uri = privateRoute("seek-duration"),
-            itemGroup = itemGroup,
-            itemMask = itemMask,
-            visibilityFlow = visibilityFlow
-        )
-    }
-
-    private fun createLyricsProvidersItem(itemGroup: Any, itemMask: Int): Any {
-        val visibilityFlow = stateFlowCtor.newInstance(isRowVisible(PrefKeys.KEY_EXTERNAL_LYRICS))
-        activeVisibilityBindings.add(
-            VisibilityBinding(visibilityFlow) { isRowVisible(PrefKeys.KEY_EXTERNAL_LYRICS) }
-        )
-        return createActionItem(
-            id = "spotxero_lyrics_providers",
-            title = str(R.string.feature_external_lyrics_title, "Third-Party Lyrics"),
-            subtitle = str(R.string.feature_external_lyrics_desc, "Providers and fallback priority"),
-            uri = privateRoute("lyrics-providers"),
-            itemGroup = itemGroup,
-            itemMask = itemMask,
-            visibilityFlow = visibilityFlow
-        )
-    }
-
-    private fun createAiTranslationItem(itemGroup: Any, itemMask: Int): Any {
-        val visibilityFlow = stateFlowCtor.newInstance(isRowVisible(null))
-        activeVisibilityBindings.add(
-            VisibilityBinding(visibilityFlow) { isRowVisible(null) }
-        )
-        return createActionItem(
-            id = "spotxero_ai_translation",
-            title = str(R.string.title_ai_lyrics_translation, "AI Lyrics Translation"),
-            subtitle = str(R.string.ai_lyrics_translation_desc, "Translation languages, providers and models"),
-            uri = privateRoute("ai-translation"),
             itemGroup = itemGroup,
             itemMask = itemMask,
             visibilityFlow = visibilityFlow
@@ -1358,14 +1301,14 @@ object InAppSettingsHook {
         } ?: return
 
         val getIdMethod = itemClass.getMethod("getId")
-        val jwoField = itemClass.declaredFields.firstOrNull { field ->
+        val titlePropField = itemClass.declaredFields.firstOrNull { field ->
             field.isAccessible = true
             !Modifier.isStatic(field.modifiers) &&
                 !field.type.isInterface &&
                 field.type != String::class.java &&
                 field.type.declaredConstructors.any { c -> c.parameterCount == 5 && c.parameterTypes[1] == String::class.java }
         } ?: return
-        val notificationsJwo = jwoField.get(notificationsItem) ?: return
+        val notificationsTitleProp = titlePropField.get(notificationsItem) ?: return
 
         var clickActionField: Field? = null
         var clickFnField: Field? = null
@@ -1396,7 +1339,7 @@ object InAppSettingsHook {
 
         val clickActionObj = cActionField.get(notificationsItem) ?: return
         val clickFn = cFnField.get(clickActionObj) ?: return
-        val sampleDescriptor = cInvoke.invoke(clickFn, notificationsJwo) ?: return
+        val sampleDescriptor = cInvoke.invoke(clickFn, notificationsTitleProp) ?: return
 
         val descriptorClass = sampleDescriptor.javaClass
         val descriptorCtor = descriptorClass.declaredConstructors.firstOrNull { c ->
@@ -1410,10 +1353,10 @@ object InAppSettingsHook {
 
         val accountIndex = items.indexOfFirst { getIdMethod.invoke(it) == "accountPage" }
         val targetRefItem = items.getOrNull(accountIndex) ?: notificationsItem
-        val targetJwo = jwoField.get(targetRefItem) ?: notificationsJwo
+        val targetTitleProp = titlePropField.get(targetRefItem) ?: notificationsTitleProp
         val targetActionObj = cActionField.get(targetRefItem) ?: clickActionObj
         val targetFnObj = if (targetActionObj.javaClass == clickActionObj.javaClass) cFnField.get(targetActionObj) else null
-        val refDesc = if (targetFnObj != null) runCatching { cInvoke.invoke(targetFnObj, targetJwo) }.getOrNull() ?: sampleDescriptor else sampleDescriptor
+        val refDesc = if (targetFnObj != null) runCatching { cInvoke.invoke(targetFnObj, targetTitleProp) }.getOrNull() ?: sampleDescriptor else sampleDescriptor
 
         val intVal = descriptorClass.declaredFields.first { it.type == Int::class.javaPrimitiveType }
             .apply { isAccessible = true }.getInt(refDesc)
@@ -1450,10 +1393,10 @@ object InAppSettingsHook {
 
         val customClickAction = clickActionObj.javaClass.getConstructor(cFnIface).newInstance(customClickFn)
 
-        val jwoCtor = jwoField.type.declaredConstructors.first { lc ->
+        val titlePropCtor = titlePropField.type.declaredConstructors.first { lc ->
             lc.parameterCount == 5 && lc.parameterTypes[1] == String::class.java && lc.parameterTypes[4] == Int::class.javaPrimitiveType
         }
-        val spotxeroJwo = jwoCtor.newInstance(null, "SpotXero", null, null, 29)
+        val spotxeroTitleProp = titlePropCtor.newInstance(null, "SpotXero", null, null, 29)
 
         val mainCtor = itemClass.declaredConstructors.first { it.parameterCount == 6 }
         val args6 = Array<Any?>(6) { null }
@@ -1461,7 +1404,7 @@ object InAppSettingsHook {
         for (i in pTypes.indices) {
             args6[i] = when {
                 pTypes[i] == String::class.java -> "spotxeroPage"
-                pTypes[i] == jwoField.type -> spotxeroJwo
+                pTypes[i] == titlePropField.type -> spotxeroTitleProp
                 pTypes[i].isAssignableFrom(customClickAction.javaClass) -> customClickAction
                 else -> itemClass.declaredFields.first { f ->
                     f.isAccessible = true
@@ -1478,7 +1421,7 @@ object InAppSettingsHook {
         sectionItemsField.set(mainSection, persistentList)
     }
 
-    private fun buildSpotXeroRowIcon(r2yClass: Class<*>): Any? {
+    private fun buildSpotXeroRowIcon(iconBaseClass: Class<*>): Any? {
         spotxeroIconCache?.let { return it }
         val logoClass = iconLogoClass ?: return null
         val builderClass = vectorBuilderClass ?: return null
@@ -1487,22 +1430,22 @@ object InAppSettingsHook {
         val curveCtor = curveToCtor ?: return null
         val closeInstance = pathCloseInstance ?: return null
 
-        val n0yFields = r2yClass.declaredFields.filter {
+        val iconPairFields = iconBaseClass.declaredFields.filter {
             !Modifier.isStatic(it.modifiers) && !it.type.isPrimitive
         }.onEach { it.isAccessible = true }
-        val n0yClass = n0yFields.first().type
-        val n0yCtor = n0yClass.declaredConstructors.first {
+        val iconPairClass = iconPairFields.first().type
+        val iconPairCtor = iconPairClass.declaredConstructors.first {
             it.parameterCount == 2 && it.parameterTypes[0] == it.parameterTypes[1]
         }
-        val oc80Class = n0yCtor.parameterTypes[0]
+        val vectorImageClass = iconPairCtor.parameterTypes[0]
 
         val templateLogo = logoClass.declaredFields.first {
             Modifier.isStatic(it.modifiers) && it.type == logoClass
         }.apply { isAccessible = true }.get(null)!!
-        val templatePair = n0yFields.first().get(templateLogo)!!
-        val oc80Field = n0yClass.declaredFields.first { it.type == oc80Class }.apply { isAccessible = true }
-        val templateImage = oc80Field.get(templatePair)!!
-        val rootGroupField = oc80Class.declaredFields.first { f ->
+        val templatePair = iconPairFields.first().get(templateLogo)!!
+        val vectorImageField = iconPairClass.declaredFields.first { it.type == vectorImageClass }.apply { isAccessible = true }
+        val templateImage = vectorImageField.get(templatePair)!!
+        val rootGroupField = vectorImageClass.declaredFields.first { f ->
             !Modifier.isStatic(f.modifiers) && !f.type.isPrimitive && f.type != String::class.java
         }.apply { isAccessible = true }
         val templateRootGroup = rootGroupField.get(templateImage)!!
@@ -1517,13 +1460,13 @@ object InAppSettingsHook {
             if (f.type == brushType) f.apply { isAccessible = true }.get(templatePath) else null
         }
 
-        val vec16 = buildSpotXeroVector(16f, "SpotXero.Vector.Logo16", blackBrush, oc80Class, builderClass, pathCtor, moveCtor, curveCtor, closeInstance)
-        val vec24 = buildSpotXeroVector(24f, "SpotXero.Vector.Logo24", blackBrush, oc80Class, builderClass, pathCtor, moveCtor, curveCtor, closeInstance)
-        val n0yPair = n0yCtor.newInstance(vec16, vec24)
+        val vec16 = buildSpotXeroVector(16f, "SpotXero.Vector.Logo16", blackBrush, vectorImageClass, builderClass, pathCtor, moveCtor, curveCtor, closeInstance)
+        val vec24 = buildSpotXeroVector(24f, "SpotXero.Vector.Logo24", blackBrush, vectorImageClass, builderClass, pathCtor, moveCtor, curveCtor, closeInstance)
+        val iconPair = iconPairCtor.newInstance(vec16, vec24)
 
         val icon = allocateInstance(logoClass)
-        for (f in n0yFields) {
-            f.set(icon, n0yPair)
+        for (f in iconPairFields) {
+            f.set(icon, iconPair)
         }
         spotxeroIconCache = icon
         return icon
@@ -1534,7 +1477,7 @@ object InAppSettingsHook {
         sizeDp: Float,
         name: String,
         strokeBrush: Any,
-        oc80Class: Class<*>,
+        vectorImageClass: Class<*>,
         builderClass: Class<*>,
         pathCtor: Constructor<*>,
         moveCtor: Constructor<*>,
@@ -1546,7 +1489,7 @@ object InAppSettingsHook {
             p.size == 9 && p[0] == String::class.java && p[1] == Float::class.javaPrimitiveType
         }
         val buildMethod = builderClass.declaredMethods.first {
-            !Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && it.returnType == oc80Class
+            !Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && it.returnType == vectorImageClass
         }
         val stackField = builderClass.declaredFields.first {
             !Modifier.isStatic(it.modifiers) && ArrayList::class.java.isAssignableFrom(it.type)
@@ -1677,8 +1620,60 @@ object InAppSettingsHook {
         return unsafeClass.getMethod("allocateInstance", Class::class.java).invoke(unsafe, cls) as Any
     }
 
+    private fun armSpotXeroIfRestarted(activity: Activity) {
+        if (!activity.javaClass.name.endsWith("SpotifyMainActivity")) return
+        val prefs = activity.getSharedPreferences(RUNTIME_PREFS_NAME, Context.MODE_PRIVATE)
+        val requestedAt = prefs.getLong(KEY_REOPEN_AFTER_RESTART_AT, 0L)
+        if (requestedAt == 0L) return
+        prefs.edit().remove(KEY_REOPEN_AFTER_RESTART_AT).commit()
+        val elapsed = System.currentTimeMillis() - requestedAt
+        if (elapsed in 0L..15_000L) {
+            activity.intent = Intent(activity.intent ?: Intent()).apply {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse(SPOTXERO_URI)
+            }
+        }
+    }
+
     private fun restartSpotify() {
-        val ctx = currentActivity?.get() ?: PreferencesManager.resolveTargetContext() ?: return
+        val activity = currentActivity?.get()
+        val persistCtx = activity ?: PreferencesManager.resolveTargetContext()
+        persistCtx?.getSharedPreferences(RUNTIME_PREFS_NAME, Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putLong(KEY_REOPEN_AFTER_RESTART_AT, System.currentTimeMillis())
+            ?.commit()
+        if (activity != null && !activity.isFinishing && !activity.isDestroyed) {
+            val trampolineClass = findRestartTrampolineActivity(activity)
+            if (trampolineClass != null) {
+                pendingRestartParent = WeakReference(activity)
+                restartRequestedAt = SystemClock.elapsedRealtime()
+                val launched = runCatching {
+                    activity.startActivity(
+                        Intent()
+                            .setClassName(activity.packageName, trampolineClass)
+                            .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                    )
+                    true
+                }.getOrDefault(false)
+                if (launched) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        if (pendingRestartParent?.get() === activity) {
+                            pendingRestartParent = null
+                            restartRequestedAt = 0L
+                            launchAndKillSpotify(activity)
+                        }
+                    }, 1500)
+                    return
+                }
+                pendingRestartParent = null
+                restartRequestedAt = 0L
+            }
+        }
+        val ctx = activity ?: PreferencesManager.resolveTargetContext() ?: return
+        launchAndKillSpotify(ctx)
+    }
+
+    private fun launchAndKillSpotify(ctx: Context) {
         val launchIntent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         } ?: return
@@ -1687,5 +1682,49 @@ object InAppSettingsHook {
             Process.killProcess(Process.myPid())
             exitProcess(0)
         }, 300)
+    }
+
+    private fun findRestartTrampolineActivity(activity: Activity): String? {
+        val pkgInfo = runCatching {
+            @Suppress("DEPRECATION")
+            activity.packageManager.getPackageInfo(activity.packageName, PackageManager.GET_ACTIVITIES)
+        }.getOrNull() ?: return null
+        val defaultAffinity = activity.applicationInfo.taskAffinity
+        val candidates = pkgInfo.activities.orEmpty().filter { info ->
+            info.enabled &&
+                info.name != activity.javaClass.name &&
+                info.name.startsWith("com.spotify.") &&
+                (info.launchMode == ActivityInfo.LAUNCH_MULTIPLE || info.launchMode == ActivityInfo.LAUNCH_SINGLE_TOP) &&
+                (info.flags and ActivityInfo.FLAG_NO_HISTORY) == 0 &&
+                (info.flags and ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS) == 0 &&
+                (info.taskAffinity == null || info.taskAffinity == defaultAffinity) &&
+                !isExcludedTrampolineName(info.name) &&
+                isOpaqueActivityTheme(activity, info.themeResource)
+        }
+        return candidates.firstOrNull { it.exported }?.name ?: candidates.firstOrNull()?.name
+    }
+
+    private fun isExcludedTrampolineName(name: String): Boolean {
+        val simple = name.substringAfterLast('.')
+        return simple.contains("Dummy", ignoreCase = true) ||
+            simple.contains("Trampoline", ignoreCase = true) ||
+            simple.contains("Callback", ignoreCase = true) ||
+            simple.contains("Result", ignoreCase = true) ||
+            simple.contains("DeepLink", ignoreCase = true) ||
+            simple.contains("Launch", ignoreCase = true) ||
+            simple.contains("MainActivity", ignoreCase = true)
+    }
+
+    private fun isOpaqueActivityTheme(activity: Activity, themeRes: Int): Boolean {
+        if (themeRes == 0) return true
+        val ta = activity.obtainStyledAttributes(
+            themeRes,
+            intArrayOf(android.R.attr.windowIsTranslucent, android.R.attr.windowIsFloating)
+        )
+        return try {
+            !ta.getBoolean(0, false) && !ta.getBoolean(1, false)
+        } finally {
+            ta.recycle()
+        }
     }
 }

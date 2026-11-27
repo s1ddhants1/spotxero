@@ -14,10 +14,8 @@ object OnDemandInFreeHook {
             return
         }
 
-        val methods = DexKitResolver.get<List<Method>>(DexKitResolver.KEY_ON_DEMAND_IN_FREE_GETTERS)
-        if (methods.isNullOrEmpty()) {
-            return
-        }
+        val methods = DexKitResolver.require<List<Method>>(DexKitResolver.KEY_ON_DEMAND_IN_FREE_GETTERS)
+            .ifEmpty { error("Empty on-demand-in-free getters") }
 
         for ((index, method) in methods.withIndex()) {
             module.deoptimize(method)
