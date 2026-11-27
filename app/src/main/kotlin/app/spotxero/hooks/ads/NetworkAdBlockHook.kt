@@ -1,7 +1,6 @@
 package app.spotxero.hooks.ads
 
 import android.net.Uri
-import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
