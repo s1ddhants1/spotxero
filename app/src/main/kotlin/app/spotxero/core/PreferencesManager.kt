@@ -405,14 +405,11 @@ object PreferencesManager {
             for (key in tp.all.keys) {
                 updateMemoryCache(tp, key)
             }
-        } else if (prefs.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
-            inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = prefs.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
         }
     }
 
     fun isEnabled(key: String, default: Boolean): Boolean {
         if (key != PrefKeys.KEY_MASTER_ENABLED &&
-            key != PrefKeys.KEY_SHUFFLE_STATE &&
             key != KEY_APP_DYNAMIC_COLOR &&
             key != KEY_APP_AMOLED_THEME &&
             key != KEY_HIDE_LAUNCHER_ICON &&
