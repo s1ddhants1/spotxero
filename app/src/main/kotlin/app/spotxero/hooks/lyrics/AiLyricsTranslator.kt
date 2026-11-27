@@ -691,39 +691,50 @@ object AiLyricsTranslator {
         }
     }
 
+    private fun chunkNonBlankLines(
+        lines: List<String>,
+        maxBatchCharacters: Int
+    ): List<List<IndexedValue<String>>> {
+        val nonBlank = lines.withIndex().filter { it.value.isNotBlank() }
+        if (nonBlank.isEmpty()) return emptyList()
+        val batches = mutableListOf<List<IndexedValue<String>>>()
+        var cursor = 0
+        while (cursor < nonBlank.size) {
+            val batch = mutableListOf<IndexedValue<String>>()
+            var characters = 0
+            while (cursor < nonBlank.size) {
+                val candidate = nonBlank[cursor]
+                if (candidate.value.length > maxBatchCharacters) {
+                    if (batch.isEmpty()) {
+                        batch.add(candidate)
+                        cursor++
+                    }
+                    break
+                }
+                if (batch.isNotEmpty() && characters + candidate.value.length > maxBatchCharacters) {
+                    break
+                }
+                batch.add(candidate)
+                characters += candidate.value.length
+                cursor++
+            }
+            batches.add(batch)
+        }
+        return batches
+    }
+
     private fun translateViaDeepLKeyless(
         lines: List<String>,
         targetLanguage: String
     ): Result<List<String>> {
         return try {
-            val nonBlank = lines.withIndex().filter { it.value.isNotBlank() }
-            if (nonBlank.isEmpty()) return Result.success(lines)
+            val batches = chunkNonBlankLines(lines, 1_400)
+            if (batches.isEmpty()) return Result.success(lines)
 
             val translated = MutableList(lines.size) { "" }
-            val maxBatchCharacters = 1_400
             val instanceId = UUID.randomUUID().toString()
 
-            var cursor = 0
-            while (cursor < nonBlank.size) {
-                val batch = mutableListOf<IndexedValue<String>>()
-                var characters = 0
-                while (cursor < nonBlank.size) {
-                    val candidate = nonBlank[cursor]
-                    if (candidate.value.length > maxBatchCharacters) {
-                        if (batch.isEmpty()) {
-                            batch.add(candidate)
-                            cursor++
-                        }
-                        break
-                    }
-                    if (batch.isNotEmpty() && characters + candidate.value.length > maxBatchCharacters) {
-                        break
-                    }
-                    batch.add(candidate)
-                    characters += candidate.value.length
-                    cursor++
-                }
-
+            for (batch in batches) {
                 val textArr = JSONArray()
                 batch.forEach { textArr.put(it.value) }
 
@@ -778,32 +789,11 @@ object AiLyricsTranslator {
         mode: String
     ): Result<List<String>> {
         return try {
-            val nonBlank = lines.withIndex().filter { it.value.isNotBlank() }
-            if (nonBlank.isEmpty()) return Result.success(lines)
+            val batches = chunkNonBlankLines(lines, 1_200)
+            if (batches.isEmpty()) return Result.success(lines)
 
             val translated = MutableList(lines.size) { "" }
-            val maxBatchCharacters = 1_200
-            var cursor = 0
-            while (cursor < nonBlank.size) {
-                val batch = mutableListOf<IndexedValue<String>>()
-                var characters = 0
-                while (cursor < nonBlank.size) {
-                    val candidate = nonBlank[cursor]
-                    if (candidate.value.length > maxBatchCharacters) {
-                        if (batch.isEmpty()) {
-                            batch.add(candidate)
-                            cursor++
-                        }
-                        break
-                    }
-                    if (batch.isNotEmpty() && characters + candidate.value.length > maxBatchCharacters) {
-                        break
-                    }
-                    batch.add(candidate)
-                    characters += candidate.value.length
-                    cursor++
-                }
-
+            for (batch in batches) {
                 val markers = List((batch.size - 1).coerceAtLeast(0)) { "__METROLIST_LINE_${it + 1}__" }
                 val input = batch.mapIndexed { index, item ->
                     item.value + markers.getOrNull(index)?.let { "\n$it\n" }.orEmpty()

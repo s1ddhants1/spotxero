@@ -203,16 +203,14 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val method = cachedMethod(cached, KEY_SHARE_URL_BUILDER, classLoader, ::isShareUrlBuilder)
-            ?: runCatching {
-                dexKit.findMethod {
-                    matcher {
-                        usingStrings(listOf("si", "utm_source", "Invalid uri "), StringMatchType.Equals)
-                        paramCount(4)
-                    }
-                }.singleOrNull()?.getMethodInstance(classLoader)
-            }.getOrNull()?.takeIf(::isShareUrlBuilder)
-        store(KEY_SHARE_URL_BUILDER, method, sigs, members)
+        resolveMethod(KEY_SHARE_URL_BUILDER, classLoader, cached, sigs, members, ::isShareUrlBuilder) {
+            dexKit.findMethod {
+                matcher {
+                    usingStrings(listOf("si", "utm_source", "Invalid uri "), StringMatchType.Equals)
+                    paramCount(4)
+                }
+            }.singleOrNull()?.getMethodInstance(classLoader)
+        }
     }
 
     private fun resolveShareResponseUrls(
@@ -245,24 +243,20 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val wrapper = cachedMethod(cached, KEY_GET_ADS_WRAPPER, classLoader, ::isGetAdsWrapper)
-            ?: runCatching {
-                dexKit.findMethod {
-                    matcher {
-                        usingStrings(GET_ADS_CALL, StringMatchType.Equals)
-                        paramCount(2)
-                    }
-                }.singleOrNull()?.getMethodInstance(classLoader)
-            }.getOrNull()?.takeIf(::isGetAdsWrapper)
-        store(KEY_GET_ADS_WRAPPER, wrapper, sigs, members)
+        resolveMethod(KEY_GET_ADS_WRAPPER, classLoader, cached, sigs, members, ::isGetAdsWrapper) {
+            dexKit.findMethod {
+                matcher {
+                    usingStrings(GET_ADS_CALL, StringMatchType.Equals)
+                    paramCount(2)
+                }
+            }.singleOrNull()?.getMethodInstance(classLoader)
+        }
 
-        val emptyResponse = cachedMethod(cached, KEY_EMPTY_ADS_RESPONSE, classLoader, ::isEmptyAdsResponse)
-            ?: runCatching {
-                Class.forName(GET_ADS_RESPONSE, false, classLoader)
-                    .declaredMethods
-                    .single { isEmptyAdsResponse(it) }
-            }.getOrNull()?.takeIf(::isEmptyAdsResponse)
-        store(KEY_EMPTY_ADS_RESPONSE, emptyResponse, sigs, members)
+        resolveMethod(KEY_EMPTY_ADS_RESPONSE, classLoader, cached, sigs, members, ::isEmptyAdsResponse) {
+            Class.forName(GET_ADS_RESPONSE, false, classLoader)
+                .declaredMethods
+                .single { isEmptyAdsResponse(it) }
+        }
     }
 
     private fun resolvePremiumTabFlag(
@@ -272,9 +266,9 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val method = cachedMethod(cached, KEY_PREMIUM_TAB_FLAG, classLoader, ::isPremiumTabFlag)
-            ?: runCatching { findPremiumTabFlag(dexKit, classLoader) }.getOrNull()?.takeIf(::isPremiumTabFlag)
-        store(KEY_PREMIUM_TAB_FLAG, method, sigs, members)
+        resolveMethod(KEY_PREMIUM_TAB_FLAG, classLoader, cached, sigs, members, ::isPremiumTabFlag) {
+            findPremiumTabFlag(dexKit, classLoader)
+        }
     }
 
     private fun resolveSectionList(
@@ -285,14 +279,12 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val method = cachedMethod(cached, key, classLoader) { isListGetter(it, className) }
-            ?: runCatching {
-                Class.forName(className, false, classLoader)
-                    .declaredMethods
-                    .filter { it.parameterCount == 0 && List::class.java.isAssignableFrom(it.returnType) }
-                    .singleOrNull()
-            }.getOrNull()?.takeIf { isListGetter(it, className) }
-        store(key, method, sigs, members)
+        resolveMethod(key, classLoader, cached, sigs, members, { isListGetter(it, className) }) {
+            Class.forName(className, false, classLoader)
+                .declaredMethods
+                .filter { it.parameterCount == 0 && List::class.java.isAssignableFrom(it.returnType) }
+                .singleOrNull()
+        }
     }
 
     private fun resolveImageAdPredicate(
@@ -302,20 +294,18 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val method = cachedMethod(cached, KEY_IMAGE_AD_PREDICATE, classLoader, ::isImageAdPredicate)
-            ?: runCatching {
-                val sectionClass = Class.forName(PLAYER_SECTION, false, classLoader)
-                val fieldNumber = sectionClass.getField(IMAGE_BRAND_AD_FIELD).getInt(null)
-                dexKit.findMethod {
-                    matcher {
-                        declaredClass(PLAYER_SECTION)
-                        paramCount(0)
-                        returnType("boolean")
-                        usingNumbers(fieldNumber)
-                    }
-                }.singleOrNull()?.getMethodInstance(classLoader)
-            }.getOrNull()?.takeIf(::isImageAdPredicate)
-        store(KEY_IMAGE_AD_PREDICATE, method, sigs, members)
+        resolveMethod(KEY_IMAGE_AD_PREDICATE, classLoader, cached, sigs, members, ::isImageAdPredicate) {
+            val sectionClass = Class.forName(PLAYER_SECTION, false, classLoader)
+            val fieldNumber = sectionClass.getField(IMAGE_BRAND_AD_FIELD).getInt(null)
+            dexKit.findMethod {
+                matcher {
+                    declaredClass(PLAYER_SECTION)
+                    paramCount(0)
+                    returnType("boolean")
+                    usingNumbers(fieldNumber)
+                }
+            }.singleOrNull()?.getMethodInstance(classLoader)
+        }
     }
 
     private fun resolveSmartShuffleFlags(
@@ -378,13 +368,9 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val method = cachedMethod(cached, KEY_PRODUCT_STATE_MAP, classLoader, ::isProductStateMapGetter)
-            ?: runCatching {
-                Class.forName(GET_VALUES_RESPONSE, false, classLoader)
-                    .declaredMethods
-                    .firstOrNull { isProductStateMapGetter(it) }
-            }.getOrNull()?.takeIf(::isProductStateMapGetter)
-        store(KEY_PRODUCT_STATE_MAP, method, sigs, members)
+        resolveMethod(KEY_PRODUCT_STATE_MAP, classLoader, cached, sigs, members, ::isProductStateMapGetter) {
+            Class.forName(GET_VALUES_RESPONSE, false, classLoader).declaredMethods.firstOrNull(::isProductStateMapGetter)
+        }
     }
 
     private fun isProductStateMapGetter(method: Method): Boolean =
@@ -443,13 +429,9 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val method = cachedMethod(cached, KEY_UCS_ACCOUNT_ATTRIBUTES_GETTER, classLoader, ::isUcsAccountAttributesGetter)
-            ?: runCatching {
-                Class.forName(UCS_ACCOUNT_ATTRIBUTES_RESPONSE, false, classLoader)
-                    .declaredMethods
-                    .firstOrNull(::isUcsAccountAttributesGetter)
-            }.getOrNull()
-        store(KEY_UCS_ACCOUNT_ATTRIBUTES_GETTER, method, sigs, members)
+        resolveMethod(KEY_UCS_ACCOUNT_ATTRIBUTES_GETTER, classLoader, cached, sigs, members, ::isUcsAccountAttributesGetter) {
+            Class.forName(UCS_ACCOUNT_ATTRIBUTES_RESPONSE, false, classLoader).declaredMethods.firstOrNull(::isUcsAccountAttributesGetter)
+        }
     }
 
     private fun isUcsAccountAttributesGetter(method: Method): Boolean =
@@ -464,13 +446,9 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val method = cachedMethod(cached, KEY_RCS_CONFIGURATION_ASSIGNED_VALUES, classLoader, ::isRcsConfigurationAssignedValuesGetter)
-            ?: runCatching {
-                Class.forName(RCS_CONFIGURATION, false, classLoader)
-                    .declaredMethods
-                    .firstOrNull(::isRcsConfigurationAssignedValuesGetter)
-            }.getOrNull()
-        store(KEY_RCS_CONFIGURATION_ASSIGNED_VALUES, method, sigs, members)
+        resolveMethod(KEY_RCS_CONFIGURATION_ASSIGNED_VALUES, classLoader, cached, sigs, members, ::isRcsConfigurationAssignedValuesGetter) {
+            Class.forName(RCS_CONFIGURATION, false, classLoader).declaredMethods.firstOrNull(::isRcsConfigurationAssignedValuesGetter)
+        }
     }
 
     private fun isRcsConfigurationAssignedValuesGetter(method: Method): Boolean =
@@ -515,16 +493,14 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val method = cachedMethod(cached, KEY_PLAYER_RESTRICTIONS_CONVERTER, classLoader, ::isRestrictionsConverter)
-            ?: runCatching {
-                dexKit.findMethod {
-                    matcher {
-                        paramTypes(ES_RESTRICTIONS)
-                        returnType(RESTRICTIONS)
-                    }
-                }.singleOrNull()?.getMethodInstance(classLoader)
-            }.getOrNull()?.takeIf(::isRestrictionsConverter)
-        store(KEY_PLAYER_RESTRICTIONS_CONVERTER, method, sigs, members)
+        resolveMethod(KEY_PLAYER_RESTRICTIONS_CONVERTER, classLoader, cached, sigs, members, ::isRestrictionsConverter) {
+            dexKit.findMethod {
+                matcher {
+                    paramTypes(ES_RESTRICTIONS)
+                    returnType(RESTRICTIONS)
+                }
+            }.singleOrNull()?.getMethodInstance(classLoader)
+        }
     }
 
     private fun isRestrictionsConverter(method: Method): Boolean =
@@ -540,16 +516,14 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val method = cachedMethod(cached, KEY_MFT_DISALLOW_RESTRICTION_HANDLER, classLoader, ::isMftDisallowRestrictionHandler)
-            ?: runCatching {
-                dexKit.findMethod {
-                    matcher {
-                        usingStrings(listOf("mft_disallow"), StringMatchType.Equals)
-                        paramCount(2)
-                    }
-                }.firstOrNull { isMftDisallowRestrictionHandler(it.getMethodInstance(classLoader)) }?.getMethodInstance(classLoader)
-            }.getOrNull()
-        store(KEY_MFT_DISALLOW_RESTRICTION_HANDLER, method, sigs, members)
+        resolveMethod(KEY_MFT_DISALLOW_RESTRICTION_HANDLER, classLoader, cached, sigs, members, ::isMftDisallowRestrictionHandler) {
+            dexKit.findMethod {
+                matcher {
+                    usingStrings(listOf("mft_disallow"), StringMatchType.Equals)
+                    paramCount(2)
+                }
+            }.firstOrNull { isMftDisallowRestrictionHandler(it.getMethodInstance(classLoader)) }?.getMethodInstance(classLoader)
+        }
     }
 
     private fun isMftDisallowRestrictionHandler(method: Method): Boolean =
@@ -709,15 +683,21 @@ object DexKitResolver {
         key: String,
         classLoader: ClassLoader,
         validate: (Method) -> Boolean
+    ): Method? = cached?.get(key)?.let { cachedMethod(classLoader, it, validate) }
+
+    private inline fun resolveMethod(
+        key: String,
+        classLoader: ClassLoader,
+        cached: Map<String, String>?,
+        sigs: MutableMap<String, String>,
+        members: MutableMap<String, Any>,
+        crossinline validate: (Method) -> Boolean,
+        find: () -> Method?
     ): Method? {
-        val entry = cached?.get(key) ?: return null
-        val parts = entry.split("#")
-        if (parts.size != 3) return null
-        return runCatching {
-            Class.forName(parts[0], false, classLoader)
-                .declaredMethods
-                .firstOrNull { it.name == parts[1] && descriptorOf(it) == parts[2] }
-        }.getOrNull()?.takeIf(validate)
+        val method = cachedMethod(cached, key, classLoader) { validate(it) }
+            ?: runCatching { find() }.getOrNull()?.takeIf { validate(it) }
+        store(key, method, sigs, members)
+        return method
     }
 
     private fun cachedMethod(classLoader: ClassLoader, entry: String, validate: (Method) -> Boolean): Method? {
@@ -2188,16 +2168,14 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val method = cachedMethod(cached, KEY_APP_SIGNATURES_METHOD, classLoader, ::isAppSignaturesMethod)
-            ?: runCatching {
-                dexKit.findMethod {
-                    matcher {
-                        usingStrings(listOf("Failed to get the application signatures"), StringMatchType.Equals)
-                        paramCount(0)
-                    }
-                }.firstOrNull()?.getMethodInstance(classLoader)
-            }.getOrNull()?.takeIf(::isAppSignaturesMethod)
-        store(KEY_APP_SIGNATURES_METHOD, method, sigs, members)
+        resolveMethod(KEY_APP_SIGNATURES_METHOD, classLoader, cached, sigs, members, ::isAppSignaturesMethod) {
+            dexKit.findMethod {
+                matcher {
+                    usingStrings(listOf("Failed to get the application signatures"), StringMatchType.Equals)
+                    paramCount(0)
+                }
+            }.firstOrNull()?.getMethodInstance(classLoader)
+        }
     }
 
     private fun isAppSignaturesMethod(method: Method): Boolean =
@@ -2211,31 +2189,34 @@ object DexKitResolver {
         sigs: MutableMap<String, String>,
         members: MutableMap<String, Any>
     ) {
-        val allowlistMethod = cachedMethod(cached, KEY_INSTALLER_ALLOWLIST_METHOD, classLoader, ::isInstallerAllowlistMethod)
-            ?: runCatching {
-                dexKit.findMethod {
-                    matcher {
-                        usingStrings(listOf("com.android.vending", "com.amazon.venezia"), StringMatchType.Contains)
-                        paramCount(1)
-                        returnType("boolean")
-                    }
-                }.firstOrNull()?.getMethodInstance(classLoader)
-            }.getOrNull()?.takeIf(::isInstallerAllowlistMethod)
-        store(KEY_INSTALLER_ALLOWLIST_METHOD, allowlistMethod, sigs, members)
+        val allowlistMethod = resolveMethod(
+            KEY_INSTALLER_ALLOWLIST_METHOD,
+            classLoader,
+            cached,
+            sigs,
+            members,
+            ::isInstallerAllowlistMethod
+        ) {
+            dexKit.findMethod {
+                matcher {
+                    usingStrings(listOf("com.android.vending", "com.amazon.venezia"), StringMatchType.Contains)
+                    paramCount(1)
+                    returnType("boolean")
+                }
+            }.firstOrNull()?.getMethodInstance(classLoader)
+        }
 
         val declaringClass = allowlistMethod?.declaringClass
-        val nameMethod = cachedMethod(cached, KEY_INSTALLER_PACKAGE_METHOD, classLoader, ::isInstallerPackageMethod)
-            ?: declaringClass?.declaredMethods?.firstOrNull(::isInstallerPackageMethod)
-            ?: runCatching {
-                dexKit.findMethod {
+        resolveMethod(KEY_INSTALLER_PACKAGE_METHOD, classLoader, cached, sigs, members, ::isInstallerPackageMethod) {
+            declaringClass?.declaredMethods?.firstOrNull(::isInstallerPackageMethod)
+                ?: dexKit.findMethod {
                     matcher {
                         usingStrings(listOf("Failed to get installer package"), StringMatchType.Equals)
                         paramCount(2)
                         returnType("java.lang.String")
                     }
                 }.firstOrNull()?.getMethodInstance(classLoader)
-            }.getOrNull()?.takeIf(::isInstallerPackageMethod)
-        store(KEY_INSTALLER_PACKAGE_METHOD, nameMethod, sigs, members)
+        }
     }
 
     private fun isInstallerAllowlistMethod(method: Method): Boolean =

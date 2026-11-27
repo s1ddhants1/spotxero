@@ -680,10 +680,11 @@ private fun AiChoiceRow(
 }
 
 @Composable
-private fun ProviderPickerDialog(
-    currentProvider: String,
-    onSelect: (AiProviderPreset) -> Unit,
-    onDismiss: () -> Unit
+private fun PickerDialogScaffold(
+    title: String,
+    onDismiss: () -> Unit,
+    trailingHeader: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit,
 ) {
     SettingsDialogSurface(onDismiss = onDismiss) {
         Column(
@@ -691,60 +692,21 @@ private fun ProviderPickerDialog(
                 .fillMaxWidth()
                 .padding(vertical = 20.dp)
         ) {
-            Text(
-                text = stringResource(R.string.ai_provider),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
-            LazyColumn(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 440.dp)
+                    .padding(horizontal = 24.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                AiProviderGroup.entries.forEach { group ->
-                    val options = ALL_PRESETS.filter { it.group == group }
-                    if (options.isNotEmpty()) {
-                        item(key = "group_${group.name}") {
-                            Text(
-                                text = stringResource(group.titleRes),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp)
-                            )
-                        }
-                        items(options, key = { it.id }) { option ->
-                            val selected = option.id.equals(currentProvider, ignoreCase = true)
-                            AiChoiceRow(
-                                selected = selected,
-                                onClick = { onSelect(option) }
-                            ) {
-                                Column {
-                                    Text(lyricsAiProviderLabel(option.id), style = MaterialTheme.typography.bodyLarge)
-                                    val subText = when {
-                                        option.group == AiProviderGroup.SERVICE -> {
-                                            if (option.id == DEEPL_PROVIDER) stringResource(R.string.ai_deepl_api_key)
-                                            else stringResource(R.string.ai_keyless_no_key_needed)
-                                        }
-                                        option.editableEndpoint -> stringResource(R.string.ai_base_url)
-                                        option.defaultModel.isNotBlank() -> option.defaultModel
-                                        else -> null
-                                    }
-                                    if (subText != null) {
-                                        Text(
-                                            text = subText,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
+                trailingHeader?.invoke()
             }
-
+            content()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -753,6 +715,65 @@ private fun ProviderPickerDialog(
             ) {
                 TextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.cancel))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProviderPickerDialog(
+    currentProvider: String,
+    onSelect: (AiProviderPreset) -> Unit,
+    onDismiss: () -> Unit
+) {
+    PickerDialogScaffold(
+        title = stringResource(R.string.ai_provider),
+        onDismiss = onDismiss,
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 440.dp)
+        ) {
+            AiProviderGroup.entries.forEach { group ->
+                val options = ALL_PRESETS.filter { it.group == group }
+                if (options.isNotEmpty()) {
+                    item(key = "group_${group.name}") {
+                        Text(
+                            text = stringResource(group.titleRes),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp)
+                        )
+                    }
+                    items(options, key = { it.id }) { option ->
+                        val selected = option.id.equals(currentProvider, ignoreCase = true)
+                        AiChoiceRow(
+                            selected = selected,
+                            onClick = { onSelect(option) }
+                        ) {
+                            Column {
+                                Text(lyricsAiProviderLabel(option.id), style = MaterialTheme.typography.bodyLarge)
+                                val subText = when {
+                                    option.group == AiProviderGroup.SERVICE -> {
+                                        if (option.id == DEEPL_PROVIDER) stringResource(R.string.ai_deepl_api_key)
+                                        else stringResource(R.string.ai_keyless_no_key_needed)
+                                    }
+                                    option.editableEndpoint -> stringResource(R.string.ai_base_url)
+                                    option.defaultModel.isNotBlank() -> option.defaultModel
+                                    else -> null
+                                }
+                                if (subText != null) {
+                                    Text(
+                                        text = subText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -786,128 +807,102 @@ private fun ModelPickerDialog(
         )
     }
 
-    SettingsDialogSurface(onDismiss = onDismiss) {
-        Column(
+    PickerDialogScaffold(
+        title = stringResource(R.string.ai_translation_model),
+        onDismiss = onDismiss,
+        trailingHeader = {
+            TextButton(onClick = { reload++ }) {
+                Text(stringResource(R.string.refresh))
+            }
+        }
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = { Text(stringResource(R.string.ai_model_search)) },
+            singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 20.dp)
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+
+        val models = (state as? ModelsState.Loaded)?.models.orEmpty()
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 420.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.ai_translation_model),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(onClick = { reload++ }) {
-                    Text(stringResource(R.string.refresh))
+            if (typed.isNotEmpty() && models.none { it.id.equals(typed, ignoreCase = true) }) {
+                item(key = "custom_typed_entry") {
+                    AiChoiceRow(
+                        selected = currentModel == typed,
+                        onClick = { onSelect(typed) }
+                    ) {
+                        Text(
+                            "${stringResource(R.string.ai_model_custom_id)}: $typed",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
                 }
             }
 
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                label = { Text(stringResource(R.string.ai_model_search)) },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp)
-            )
+            when (val current = state) {
+                ModelsState.Loading -> {
+                    items(5) {
+                        AiModelSkeleton()
+                    }
+                }
 
-            val models = (state as? ModelsState.Loaded)?.models.orEmpty()
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-            ) {
-                if (typed.isNotEmpty() && models.none { it.id.equals(typed, ignoreCase = true) }) {
-                    item(key = "custom_typed_entry") {
-                        AiChoiceRow(
-                            selected = currentModel == typed,
-                            onClick = { onSelect(typed) }
-                        ) {
+                ModelsState.Failed -> {
+                    item(key = "failed") {
+                        Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) {
                             Text(
-                                "${stringResource(R.string.ai_model_custom_id)}: $typed",
-                                style = MaterialTheme.typography.bodyLarge
+                                stringResource(
+                                    if (apiKey.isBlank() && !currentPreset.publicModelList) {
+                                        R.string.ai_model_api_key_needed
+                                    } else {
+                                        R.string.ai_model_load_failed
+                                    }
+                                ),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            TextButton(onClick = { reload++ }) {
+                                Text(stringResource(R.string.refresh))
+                            }
+                        }
+                    }
+                }
+
+                is ModelsState.Loaded -> {
+                    val filteredModels = if (typed.isEmpty()) {
+                        current.models
+                    } else {
+                        current.models.filter {
+                            it.id.contains(typed, ignoreCase = true) || it.name.contains(typed, ignoreCase = true)
+                        }
+                    }
+
+                    if (filteredModels.isEmpty() && typed.isNotEmpty()) {
+                        item(key = "empty_models") {
+                            Text(
+                                text = stringResource(R.string.ai_model_none_found),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
                             )
                         }
                     }
-                }
 
-                when (val current = state) {
-                    ModelsState.Loading -> {
-                        items(5) {
-                            AiModelSkeleton()
+                    items(filteredModels, key = { it.id }) { modelInfo ->
+                        AiChoiceRow(
+                            selected = currentModel == modelInfo.id,
+                            onClick = { onSelect(modelInfo.id) }
+                        ) {
+                            AiModelDetails(modelInfo, currentPreset)
                         }
                     }
-
-                    ModelsState.Failed -> {
-                        item(key = "failed") {
-                            Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) {
-                                Text(
-                                    stringResource(
-                                        if (apiKey.isBlank() && !currentPreset.publicModelList) {
-                                            R.string.ai_model_api_key_needed
-                                        } else {
-                                            R.string.ai_model_load_failed
-                                        }
-                                    ),
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                TextButton(onClick = { reload++ }) {
-                                    Text(stringResource(R.string.refresh))
-                                }
-                            }
-                        }
-                    }
-
-                    is ModelsState.Loaded -> {
-                        val filteredModels = if (typed.isEmpty()) {
-                            current.models
-                        } else {
-                            current.models.filter {
-                                it.id.contains(typed, ignoreCase = true) || it.name.contains(typed, ignoreCase = true)
-                            }
-                        }
-
-                        if (filteredModels.isEmpty() && typed.isNotEmpty()) {
-                            item(key = "empty_models") {
-                                Text(
-                                    text = stringResource(R.string.ai_model_none_found),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-                                )
-                            }
-                        }
-
-                        items(filteredModels, key = { it.id }) { modelInfo ->
-                            AiChoiceRow(
-                                selected = currentModel == modelInfo.id,
-                                onClick = { onSelect(modelInfo.id) }
-                            ) {
-                                AiModelDetails(modelInfo, currentPreset)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.cancel))
                 }
             }
         }
@@ -980,55 +975,25 @@ private fun TranslateModePickerDialog(
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    SettingsDialogSurface(onDismiss = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 20.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.mode),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
+    PickerDialogScaffold(
+        title = stringResource(R.string.mode),
+        onDismiss = onDismiss,
+    ) {
+        listOf(
+            Triple(LITERAL_MODE, R.string.ai_translation_literal, R.string.ai_translation_literal_desc),
+            Triple(TRANSCRIBED_MODE, R.string.ai_translation_transcribed, R.string.ai_translation_transcribed_desc),
+        ).forEach { (mode, titleRes, descRes) ->
             AiChoiceRow(
-                selected = currentMode == LITERAL_MODE,
-                onClick = { onSelect(LITERAL_MODE) }
+                selected = currentMode == mode,
+                onClick = { onSelect(mode) }
             ) {
                 Column {
-                    Text(stringResource(R.string.ai_translation_literal), style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(titleRes), style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        stringResource(R.string.ai_translation_literal_desc),
+                        stringResource(descRes),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-            }
-
-            AiChoiceRow(
-                selected = currentMode == TRANSCRIBED_MODE,
-                onClick = { onSelect(TRANSCRIBED_MODE) }
-            ) {
-                Column {
-                    Text(stringResource(R.string.ai_translation_transcribed), style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        stringResource(R.string.ai_translation_transcribed_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.cancel))
                 }
             }
         }
@@ -1041,41 +1006,20 @@ private fun FormalityPickerDialog(
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    SettingsDialogSurface(onDismiss = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 20.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.ai_deepl_formality),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
-            listOf(
-                "default" to stringResource(R.string.ai_deepl_formality_default),
-                "more" to stringResource(R.string.ai_deepl_formality_more),
-                "less" to stringResource(R.string.ai_deepl_formality_less)
-            ).forEach { (code, label) ->
-                AiChoiceRow(
-                    selected = currentFormality == code,
-                    onClick = { onSelect(code) }
-                ) {
-                    Text(label, style = MaterialTheme.typography.bodyLarge)
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.End
+    PickerDialogScaffold(
+        title = stringResource(R.string.ai_deepl_formality),
+        onDismiss = onDismiss,
+    ) {
+        listOf(
+            "default" to stringResource(R.string.ai_deepl_formality_default),
+            "more" to stringResource(R.string.ai_deepl_formality_more),
+            "less" to stringResource(R.string.ai_deepl_formality_less)
+        ).forEach { (code, label) ->
+            AiChoiceRow(
+                selected = currentFormality == code,
+                onClick = { onSelect(code) }
             ) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.cancel))
-                }
+                Text(label, style = MaterialTheme.typography.bodyLarge)
             }
         }
     }
@@ -1100,52 +1044,31 @@ private fun LanguagePickerDialog(
         }
     }
 
-    SettingsDialogSurface(onDismiss = onDismiss) {
-        Column(
+    PickerDialogScaffold(
+        title = stringResource(R.string.ai_target_language),
+        onDismiss = onDismiss,
+    ) {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text(stringResource(R.string.action_search)) },
+            singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 20.dp)
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 420.dp)
         ) {
-            Text(
-                text = stringResource(R.string.ai_target_language),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-            )
-
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                label = { Text(stringResource(R.string.action_search)) },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-            ) {
-                items(filteredLanguages, key = { it.first }) { (code, name) ->
-                    AiChoiceRow(
-                        selected = currentCode.equals(code, ignoreCase = true),
-                        onClick = { onSelect(code) }
-                    ) {
-                        Text(name, style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.cancel))
+            items(filteredLanguages, key = { it.first }) { (code, name) ->
+                AiChoiceRow(
+                    selected = currentCode.equals(code, ignoreCase = true),
+                    onClick = { onSelect(code) }
+                ) {
+                    Text(name, style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
