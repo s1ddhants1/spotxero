@@ -113,12 +113,18 @@ object PreferencesManager {
     fun initTarget(context: Context) {
         val target = context.applicationContext ?: context
         targetContext = target
+        var changed = false
         runCatching {
             val tp = target.getSharedPreferences(TARGET_PREFS_NAME, Context.MODE_PRIVATE)
             targetPrefs = tp
             for (key in tp.all.keys) {
-                updateMemoryCache(tp, key)
+                if (updateMemoryCache(tp, key)) {
+                    changed = true
+                }
             }
+        }
+        if (changed) {
+            notifyPreferenceChanged()
         }
     }
 
@@ -190,10 +196,14 @@ object PreferencesManager {
                     is Int -> tp.edit().putInt(key, value).apply()
                 }
             }
-            onPreferenceChangedListener?.invoke()
-            for (listener in preferenceChangeCallbacks) {
-                runCatching { listener.invoke() }
-            }
+            notifyPreferenceChanged()
+        }
+    }
+
+    private fun notifyPreferenceChanged() {
+        onPreferenceChangedListener?.invoke()
+        for (listener in preferenceChangeCallbacks) {
+            runCatching { listener.invoke() }
         }
     }
 
@@ -440,7 +450,7 @@ object PreferencesManager {
     }
 
     fun setBoolean(context: Context? = null, key: String, value: Boolean) {
-        inMemoryBooleans[key] = value
+        val changed = inMemoryBooleans.put(key, value) != value
         updateFieldDirectly(key, value)
         val tp = getTargetPrefs()
         if (tp != null) {
@@ -459,6 +469,9 @@ object PreferencesManager {
             runCatching {
                 prefs.edit().putBoolean(key, value).apply()
             }
+        }
+        if (changed) {
+            notifyPreferenceChanged()
         }
     }
 
@@ -486,7 +499,7 @@ object PreferencesManager {
     }
 
     fun setString(context: Context? = null, key: String, value: String) {
-        inMemoryStrings[key] = value
+        val changed = inMemoryStrings.put(key, value) != value
         updateStringFieldDirectly(key, value)
         val tp = getTargetPrefs()
         val rp = remotePrefs
@@ -505,6 +518,9 @@ object PreferencesManager {
             runCatching {
                 prefs.edit().putString(key, value).apply()
             }
+        }
+        if (changed) {
+            notifyPreferenceChanged()
         }
     }
 
@@ -532,7 +548,7 @@ object PreferencesManager {
     }
 
     fun setInt(context: Context? = null, key: String, value: Int) {
-        inMemoryInts[key] = value
+        val changed = inMemoryInts.put(key, value) != value
         updateIntFieldDirectly(key, value)
         val tp = getTargetPrefs()
         if (tp != null) {
@@ -551,6 +567,9 @@ object PreferencesManager {
             runCatching {
                 prefs.edit().putInt(key, value).apply()
             }
+        }
+        if (changed) {
+            notifyPreferenceChanged()
         }
     }
 
