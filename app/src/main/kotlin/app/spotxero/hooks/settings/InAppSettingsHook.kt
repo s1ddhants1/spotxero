@@ -20,6 +20,7 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
+import app.spotxero.BuildConfig
 import app.spotxero.R
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
@@ -62,8 +63,7 @@ object InAppSettingsHook {
         val subtitleRes: Int? = null,
         val fallbackSubtitle: String? = null,
         val defaultValue: Boolean,
-        val dependsOnKey: String? = null,
-        val requiresRestart: Boolean = false
+        val dependsOnKey: String? = null
     )
 
     private data class SectionSpec(
@@ -90,6 +90,7 @@ object InAppSettingsHook {
     private const val SECTION_PRIVACY = -0x70010003
     private const val SECTION_CONTENT = -0x70010004
     private const val SECTION_APPEARANCE = -0x70010005
+    private const val SECTION_ABOUT = -0x70010006
 
     private val SPOTXERO_SECTIONS = listOf(
         SectionSpec(
@@ -100,8 +101,7 @@ object InAppSettingsHook {
                     key = PrefKeys.KEY_MASTER_ENABLED,
                     titleRes = R.string.feature_master_switch_title,
                     fallbackTitle = "Enable Module",
-                    defaultValue = true,
-                    requiresRestart = true
+                    defaultValue = true
                 )
             )
         ),
@@ -117,8 +117,7 @@ object InAppSettingsHook {
                     fallbackTitle = "Unrestricted Playback",
                     subtitleRes = R.string.pref_unrestricted_playback_desc,
                     fallbackSubtitle = "Block ads and unlock shuffle",
-                    defaultValue = true,
-                    requiresRestart = true
+                    defaultValue = true
                 ),
                 ToggleSpec(
                     id = "spotxero_local_volume",
@@ -195,8 +194,7 @@ object InAppSettingsHook {
                     fallbackTitle = "Hide Premium Tab",
                     subtitleRes = R.string.feature_hide_premium_tab_desc,
                     fallbackSubtitle = "Remove Premium from bottom navigation",
-                    defaultValue = true,
-                    requiresRestart = true
+                    defaultValue = true
                 ),
                 ToggleSpec(
                     id = "spotxero_hide_podcasts",
@@ -230,8 +228,7 @@ object InAppSettingsHook {
                     fallbackTitle = "Spotify Pure Black (AMOLED)",
                     subtitleRes = R.string.feature_spotify_amoled_desc,
                     fallbackSubtitle = "Pure black background for dark theme",
-                    defaultValue = false,
-                    requiresRestart = true
+                    defaultValue = false
                 ),
                 ToggleSpec(
                     id = "spotxero_monet",
@@ -240,8 +237,7 @@ object InAppSettingsHook {
                     fallbackTitle = "Monet Dynamic Theme",
                     subtitleRes = R.string.feature_spotify_monet_desc,
                     fallbackSubtitle = "Match accent colors to system theme",
-                    defaultValue = false,
-                    requiresRestart = true
+                    defaultValue = false
                 ),
                 ToggleSpec(
                     id = "spotxero_roundy_ui",
@@ -250,8 +246,7 @@ object InAppSettingsHook {
                     fallbackTitle = "RoundyUI",
                     subtitleRes = R.string.feature_spotify_roundy_ui_desc,
                     fallbackSubtitle = "Round artwork, buttons, and cards",
-                    defaultValue = false,
-                    requiresRestart = true
+                    defaultValue = false
                 )
             )
         )
@@ -324,7 +319,11 @@ object InAppSettingsHook {
     private var moveToCtor: Constructor<*>? = null
     private var curveToCtor: Constructor<*>? = null
     private var pathCloseInstance: Any? = null
+    private var rowParcelCtor: Constructor<*>? = null
     private var spotxeroIconCache: Any? = null
+    @Volatile
+    private var spotxeroVersionSource: Any? = null
+    private val hookedVersionMethods = ConcurrentHashMap.newKeySet<Method>()
 
     private lateinit var modelGroupField: Field
     private lateinit var modelHeaderField: Field
@@ -370,13 +369,37 @@ object InAppSettingsHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val id = chain.args[1] as? Int
-                val section = if (id != null) SPOTXERO_SECTIONS.firstOrNull { it.syntheticTitleId == id } else null
-                if (section != null && section.fallbackTitle != null) {
-                    str(section.titleRes, section.fallbackTitle)
-                } else {
-                    chain.proceed()
+                when {
+                    id == SECTION_ABOUT -> "About"
+                    else -> {
+                        val section = if (id != null) SPOTXERO_SECTIONS.firstOrNull { it.syntheticTitleId == id } else null
+                        if (section != null && section.fallbackTitle != null) {
+                            str(section.titleRes, section.fallbackTitle)
+                        } else {
+                            chain.proceed()
+                        }
+                    }
                 }
             }
+
+        val iconBaseType = modelCtor.parameterTypes[0]
+        rowParcelCtor?.let { ctor ->
+            module.deoptimize(ctor)
+            module.hook(ctor)
+                .setId("inapp_settings_row_parcel_icon")
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    if (chain.args[0] as? String == "SpotXero") {
+                        val customIcon = runCatching { buildSpotXeroRowIcon(iconBaseType) }.getOrNull()
+                        if (customIcon != null) {
+                            val modifiedArgs = chain.args.toTypedArray()
+                            modifiedArgs[2] = customIcon
+                            return@intercept chain.proceed(modifiedArgs)
+                        }
+                    }
+                    chain.proceed()
+                }
+        }
 
         val restartRoute = privateRoute("restart")
         val seekRoute = privateRoute("seek-duration")
@@ -832,6 +855,15 @@ object InAppSettingsHook {
 
         val modelClass = modelCtor.declaringClass
         val iconType = modelCtor.parameterTypes[0]
+        rowParcelCtor = DexKitResolver.get<Class<*>>(DexKitResolver.KEY_SETTINGS_ROW_PARCEL_CLASS)
+            ?.declaredConstructors
+            ?.firstOrNull { c ->
+                val p = c.parameterTypes
+                p.size == 3 &&
+                    p[0] == String::class.java &&
+                    p[1] == String::class.java &&
+                    p[2] == iconType
+            }
         val headerType = modelCtor.parameterTypes[1]
         modelGroupField = modelClass.declaredFields.first { it.type == iconType }.apply { isAccessible = true }
         modelHeaderField = modelClass.declaredFields.first { it.type == headerType }.apply { isAccessible = true }
@@ -1042,17 +1074,156 @@ object InAppSettingsHook {
 
         val allSections = buildList {
             addAll(standardSections)
-            val footerRows = buildList {
+            val aboutRows = buildList {
+                buildSpotXeroVersionItem(templateModel, itemGroup)?.let { add(it) }
                 add(createExternalLinkItem("spotxero_github", "GitHub", "https://github.com/s1ddhants1/SpotXero", itemGroup, itemMask))
                 add(createExternalLinkItem("spotxero_telegram", "Telegram Group", "https://t.me/SpotXero", itemGroup, itemMask))
-                add(createActionItem("spotxero_restart", "Restart Spotify", "Apply changes that need a fresh session", privateRoute("restart"), itemGroup, itemMask))
             }
-            val footerItems = listFactory.invoke(null, footerRows.toTypedArray())
-            add(sectionCtor.newInstance(pageGroup, null, null, null, footerItems, headerlessMask))
+            val aboutItems = listFactory.invoke(null, aboutRows.toTypedArray())
+            add(sectionCtor.newInstance(pageGroup, SECTION_ABOUT, null, null, aboutItems, titledMask))
+            val restartRows = listOf(
+                createActionItem("spotxero_restart", "Restart Spotify", "Apply changes that need a fresh session", privateRoute("restart"), itemGroup, itemMask)
+            )
+            val restartItems = listFactory.invoke(null, restartRows.toTypedArray())
+            add(sectionCtor.newInstance(pageGroup, null, null, null, restartItems, headerlessMask))
         }
         Log.i(TAG, "Built SpotXero page model with ${allSections.size} sections")
 
         return modelCtor.newInstance(pageGroup, headerPlaceholder, null, allSections, emptyList<Any>())
+    }
+
+    private fun buildSpotXeroVersionItem(templateModel: Any, itemGroup: Any): Any? {
+        val sections = modelSectionsField.get(templateModel) as? List<*> ?: return null
+        val versionItem = sections.filterNotNull().firstNotNullOfOrNull { section ->
+            val items = sectionItemsField.get(section) as? List<*> ?: return@firstNotNullOfOrNull null
+            items.filterNotNull().firstOrNull { item ->
+                runCatching { item.javaClass.getMethod("getId").invoke(item) == "version" }.getOrDefault(false)
+            }
+        } ?: return null
+
+        val versionClass = versionItem.javaClass
+        val versionCtor = versionClass.declaredConstructors
+            .filter { c -> c.parameterCount >= 5 && c.parameterTypes[0] == String::class.java }
+            .maxByOrNull { it.parameterCount }
+            ?: return null
+
+        val visibilityType = toggleItemCtor.parameterTypes[7]
+        val fields = versionClass.declaredFields
+            .filter { !Modifier.isStatic(it.modifiers) }
+            .onEach { it.isAccessible = true }
+
+        val pTypes = versionCtor.parameterTypes
+        val args = arrayOfNulls<Any?>(pTypes.size)
+        var providerWrapped = false
+        for (i in pTypes.indices) {
+            val pType = pTypes[i]
+            args[i] = when {
+                pType == String::class.java -> "spotxero_version"
+                pType.isAssignableFrom(itemGroup.javaClass) -> itemGroup
+                pType == visibilityType -> stateFlowCtor.newInstance(java.lang.Boolean.TRUE)
+                else -> {
+                    val field = fields.firstOrNull { it.type == pType }
+                        ?: fields.firstOrNull { pType.isAssignableFrom(it.type) }
+                        ?: return null
+                    val realVal = field.get(versionItem) ?: return null
+                    val wrapped = if (field.type.isInterface) wrapVersionProvider(field.type, realVal) else null
+                    if (wrapped != null) {
+                        providerWrapped = true
+                        wrapped
+                    } else {
+                        realVal
+                    }
+                }
+            }
+        }
+        if (!providerWrapped) return null
+        return runCatching { versionCtor.newInstance(*args) }
+            .onFailure { Log.w(TAG, "Failed creating SpotXero version item", it) }
+            .getOrNull()
+    }
+
+    private fun wrapVersionProvider(providerInterface: Class<*>, realProvider: Any): Any? {
+        val getMethod = providerInterface.methods.firstOrNull { m ->
+            !Modifier.isStatic(m.modifiers) && !m.isDefault && m.parameterCount == 0
+        } ?: return null
+        val realElement = runCatching { getMethod.invoke(realProvider) }.getOrNull() ?: return null
+        val elemClass = realElement.javaClass
+        val elemFields = elemClass.declaredFields
+            .filter { !Modifier.isStatic(it.modifiers) }
+            .onEach { it.isAccessible = true }
+        val elemCtor = elemClass.declaredConstructors.firstOrNull { c ->
+            c.parameterCount == 2 && c.parameterTypes.any { Context::class.java.isAssignableFrom(it) }
+        } ?: return null
+        val srcParamType = elemCtor.parameterTypes.first { !Context::class.java.isAssignableFrom(it) }
+        val ctxField = elemFields.firstOrNull { Context::class.java.isAssignableFrom(it.type) } ?: return null
+        val srcField = elemFields.firstOrNull { it.type == srcParamType } ?: return null
+
+        val ctx = ctxField.get(realElement) as? Context ?: return null
+        val realSrc = srcField.get(realElement) ?: return null
+        if (!srcParamType.isAssignableFrom(realSrc.javaClass)) return null
+
+        val module = moduleRef ?: return null
+        @Suppress("DEPRECATION")
+        val appVersion = runCatching {
+            ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName
+        }.getOrNull() ?: return null
+        val versionMethod = realSrc.javaClass.declaredMethods.firstOrNull { m ->
+            !Modifier.isStatic(m.modifiers) &&
+                m.parameterCount == 0 &&
+                m.returnType == String::class.java &&
+                runCatching {
+                    m.isAccessible = true
+                    m.invoke(realSrc) as? String == appVersion
+                }.getOrDefault(false)
+        } ?: return null
+
+        if (hookedVersionMethods.add(versionMethod)) {
+            module.deoptimize(versionMethod)
+            module.hook(versionMethod)
+                .setId("inapp_settings_spotxero_version")
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    if (chain.thisObject === spotxeroVersionSource) {
+                        BuildConfig.VERSION_NAME
+                    } else {
+                        chain.proceed()
+                    }
+                }
+        }
+
+        val clonedSrc = spotxeroVersionSource?.takeIf { realSrc.javaClass.isInstance(it) } ?: run {
+            val copy = allocateInstance(realSrc.javaClass)
+            var cls: Class<*>? = realSrc.javaClass
+            while (cls != null && cls != Any::class.java) {
+                for (f in cls.declaredFields) {
+                    if (Modifier.isStatic(f.modifiers)) continue
+                    f.isAccessible = true
+                    f.set(copy, f.get(realSrc))
+                }
+                cls = cls.superclass
+            }
+            spotxeroVersionSource = copy
+            copy
+        }
+
+        val customElement = if (Context::class.java.isAssignableFrom(elemCtor.parameterTypes[0])) {
+            elemCtor.newInstance(ctx, clonedSrc)
+        } else {
+            elemCtor.newInstance(clonedSrc, ctx)
+        }
+
+        return Proxy.newProxyInstance(
+            providerInterface.classLoader,
+            arrayOf(providerInterface)
+        ) { proxy, method, args ->
+            when {
+                method == getMethod -> customElement
+                method.name == "equals" -> args?.get(0) === proxy
+                method.name == "hashCode" -> System.identityHashCode(proxy)
+                method.name == "toString" -> "SpotXeroVersionProvider"
+                else -> method.invoke(realProvider, *(args ?: emptyArray()))
+            }
+        }
     }
 
     private fun isRowVisible(dependsOnKey: String?, isMaster: Boolean = false): Boolean {
@@ -1080,15 +1251,9 @@ object InAppSettingsHook {
                 method.parameterCount == 3 -> {
                     val newValue = args?.get(1) as? Boolean
                     if (newValue != null) {
-                        val activity = currentActivity?.get()
-                        PreferencesManager.setBoolean(activity, spec.key, newValue)
+                        PreferencesManager.setBoolean(currentActivity?.get(), spec.key, newValue)
                         stateFlowEmit.invoke(stateFlow, newValue)
                         syncToggleFlows()
-                        if (spec.requiresRestart && activity != null) {
-                            activity.runOnUiThread {
-                                Toast.makeText(activity, "Restart Spotify to apply changes", Toast.LENGTH_SHORT).show()
-                            }
-                        }
                     }
                     successResultCtor.newInstance(Unit)
                 }
@@ -1130,16 +1295,6 @@ object InAppSettingsHook {
         itemGroup: Any,
         itemMask: Int,
         visibilityFlow: Any = stateFlowCtor.newInstance(java.lang.Boolean.TRUE)
-    ): Any = createActionItemWithSupplier(id, title, { subtitle }, uri, itemGroup, itemMask, visibilityFlow)
-
-    private fun createActionItemWithSupplier(
-        id: String,
-        title: String,
-        subtitleSupplier: () -> String,
-        uri: String,
-        itemGroup: Any,
-        itemMask: Int,
-        visibilityFlow: Any = stateFlowCtor.newInstance(java.lang.Boolean.TRUE)
     ): Any {
         val actionId = allocateActionId()
         val actionUri = actionUriCtor.newInstance(uri, null)
@@ -1159,7 +1314,7 @@ object InAppSettingsHook {
             emptyMap<Any, Any>(),
             itemMask
         )
-        toggleItemSubtitleField.set(item, createSubtitleProvider(subtitleSupplier))
+        toggleItemSubtitleField.set(item, createSubtitleProvider { subtitle })
         return item
     }
 
@@ -1168,13 +1323,10 @@ object InAppSettingsHook {
         activeVisibilityBindings.add(
             VisibilityBinding(visibilityFlow) { isRowVisible(PrefKeys.KEY_DOUBLE_TAP_TO_SEEK) }
         )
-        return createActionItemWithSupplier(
+        return createActionItem(
             id = "spotxero_seek_duration",
             title = str(R.string.seek_duration, "Seek duration"),
-            subtitleSupplier = {
-                val secs = InAppSettingsSheets.seekDurationSeconds()
-                str(R.string.settings_seconds_value, "$secs seconds", secs)
-            },
+            subtitle = str(R.string.seek_duration_description, "Seconds to skip when seeking"),
             uri = privateRoute("seek-duration"),
             itemGroup = itemGroup,
             itemMask = itemMask,

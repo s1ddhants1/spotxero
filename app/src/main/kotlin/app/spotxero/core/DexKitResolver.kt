@@ -99,6 +99,7 @@ object DexKitResolver {
     const val KEY_SETTINGS_PATH_MOVETO_CTOR = "settings_path_moveto_ctor"
     const val KEY_SETTINGS_PATH_CURVETO_CTOR = "settings_path_curveto_ctor"
     const val KEY_SETTINGS_PATH_CLOSE_CLASS = "settings_path_close_class"
+    const val KEY_SETTINGS_ROW_PARCEL_CLASS = "settings_row_parcel_class"
     const val KEY_APP_SIGNATURES_METHOD = "app_signatures_method"
     const val KEY_INSTALLER_PACKAGE_METHOD = "installer_package_method"
     const val KEY_INSTALLER_ALLOWLIST_METHOD = "installer_allowlist_method"
@@ -2320,6 +2321,23 @@ object DexKitResolver {
             }.getOrNull()
         } else null
         storeClass(KEY_SETTINGS_PATH_CLOSE_CLASS, pathCloseClass, sigs, members)
+
+        val rowParcelClass = cached?.get(KEY_SETTINGS_ROW_PARCEL_CLASS)?.let { clsName ->
+            runCatching { Class.forName(clsName, false, classLoader) }.getOrNull()
+                ?.takeIf { isSettingsRowParcelClass(it, iconBaseType) }
+        } ?: if (iconBaseType != null) {
+            runCatching {
+                dexKit.findMethod {
+                    matcher {
+                        name("<init>")
+                        paramTypes(String::class.java, String::class.java, iconBaseType)
+                    }
+                }.asSequence()
+                    .mapNotNull { runCatching { it.getConstructorInstance(classLoader).declaringClass }.getOrNull() }
+                    .firstOrNull { isSettingsRowParcelClass(it, iconBaseType) }
+            }.getOrNull()
+        } else null
+        storeClass(KEY_SETTINGS_ROW_PARCEL_CLASS, rowParcelClass, sigs, members)
     }
 
     private fun storeClass(
@@ -2600,6 +2618,22 @@ object DexKitResolver {
             cls.declaredFields.any { f ->
                 java.lang.reflect.Modifier.isStatic(f.modifiers) && f.type == cls
             }
+
+    private fun isSettingsRowParcelClass(cls: Class<*>, iconBaseType: Class<*>?): Boolean {
+        if (iconBaseType == null || !android.os.Parcelable::class.java.isAssignableFrom(cls)) return false
+        val hasCtor = cls.declaredConstructors.any { c ->
+            val p = c.parameterTypes
+            p.size == 3 &&
+                p[0] == String::class.java &&
+                p[1] == String::class.java &&
+                p[2] == iconBaseType
+        }
+        if (!hasCtor) return false
+        val instanceFields = cls.declaredFields.filter { !java.lang.reflect.Modifier.isStatic(it.modifiers) }
+        return instanceFields.size == 3 &&
+            instanceFields.count { it.type == String::class.java } == 2 &&
+            instanceFields.count { it.type == iconBaseType } == 1
+    }
 
     private fun resolveAppSignaturesMethod(
         dexKit: DexKitBridge,
