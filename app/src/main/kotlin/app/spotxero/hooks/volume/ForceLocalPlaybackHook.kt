@@ -46,39 +46,35 @@ object ForceLocalPlaybackHook {
                 }
         }
 
-        val activityHandler = DexKitResolver.get<Method>(DexKitResolver.KEY_ACTIVITY_VOLUME_KEY_HANDLER)
-        if (activityHandler != null) {
-            module.deoptimize(activityHandler)
-            module.hook(activityHandler)
-                .setId("force_local_activity_volume")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, true)) {
-                        val keyCode = chain.getArg(0) as? Int ?: (chain.getArg(1) as? KeyEvent)?.keyCode ?: -1
-                        if (isVolumeKey(keyCode)) {
-                            return@intercept false
-                        }
+        val activityHandler = DexKitResolver.require<Method>(DexKitResolver.KEY_ACTIVITY_VOLUME_KEY_HANDLER)
+        module.deoptimize(activityHandler)
+        module.hook(activityHandler)
+            .setId("force_local_activity_volume")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, true)) {
+                    val keyCode = chain.getArg(0) as? Int ?: (chain.getArg(1) as? KeyEvent)?.keyCode ?: -1
+                    if (isVolumeKey(keyCode)) {
+                        return@intercept false
                     }
-                    chain.proceed()
                 }
-        }
+                chain.proceed()
+            }
 
-        val volumeHandler = DexKitResolver.get<Method>(DexKitResolver.KEY_VOLUME_KEY_HANDLER)
-        if (volumeHandler != null) {
-            module.deoptimize(volumeHandler)
-            module.hook(volumeHandler)
-                .setId("force_local_volume_handler")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, true)) {
-                        val keyEvent = chain.getArg(0) as? KeyEvent
-                        if (keyEvent != null && isVolumeKey(keyEvent.keyCode)) {
-                            return@intercept false
-                        }
+        val volumeHandler = DexKitResolver.require<Method>(DexKitResolver.KEY_VOLUME_KEY_HANDLER)
+        module.deoptimize(volumeHandler)
+        module.hook(volumeHandler)
+            .setId("force_local_volume_handler")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (PreferencesManager.isEnabled(PrefKeys.KEY_FORCE_LOCAL_PLAYBACK, true)) {
+                    val keyEvent = chain.getArg(0) as? KeyEvent
+                    if (keyEvent != null && isVolumeKey(keyEvent.keyCode)) {
+                        return@intercept false
                     }
-                    chain.proceed()
                 }
-        }
+                chain.proceed()
+            }
     }
 
     private fun isVolumeKey(keyCode: Int): Boolean =

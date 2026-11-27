@@ -1,8 +1,12 @@
 package app.spotxero.core
 
+import android.content.pm.ApplicationInfo
+import android.util.Base64
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import app.spotxero.SpotXeroApplication
+import io.github.libxposed.api.XposedModule
+import org.json.JSONObject
 import java.io.File
 
 object ModuleStatus {
@@ -24,11 +28,56 @@ object ModuleStatus {
         }
     }
 
-    fun detectFramework(): String {
+    fun isLspatch(
+        module: XposedModule,
+        appInfo: ApplicationInfo? = null,
+        classLoader: ClassLoader? = null
+    ): Boolean {
+        val framework = runCatching { module.frameworkName }.getOrNull()
+        if (!framework.isNullOrBlank() && framework.contains("lspatch", ignoreCase = true)) {
+            return true
+        }
+        return detectFramework(classLoader, appInfo) == "LSPatch"
+    }
+
+    fun isLspatchIntegrated(
+        module: XposedModule,
+        appInfo: ApplicationInfo? = null,
+        classLoader: ClassLoader? = null
+    ): Boolean {
+        if (!isLspatch(module, appInfo, classLoader)) {
+            return false
+        }
+        val encodedConfig = appInfo?.metaData?.getString("lspatch")
+        if (!encodedConfig.isNullOrBlank()) {
+            val useManager = runCatching {
+                val decoded = String(Base64.decode(encodedConfig, Base64.DEFAULT), Charsets.UTF_8)
+                val json = JSONObject(decoded)
+                if (json.has("useManager")) json.getBoolean("useManager") else null
+            }.getOrNull()
+            if (useManager != null) {
+                return !useManager
+            }
+        }
+        val maps = runCatching { File("/proc/self/maps").readText() }.getOrNull() ?: return false
+        return !maps.contains("org.lsposed.lspatch", ignoreCase = true)
+    }
+
+    fun detectFramework(classLoader: ClassLoader? = null, appInfo: ApplicationInfo? = null): String {
+        if (appInfo?.metaData?.containsKey("lspatch") == true ||
+            appInfo?.sourceDir?.contains("/lspatch/") == true ||
+            appInfo?.publicSourceDir?.contains("/lspatch/") == true
+        ) {
+            return "LSPatch"
+        }
+
         val knownClasses = listOf(
             "LSPatch" to listOf(
                 "org.lsposed.lspatch.metaloader.LSPAppComponentFactoryStub",
-                "org.lsposed.lspatch.loader.LSPApplication"
+                "org.lsposed.lspatch.loader.LSPApplication",
+                "org.lsposed.lspatch.loader.LSPatchDocumentsProvider",
+                "org.lsposed.lspatch.share.remote.FrameworkInfo",
+                "org.matrix.vector.impl.core.VectorServiceClient"
             ),
             "LSPosed" to listOf(
                 "org.lsposed.lspd.service.ILSPManager",
@@ -50,10 +99,11 @@ object ModuleStatus {
             )
         )
 
+        val targetLoader = classLoader ?: ModuleStatus::class.java.classLoader
         for ((name, classNames) in knownClasses) {
             for (className in classNames) {
                 try {
-                    Class.forName(className)
+                    Class.forName(className, false, targetLoader)
                     return name
                 } catch (_: Throwable) {}
             }

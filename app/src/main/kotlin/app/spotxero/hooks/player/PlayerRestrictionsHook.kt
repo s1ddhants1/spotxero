@@ -22,34 +22,27 @@ object PlayerRestrictionsHook {
     }
 
     private fun installConverterHook(module: XposedModule) {
-        val converter = DexKitResolver.get<Method>(DexKitResolver.KEY_PLAYER_RESTRICTIONS_CONVERTER)
-        val emptyInstance = runCatching {
-            val cl = converter?.declaringClass?.classLoader
-                ?: DexKitResolver.get<List<Method>>(DexKitResolver.KEY_PLAYER_RESTRICTIONS_METHODS)?.firstOrNull()?.declaringClass?.classLoader
-                ?: return@runCatching null
-            val restrictionsClass = Class.forName(RESTRICTIONS_CLASS, false, cl)
-            restrictionsClass.getField("EMPTY").get(null)
-        }.getOrNull()
+        val converter = DexKitResolver.require<Method>(DexKitResolver.KEY_PLAYER_RESTRICTIONS_CONVERTER)
+        val cl = converter.declaringClass.classLoader
+        val restrictionsClass = Class.forName(RESTRICTIONS_CLASS, false, cl)
+        val emptyInstance = restrictionsClass.getField("EMPTY").get(null)
+            ?: error("Missing Restrictions.EMPTY")
 
-        if (converter != null && emptyInstance != null) {
-            module.deoptimize(converter)
-            module.hook(converter)
-                .setId("player_restrictions_converter")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept chain.proceed()
-                    }
-                    emptyInstance
+        module.deoptimize(converter)
+        module.hook(converter)
+            .setId("player_restrictions_converter")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept chain.proceed()
                 }
-        }
+                emptyInstance
+            }
     }
 
     private fun installRestrictionMethodsHook(module: XposedModule) {
-        val methods = DexKitResolver.get<List<Method>>(DexKitResolver.KEY_PLAYER_RESTRICTIONS_METHODS)
-        if (methods.isNullOrEmpty()) {
-            return
-        }
+        val methods = DexKitResolver.require<List<Method>>(DexKitResolver.KEY_PLAYER_RESTRICTIONS_METHODS)
+            .ifEmpty { error("Empty player restrictions methods") }
 
         val emptyInstance = runCatching {
             val cl = methods.first().declaringClass.classLoader

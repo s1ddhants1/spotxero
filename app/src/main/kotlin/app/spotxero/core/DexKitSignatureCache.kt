@@ -6,7 +6,7 @@ import java.io.File
 
 object DexKitSignatureCache {
     private const val CACHE_FILE_NAME = "spotify_dexkit_cache.json"
-    private const val CACHE_VERSION = 36
+    private const val CACHE_VERSION = 46
 
     private data class CachedSignatures(
         val versionCode: Long,
@@ -56,6 +56,11 @@ object DexKitSignatureCache {
         val values = signatures.toMap()
         cachedSignatures = CachedSignatures(versionCode, values)
         saveToDisk(cacheFileFor(appInfo), versionCode, values)
+    }
+
+    fun clear(appInfo: ApplicationInfo): Boolean {
+        cachedSignatures = null
+        return runCatching { cacheFileFor(appInfo).delete() }.getOrDefault(false)
     }
 
     private fun cacheFileFor(appInfo: ApplicationInfo): File {

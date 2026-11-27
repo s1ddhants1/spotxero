@@ -1,11 +1,14 @@
 package app.spotxero.ui.viewmodel
 
 import android.app.Application
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.spotxero.R
 import app.spotxero.SpotXeroApplication
+import app.spotxero.core.LSPatchHelper
 import app.spotxero.core.ModuleStatus
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -13,6 +16,7 @@ import app.spotxero.hooks.lyrics.PersistentLyricsCache
 import app.spotxero.utils.AppUtils
 import app.spotxero.utils.core.CommonUtils
 import io.github.libxposed.service.XposedService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -29,19 +34,29 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _effects = Channel<DashboardUiEffect>(Channel.BUFFERED)
     val effects = _effects.receiveAsFlow()
 
+    @Volatile
+    private var cachedTargetStatus = LSPatchHelper.TargetStatus(
+        isInstalled = false,
+        isPatched = false,
+        isModuleEmbedded = false
+    )
+
     private val serviceListener = object : SpotXeroApplication.ServiceConnectionListener {
         override fun onServiceConnected(service: XposedService?) {
-            ModuleStatus.checkStatus()
-            refreshState()
+            viewModelScope.launch {
+                ModuleStatus.checkStatus()
+                refreshState()
+            }
         }
     }
 
     init {
+        LSPatchHelper.requestServicePush(application)
         PreferencesManager.init(application)
         ModuleStatus.checkStatus()
 
-        detectSpotifyStatus()
         refreshState()
+        refreshTargetAndState()
 
         SpotXeroApplication.addConnectionListener(serviceListener)
 
@@ -60,85 +75,59 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun refreshStatus() {
+        LSPatchHelper.requestServicePush(getApplication())
         ModuleStatus.checkStatus()
         PreferencesManager.loadAll(getApplication())
-        detectSpotifyStatus()
-        refreshState()
+        refreshTargetAndState()
+    }
+
+    private fun refreshTargetAndState() {
+        viewModelScope.launch {
+            val (installed, targetStatus) = withContext(Dispatchers.IO) {
+                val app = getApplication<Application>()
+                val installedVariants = scanInstalledSpotify(app)
+                val targetPackages = installedVariants.map { it.packageName }.ifEmpty { CommonUtils.SUPPORTED_PACKAGES }
+                val inspected = LSPatchHelper.inspectTargetApp(app, targetPackages)
+                installedVariants to inspected
+            }
+            cachedTargetStatus = targetStatus
+            val active = targetStatus.packageName?.let { pkg ->
+                installed.firstOrNull { it.packageName == pkg }
+            } ?: installed.firstOrNull { it.packageName == CommonUtils.SPOTIFY_PACKAGE_NAME }
+                ?: installed.firstOrNull()
+
+            _uiState.update {
+                it.copy(
+                    installedSpotifyVariants = installed,
+                    activeSpotify = active
+                )
+            }
+            refreshState()
+        }
     }
 
     fun refreshState() {
         val app = getApplication<Application>()
-        val isModuleActive = ModuleStatus.isModuleActive.value
-        val frameworkName = ModuleStatus.frameworkName.value ?: "LSPosed"
         val service = SpotXeroApplication.service
-        val name = service?.frameworkName?.takeIf { it.isNotBlank() } ?: frameworkName
-        val version = service?.frameworkVersion.orEmpty()
-        val isFrameworkConnected = isModuleActive || service != null
-        val isInstalled = _uiState.value.installedSpotifyVariants.isNotEmpty()
+        val targetPackages = _uiState.value.installedSpotifyVariants.map { it.packageName }.ifEmpty { CommonUtils.SUPPORTED_PACKAGES }
 
-        val eval = when {
-            !isInstalled -> {
-                BannerEvaluationData(
-                    titleRes = R.string.framework_spotify_not_installed_title,
-                    titleArgs = emptyList(),
-                    descRes = R.string.framework_spotify_not_installed_desc,
-                    descArgs = emptyList(),
-                    isInjectable = false
-                )
-            }
-            service != null -> {
-                val currentScope = service.scope.orEmpty()
-                val isLSPosed = name.contains("LSPosed", ignoreCase = true)
-                val isInScope = if (isLSPosed) {
-                    currentScope.any { it in CommonUtils.SUPPORTED_PACKAGES }
-                } else {
-                    currentScope.isEmpty() || currentScope.any { it in CommonUtils.SUPPORTED_PACKAGES }
-                }
-
-                if (!isInScope) {
-                    BannerEvaluationData(
-                        titleRes = R.string.framework_lsposed_not_in_scope_title,
-                        titleArgs = emptyList(),
-                        descRes = R.string.framework_lsposed_not_in_scope_desc,
-                        descArgs = emptyList(),
-                        isInjectable = false,
-                        canRequestScope = true
-                    )
-                } else {
-                    BannerEvaluationData(
-                        titleRes = R.string.framework_active_title_dynamic,
-                        titleArgs = listOf(name),
-                        descRes = R.string.framework_active_desc,
-                        descArgs = listOf(name, version),
-                        isInjectable = true
-                    )
-                }
-            }
-            isModuleActive -> {
-                BannerEvaluationData(
-                    titleRes = R.string.framework_active_title_dynamic,
-                    titleArgs = listOf(frameworkName),
-                    descRes = R.string.framework_active_desc,
-                    descArgs = listOf(frameworkName, "API 102"),
-                    isInjectable = true
-                )
-            }
-            else -> {
-                BannerEvaluationData(
-                    titleRes = R.string.framework_inactive_title,
-                    titleArgs = emptyList(),
-                    descRes = R.string.framework_inactive_desc,
-                    descArgs = emptyList(),
-                    isInjectable = false
-                )
-            }
-        }
+        val eval = LSPatchHelper.evaluateFrameworkStatus(
+            frameworkName = service?.frameworkName,
+            frameworkVersion = service?.frameworkVersion,
+            scope = service?.scope,
+            isServiceBound = service != null,
+            targetStatus = cachedTargetStatus,
+            packageNames = targetPackages
+        )
 
         _uiState.update { current ->
             current.copy(
-                isFrameworkConnected = isFrameworkConnected,
+                isFrameworkConnected = eval.isConnected,
                 isInjectable = eval.isInjectable,
                 canRequestScope = eval.canRequestScope,
+                isIntegrated = eval.isIntegrated,
+                frameworkName = eval.frameworkName,
+                frameworkVersion = eval.frameworkVersion,
                 titleRes = eval.titleRes,
                 titleArgs = eval.titleArgs,
                 descRes = eval.descRes,
@@ -187,27 +176,32 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun detectSpotifyStatus() {
-        val pm = getApplication<Application>().packageManager
+    private fun scanInstalledSpotify(app: Application): List<InstalledSpotifyInfo> {
+        val pm = app.packageManager
         val installed = mutableListOf<InstalledSpotifyInfo>()
-
         for (pkg in CommonUtils.SUPPORTED_PACKAGES) {
             try {
                 val info = pm.getPackageInfo(pkg, 0)
                 val ver = info.versionName ?: "Unknown"
-                val label = CommonUtils.getVariantLabel(getApplication(), pkg)
-                installed.add(InstalledSpotifyInfo(pkg, ver, label))
+                installed.add(InstalledSpotifyInfo(pkg, ver))
             } catch (_: PackageManager.NameNotFoundException) {}
         }
+        return installed
+    }
 
-        val active = installed.firstOrNull { it.packageName == CommonUtils.SPOTIFY_PACKAGE_NAME }
-            ?: installed.firstOrNull()
-
-        _uiState.update {
-            it.copy(
-                installedSpotifyVariants = installed,
-                activeSpotify = active
-            )
+    fun openInAppSettings() {
+        val pkg = _uiState.value.activeSpotify?.packageName ?: CommonUtils.SPOTIFY_PACKAGE_NAME
+        val app = getApplication<Application>()
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("spotify:spotxero")).apply {
+            setPackage(pkg)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val opened = runCatching {
+            app.startActivity(intent)
+            true
+        }.getOrDefault(false)
+        if (!opened) {
+            launchSpotify()
         }
     }
 
@@ -476,15 +470,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         return false
     }
 
-    private fun parseLyricsProviders(raw: String): List<String> {
-        val defaultList = listOf("spicylyrics", "betterlyrics", "lrcred", "lrclib", "kugou", "netease", "genius")
-        val items = raw.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
-        val result = items.filter { defaultList.contains(it) }.distinct().toMutableList()
-        for (d in defaultList) {
-            if (!result.contains(d)) result.add(d)
-        }
-        return result
-    }
+    private fun parseLyricsProviders(raw: String): List<String> =
+        PrefKeys.parseLyricsProviders(raw)
 
     fun setDoubleTapToSeekEnabled(enabled: Boolean) {
         PreferencesManager.setBoolean(getApplication(), PrefKeys.KEY_DOUBLE_TAP_TO_SEEK, enabled)
@@ -508,25 +495,34 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun requestScope(packageName: String? = null) {
+        val app = getApplication<Application>()
         val target = packageName ?: _uiState.value.activeSpotify?.packageName ?: CommonUtils.SPOTIFY_PACKAGE_NAME
         val service = SpotXeroApplication.service ?: return
+        val isLSPatch = service.frameworkName.contains("LSPatch", ignoreCase = true)
         service.requestScope(listOf(target), object : XposedService.OnScopeEventListener {
             override fun onScopeRequestApproved(approved: List<String>) {
-                refreshState()
+                viewModelScope.launch {
+                    notifyEffect(DashboardUiEffect.ShowToast(app.getString(R.string.msg_scope_approved_restart)))
+                    refreshStatus()
+                }
             }
 
             override fun onScopeRequestFailed(message: String) {
-                refreshState()
+                viewModelScope.launch {
+                    if (isLSPatch) {
+                        val intent = app.packageManager.getLaunchIntentForPackage("org.lsposed.lspatch")
+                        if (intent != null) {
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            app.startActivity(intent)
+                        } else {
+                            notifyEffect(DashboardUiEffect.ShowToast(app.getString(R.string.msg_lspatch_manager_not_found)))
+                        }
+                    } else {
+                        notifyEffect(DashboardUiEffect.ShowToast(app.getString(R.string.msg_scope_request_failed)))
+                    }
+                    refreshState()
+                }
             }
         })
     }
 }
-
-private data class BannerEvaluationData(
-    val titleRes: Int,
-    val titleArgs: List<String>,
-    val descRes: Int,
-    val descArgs: List<String>,
-    val isInjectable: Boolean,
-    val canRequestScope: Boolean = false
-)

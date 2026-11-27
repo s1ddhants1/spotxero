@@ -68,11 +68,11 @@ object LyricsHook {
     }
 
     private fun hookUncappedLyrics(module: XposedModule) {
-        val capStatusGetter = DexKitResolver.get<Method>(DexKitResolver.KEY_LYRICS_CAP_STATUS_GETTER) ?: return
+        val capStatusGetter = DexKitResolver.require<Method>(DexKitResolver.KEY_LYRICS_CAP_STATUS_GETTER)
         val enumType = capStatusGetter.returnType
         val uncappedConstant = enumType.enumConstants?.firstOrNull {
             (it as? Enum<*>)?.name == "UNCAPPED"
-        } ?: return
+        } ?: error("Missing UNCAPPED enum constant on ${enumType.name}")
 
         module.deoptimize(capStatusGetter)
         module.hook(capStatusGetter)
@@ -88,12 +88,11 @@ object LyricsHook {
     }
 
     private fun hookThirdPartyLyrics(module: XposedModule) {
-        val realCallChain = DexKitResolver.get<Method>(DexKitResolver.KEY_OKHTTP_REAL_CALL_CHAIN)
-        val reqToString = DexKitResolver.get<Method>(DexKitResolver.KEY_OKHTTP_REQUEST_TO_STRING)
-        val respBuild = DexKitResolver.get<Method>(DexKitResolver.KEY_OKHTTP_RESPONSE_BUILDER_BUILD)
+        val realCallChain = DexKitResolver.require<Method>(DexKitResolver.KEY_OKHTTP_REAL_CALL_CHAIN)
+        val reqToString = DexKitResolver.require<Method>(DexKitResolver.KEY_OKHTTP_REQUEST_TO_STRING)
+        val respBuild = DexKitResolver.require<Method>(DexKitResolver.KEY_OKHTTP_RESPONSE_BUILDER_BUILD)
 
         Log.i(TAG, "hookThirdPartyLyrics: realCallChain=$realCallChain, reqToString=$reqToString, respBuild=$respBuild")
-        if (realCallChain == null || reqToString == null || respBuild == null) return
 
         val requestClass = reqToString.declaringClass
         val responseClass = respBuild.returnType
@@ -182,16 +181,9 @@ object LyricsHook {
             }.getOrNull()
         }
 
-        try {
-            val concreteBodyClass = DexKitResolver.get<Class<*>>(DexKitResolver.KEY_LYRICS_CONCRETE_BODY_CLASS)
-                ?: responseBodyClass.declaredFields.firstOrNull {
-                    it.type != responseBodyClass && responseBodyClass.isAssignableFrom(it.type)
-                }?.type
+        val concreteBodyClass = DexKitResolver.require<Class<*>>(DexKitResolver.KEY_LYRICS_CONCRETE_BODY_CLASS)
 
-            if (concreteBodyClass == null) {
-                Log.w(TAG, "Concrete response body unresolved; third-party lyrics disabled")
-                return
-            }
+        try {
 
             val concreteBodyCtor = concreteBodyClass.declaredConstructors.firstOrNull {
                 it.parameterCount == 3 && it.parameterTypes[1] == Long::class.javaPrimitiveType

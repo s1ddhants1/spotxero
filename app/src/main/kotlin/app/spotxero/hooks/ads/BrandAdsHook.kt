@@ -24,7 +24,7 @@ object BrandAdsHook {
         hookId: String,
         filter: (List<*>?) -> List<*>?
     ) {
-        val method = DexKitResolver.get<Method>(resolverKey) ?: return
+        val method = DexKitResolver.require<Method>(resolverKey)
         module.deoptimize(method)
         module.hook(method)
             .setId(hookId)

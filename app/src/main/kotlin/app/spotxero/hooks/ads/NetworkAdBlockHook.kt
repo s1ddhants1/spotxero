@@ -1,6 +1,7 @@
 package app.spotxero.hooks.ads
 
 import android.net.Uri
+import android.util.Log
 import app.spotxero.core.DexKitResolver
 import app.spotxero.core.PrefKeys
 import app.spotxero.core.PreferencesManager
@@ -62,12 +63,17 @@ object NetworkAdBlockHook {
     private const val HERMES_CAPPING_URI = "hm://common-capping/update"
 
     fun install(module: XposedModule) {
+        hookNativeHttpConnection(module)
         if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
             return
         }
-        hookNativeHttpConnection(module)
         hookOkHttpRealCall(module)
     }
+
+    private fun findRequestUrlField(requestClass: Class<*>): Field? =
+        requestClass.declaredFields.firstOrNull { f ->
+            !f.type.isPrimitive && f.type.declaredMethods.any { m -> m.returnType == URI::class.java }
+        }?.apply { isAccessible = true }
 
     private val AUTH_BYPASS_KEYWORDS = listOf(
         "/login",
@@ -114,47 +120,41 @@ object NetworkAdBlockHook {
     }
 
     private fun hookNativeHttpConnection(module: XposedModule) {
-        val cl = DexKitResolver.get<Method>(DexKitResolver.KEY_CLIENT_BASE_CALL_SINGLE)?.declaringClass?.classLoader ?: return
-        val connClass = runCatching { Class.forName(NATIVE_HTTP_CONNECTION, false, cl) }.getOrNull() ?: return
-        val reqClass = runCatching { Class.forName(HTTP_REQUEST, false, cl) }.getOrNull() ?: return
-        val optClass = runCatching { Class.forName(HTTP_OPTIONS, false, cl) }.getOrNull() ?: return
-        val respClass = runCatching { Class.forName(HTTP_RESPONSE, false, cl) }.getOrNull() ?: return
+        val cl = DexKitResolver.require<Method>(DexKitResolver.KEY_CLIENT_BASE_CALL_SINGLE).declaringClass.classLoader
+        val connClass = Class.forName(NATIVE_HTTP_CONNECTION, false, cl)
+        val reqClass = Class.forName(HTTP_REQUEST, false, cl)
+        val optClass = Class.forName(HTTP_OPTIONS, false, cl)
+        val respClass = Class.forName(HTTP_RESPONSE, false, cl)
 
-        val sendMethod = runCatching {
-            connClass.getDeclaredMethod("send", reqClass, optClass)
-        }.getOrNull() ?: return
-        val getUrlMethod = runCatching { reqClass.getMethod("getUrl") }.getOrNull() ?: return
-        val onHeadersMethod = runCatching { connClass.getMethod("onHeaders", respClass) }.getOrNull() ?: return
-        val onCompleteMethod = runCatching { connClass.getMethod("onComplete", Boolean::class.javaPrimitiveType) }.getOrNull() ?: return
-        val respCtor = runCatching {
-            respClass.getConstructor(Int::class.javaPrimitiveType, String::class.java, String::class.java)
-        }.getOrNull() ?: return
+        val sendMethod = connClass.getDeclaredMethod("send", reqClass, optClass)
+        val getUrlMethod = reqClass.getMethod("getUrl")
+        val onHeadersMethod = connClass.getMethod("onHeaders", respClass)
+        val onCompleteMethod = connClass.getMethod("onComplete", Boolean::class.javaPrimitiveType)
+        val respCtor = respClass.getConstructor(Int::class.javaPrimitiveType, String::class.java, String::class.java)
 
         module.deoptimize(sendMethod)
         module.hook(sendMethod)
             .setId("native_http_ad_blocker")
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
+                val req = chain.getArg(0)
+                val conn = chain.getThisObject()
+                val url = req?.let { runCatching { getUrlMethod.invoke(it) as? String }.getOrNull() }
                 if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                    val req = chain.getArg(0)
-                    val conn = chain.getThisObject()
-                    if (req != null && conn != null) {
-                        val url = runCatching { getUrlMethod.invoke(req) as? String }.getOrNull()
-                        val code = blockedStatusCode(url)
-                        if (code != null && url != null) {
-                            val response = respCtor.newInstance(
-                                code,
-                                url,
-                                "SPT-Protocol: http/1.1\r\nContent-Length: 0\r\n\r\n"
-                            )
-                            asyncExecutor.execute {
-                                runCatching {
-                                    onHeadersMethod.invoke(conn, response)
-                                    onCompleteMethod.invoke(conn, true)
-                                }
+                    val code = blockedStatusCode(url)
+                    if (code != null && url != null && conn != null) {
+                        val response = respCtor.newInstance(
+                            code,
+                            url,
+                            "SPT-Protocol: http/1.1\r\nContent-Length: 0\r\n\r\n"
+                        )
+                        asyncExecutor.execute {
+                            runCatching {
+                                onHeadersMethod.invoke(conn, response)
+                                onCompleteMethod.invoke(conn, true)
                             }
-                            return@intercept null
                         }
+                        return@intercept null
                     }
                 }
                 chain.proceed()
@@ -162,33 +162,34 @@ object NetworkAdBlockHook {
     }
 
     private fun hookOkHttpRealCall(module: XposedModule) {
-        val realCallChain = DexKitResolver.get<Method>(DexKitResolver.KEY_OKHTTP_REAL_CALL_CHAIN) ?: return
-        val reqToString = DexKitResolver.get<Method>(DexKitResolver.KEY_OKHTTP_REQUEST_TO_STRING) ?: return
-        val respBuild = DexKitResolver.get<Method>(DexKitResolver.KEY_OKHTTP_RESPONSE_BUILDER_BUILD) ?: return
+        val realCallChain = DexKitResolver.require<Method>(DexKitResolver.KEY_OKHTTP_REAL_CALL_CHAIN)
+        val reqToString = DexKitResolver.require<Method>(DexKitResolver.KEY_OKHTTP_REQUEST_TO_STRING)
+        val respBuild = DexKitResolver.require<Method>(DexKitResolver.KEY_OKHTTP_RESPONSE_BUILDER_BUILD)
 
         val requestClass = reqToString.declaringClass
         val callRequestField = realCallChain.declaringClass.declaredFields.firstOrNull {
             it.type == requestClass
-        }?.apply { isAccessible = true } ?: return
-        val urlField = requestClass.declaredFields.firstOrNull { f ->
-            !f.type.isPrimitive && f.type.declaredMethods.any { m -> m.returnType == URI::class.java }
-        }?.apply { isAccessible = true } ?: return
+        }?.apply { isAccessible = true } ?: error("Missing OkHttp call request field")
+        val urlField = findRequestUrlField(requestClass) ?: error("Missing OkHttp request URL field")
 
         val builderClass = respBuild.declaringClass
-        val builderCtor = runCatching {
-            builderClass.getDeclaredConstructor().apply { isAccessible = true }
-        }.getOrNull() ?: return
-        val bReqField: Field = builderClass.declaredFields.firstOrNull { it.type == requestClass }?.apply { isAccessible = true } ?: return
-        val bCodeField: Field = builderClass.declaredFields.firstOrNull { it.type == Int::class.javaPrimitiveType }?.apply { isAccessible = true } ?: return
-        val bMsgField: Field = builderClass.declaredFields.firstOrNull { it.type == String::class.java }?.apply { isAccessible = true } ?: return
+        val builderCtor = builderClass.getDeclaredConstructor().apply { isAccessible = true }
+        val bReqField: Field = builderClass.declaredFields.firstOrNull { it.type == requestClass }?.apply { isAccessible = true }
+            ?: error("Missing OkHttp builder request field")
+        val bCodeField: Field = builderClass.declaredFields.firstOrNull { it.type == Int::class.javaPrimitiveType }?.apply { isAccessible = true }
+            ?: error("Missing OkHttp builder code field")
+        val bMsgField: Field = builderClass.declaredFields.firstOrNull { it.type == String::class.java }?.apply { isAccessible = true }
+            ?: error("Missing OkHttp builder message field")
         val bProtoField: Field = builderClass.declaredFields.firstOrNull {
             it.type.isEnum && it.type.enumConstants?.any { c -> c.toString() == "http/1.1" } == true
-        }?.apply { isAccessible = true } ?: return
-        val http11 = bProtoField.type.enumConstants?.firstOrNull { it.toString() == "http/1.1" } ?: return
+        }?.apply { isAccessible = true } ?: error("Missing OkHttp builder protocol field")
+        val http11 = bProtoField.type.enumConstants?.firstOrNull { it.toString() == "http/1.1" }
+            ?: error("Missing http/1.1 enum constant")
 
         val longFields = builderClass.declaredFields.filter { it.type == Long::class.javaPrimitiveType }.onEach { it.isAccessible = true }
-        val bSentField = longFields.firstOrNull { it.name == "l" || it.name.contains("sent", ignoreCase = true) } ?: longFields.getOrNull(0)
-        val bReceivedField = longFields.firstOrNull { it.name == "m" || it.name.contains("received", ignoreCase = true) } ?: longFields.getOrNull(1)
+        val bSentField = longFields.firstOrNull { it.name.contains("sent", ignoreCase = true) } ?: longFields.getOrNull(0)
+        val bReceivedField = longFields.firstOrNull { it.name.contains("received", ignoreCase = true) }
+            ?: longFields.firstOrNull { it != bSentField }
 
         respBuild.isAccessible = true
         module.deoptimize(realCallChain)

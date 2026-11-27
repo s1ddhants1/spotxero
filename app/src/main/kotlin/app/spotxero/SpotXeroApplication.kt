@@ -2,6 +2,7 @@ package app.spotxero
 
 import android.app.Application
 import android.util.Log
+import app.spotxero.core.LSPatchHelper
 import app.spotxero.core.PreferencesManager
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
@@ -44,6 +45,7 @@ class SpotXeroApplication : Application(), XposedServiceHelper.OnServiceListener
         } catch (t: Throwable) {
             Log.e(TAG, "Failed registering XposedServiceHelper: ${t.message}", t)
         }
+        LSPatchHelper.requestServicePush(this)
     }
 
     override fun onServiceBind(service: XposedService) {

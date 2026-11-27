@@ -13,8 +13,7 @@ enum class SettingsSubpage {
 @Immutable
 data class InstalledSpotifyInfo(
     val packageName: String,
-    val versionName: String,
-    val variantLabel: String
+    val versionName: String
 )
 
 @Immutable
@@ -23,7 +22,10 @@ data class DashboardUiState(
     val isPremiumEnabled: Boolean = true,
     val isFrameworkConnected: Boolean = false,
     val isInjectable: Boolean = false,
+    val isIntegrated: Boolean = false,
     val canRequestScope: Boolean = false,
+    val frameworkName: String = "",
+    val frameworkVersion: String = "",
     val titleRes: Int = R.string.framework_inactive_title,
     val titleArgs: List<String> = emptyList(),
     val descRes: Int = R.string.framework_inactive_desc,

@@ -57,177 +57,157 @@ object PlayerShuffleHook {
     }
 
     private fun hookCommandValue(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_SET_SHUFFLE_COMMAND_VALUE)
-        if (method != null) {
-            module.deoptimize(method)
-            module.hook(method)
-                .setId("set_shuffle_command_value")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val value = chain.getArg(0) as? Boolean
-                    if (value != null) {
-                        userShuffleState = value
-                        PreferencesManager.setBoolean(null, PrefKeys.KEY_SHUFFLE_STATE, value)
-                    }
-                    chain.proceed()
+        val method = DexKitResolver.require<Method>(DexKitResolver.KEY_SET_SHUFFLE_COMMAND_VALUE)
+        module.deoptimize(method)
+        module.hook(method)
+            .setId("set_shuffle_command_value")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val value = chain.getArg(0) as? Boolean
+                if (value != null) {
+                    userShuffleState = value
+                    PreferencesManager.setBoolean(null, PrefKeys.KEY_SHUFFLE_STATE, value)
                 }
-        }
+                chain.proceed()
+            }
 
-        val createMethod = DexKitResolver.get<Method>(DexKitResolver.KEY_SET_SHUFFLE_COMMAND_CREATE)
-        if (createMethod != null) {
-            module.deoptimize(createMethod)
-            module.hook(createMethod)
-                .setId("set_shuffle_command_create")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val value = chain.getArg(0) as? Boolean
-                    if (value != null) {
-                        userShuffleState = value
-                        PreferencesManager.setBoolean(null, PrefKeys.KEY_SHUFFLE_STATE, value)
-                    }
-                    chain.proceed()
+        val createMethod = DexKitResolver.require<Method>(DexKitResolver.KEY_SET_SHUFFLE_COMMAND_CREATE)
+        module.deoptimize(createMethod)
+        module.hook(createMethod)
+            .setId("set_shuffle_command_create")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val value = chain.getArg(0) as? Boolean
+                if (value != null) {
+                    userShuffleState = value
+                    PreferencesManager.setBoolean(null, PrefKeys.KEY_SHUFFLE_STATE, value)
                 }
-        }
+                chain.proceed()
+            }
 
-        val valueGetter = DexKitResolver.get<Method>(DexKitResolver.KEY_SET_SHUFFLE_COMMAND_VALUE_GETTER)
-        if (valueGetter != null) {
-            module.deoptimize(valueGetter)
-            module.hook(valueGetter)
-                .setId("set_shuffle_command_value_getter")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept chain.proceed()
-                    }
-                    isShuffleEnabled()
+        val valueGetter = DexKitResolver.require<Method>(DexKitResolver.KEY_SET_SHUFFLE_COMMAND_VALUE_GETTER)
+        module.deoptimize(valueGetter)
+        module.hook(valueGetter)
+            .setId("set_shuffle_command_value_getter")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept chain.proceed()
                 }
-        }
+                isShuffleEnabled()
+            }
     }
 
     private fun hookPlayerOptions(module: XposedModule) {
-        val getter = DexKitResolver.get<Method>(DexKitResolver.KEY_PLAYER_OPTIONS_SHUFFLE_GETTER)
-        if (getter != null) {
-            module.deoptimize(getter)
-            module.hook(getter)
-                .setId("player_options_shuffle_getter")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept chain.proceed()
-                    }
-                    isShuffleEnabled()
+        val getter = DexKitResolver.require<Method>(DexKitResolver.KEY_PLAYER_OPTIONS_SHUFFLE_GETTER)
+        module.deoptimize(getter)
+        module.hook(getter)
+            .setId("player_options_shuffle_getter")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept chain.proceed()
                 }
-        }
+                isShuffleEnabled()
+            }
 
-        val builderSetter = DexKitResolver.get<Method>(DexKitResolver.KEY_PLAYER_OPTIONS_BUILDER_SHUFFLE)
-        if (builderSetter != null) {
-            module.deoptimize(builderSetter)
-            module.hook(builderSetter)
-                .setId("player_options_builder_shuffle")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept chain.proceed()
-                    }
-                    chain.proceed(arrayOf(isShuffleEnabled()))
+        val builderSetter = DexKitResolver.require<Method>(DexKitResolver.KEY_PLAYER_OPTIONS_BUILDER_SHUFFLE)
+        module.deoptimize(builderSetter)
+        module.hook(builderSetter)
+            .setId("player_options_builder_shuffle")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept chain.proceed()
                 }
-        }
+                chain.proceed(arrayOf(isShuffleEnabled()))
+            }
     }
 
     private fun hookPreparePlayOptions(module: XposedModule) {
-        val buildMethod = DexKitResolver.get<Method>(DexKitResolver.KEY_PREPARE_PLAY_OPTIONS_BUILDER_BUILD)
-        if (buildMethod != null) {
-            module.deoptimize(buildMethod)
-            module.hook(buildMethod)
-                .setId("prepare_play_options_build")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        val builderObj = chain.getThisObject()
-                        val cl = builderObj?.javaClass?.classLoader
-                        if (builderObj != null && cl != null) {
-                            runCatching {
-                                applyPreparePlayOverrides(builderObj, cl, isShuffleEnabled())
-                            }
+        val buildMethod = DexKitResolver.require<Method>(DexKitResolver.KEY_PREPARE_PLAY_OPTIONS_BUILDER_BUILD)
+        module.deoptimize(buildMethod)
+        module.hook(buildMethod)
+            .setId("prepare_play_options_build")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    val builderObj = chain.getThisObject()
+                    val cl = builderObj?.javaClass?.classLoader
+                    if (builderObj != null && cl != null) {
+                        runCatching {
+                            applyPreparePlayOverrides(builderObj, cl, isShuffleEnabled())
                         }
                     }
-                    chain.proceed()
                 }
-        }
+                chain.proceed()
+            }
 
-        val suppGetter = DexKitResolver.get<Method>(DexKitResolver.KEY_PREPARE_PLAY_OPTIONS_SUPPRESSIONS_GETTER)
-        if (suppGetter != null) {
-            module.deoptimize(suppGetter)
-            module.hook(suppGetter)
-                .setId("prepare_play_options_suppressions_getter")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept result
-                    }
-                    val thisObj = chain.getThisObject() ?: return@intercept result
-                    val cl = thisObj.javaClass.classLoader
-                    buildSuppressionsOptional(cl, result, isShuffleEnabled()) ?: result
+        val suppGetter = DexKitResolver.require<Method>(DexKitResolver.KEY_PREPARE_PLAY_OPTIONS_SUPPRESSIONS_GETTER)
+        module.deoptimize(suppGetter)
+        module.hook(suppGetter)
+            .setId("prepare_play_options_suppressions_getter")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val result = chain.proceed()
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept result
                 }
-        }
+                val thisObj = chain.getThisObject() ?: return@intercept result
+                val cl = thisObj.javaClass.classLoader
+                buildSuppressionsOptional(cl, result, isShuffleEnabled()) ?: result
+            }
     }
 
     private fun hookOptionOverrides(module: XposedModule) {
-        val builderSetter = DexKitResolver.get<Method>(DexKitResolver.KEY_PLAYER_OPTION_OVERRIDES_BUILDER_SHUFFLE)
-        if (builderSetter != null) {
-            module.deoptimize(builderSetter)
-            module.hook(builderSetter)
-                .setId("player_option_overrides_builder_shuffle")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept chain.proceed()
-                    }
-                    if (isShuffleEnabled()) {
-                        chain.proceed()
-                    } else {
-                        chain.proceed(arrayOf(java.lang.Boolean.FALSE))
-                    }
+        val builderSetter = DexKitResolver.require<Method>(DexKitResolver.KEY_PLAYER_OPTION_OVERRIDES_BUILDER_SHUFFLE)
+        module.deoptimize(builderSetter)
+        module.hook(builderSetter)
+            .setId("player_option_overrides_builder_shuffle")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept chain.proceed()
                 }
-        }
+                if (isShuffleEnabled()) {
+                    chain.proceed()
+                } else {
+                    chain.proceed(arrayOf(java.lang.Boolean.FALSE))
+                }
+            }
 
-        val overrideGetter = DexKitResolver.get<Method>(DexKitResolver.KEY_PLAYER_OPTION_OVERRIDES_SHUFFLE_GETTER)
-        if (overrideGetter != null) {
-            module.deoptimize(overrideGetter)
-            module.hook(overrideGetter)
-                .setId("player_option_overrides_shuffle_getter")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept result
-                    }
-                    if (isShuffleEnabled()) {
-                        val thisObj = chain.getThisObject() ?: return@intercept result
-                        val cl = thisObj.javaClass.classLoader
-                        buildBooleanOptional(cl, result, true) ?: result
-                    } else {
-                        result
-                    }
+        val overrideGetter = DexKitResolver.require<Method>(DexKitResolver.KEY_PLAYER_OPTION_OVERRIDES_SHUFFLE_GETTER)
+        module.deoptimize(overrideGetter)
+        module.hook(overrideGetter)
+            .setId("player_option_overrides_shuffle_getter")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val result = chain.proceed()
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept result
                 }
-        }
+                if (isShuffleEnabled()) {
+                    val thisObj = chain.getThisObject() ?: return@intercept result
+                    val cl = thisObj.javaClass.classLoader
+                    buildBooleanOptional(cl, result, true) ?: result
+                } else {
+                    result
+                }
+            }
     }
 
     private fun hookProtoOptions(module: XposedModule) {
-        val protoGetter = DexKitResolver.get<Method>(DexKitResolver.KEY_ES_CONTEXT_PLAYER_OPTIONS_SHUFFLE_GETTER)
-        if (protoGetter != null) {
-            module.deoptimize(protoGetter)
-            module.hook(protoGetter)
-                .setId("es_context_player_options_shuffle_getter")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept chain.proceed()
-                    }
-                    isShuffleEnabled()
+        val protoGetter = DexKitResolver.require<Method>(DexKitResolver.KEY_ES_CONTEXT_PLAYER_OPTIONS_SHUFFLE_GETTER)
+        module.deoptimize(protoGetter)
+        module.hook(protoGetter)
+            .setId("es_context_player_options_shuffle_getter")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept chain.proceed()
                 }
-        }
+                isShuffleEnabled()
+            }
     }
 
     private fun applyPreparePlayOverrides(builderObj: Any, cl: ClassLoader, shuffleEnabled: Boolean) {
@@ -395,137 +375,125 @@ object PlayerShuffleHook {
     }
 
     private fun hookPlaybackSettings(module: XposedModule) {
-        val setMethod = DexKitResolver.get<Method>(DexKitResolver.KEY_PLAYBACK_SETTINGS_SET_SHUFFLE)
-        if (setMethod != null) {
-            module.deoptimize(setMethod)
-            module.hook(setMethod)
-                .setId("playback_settings_set_shuffle")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        val smartShuffle = chain.getArg(2) as? Boolean
-                        if (smartShuffle != null) {
-                            userSmartShuffleInModes = smartShuffle
-                            PreferencesManager.setBoolean(null, PrefKeys.KEY_SMART_SHUFFLE_IN_MODES, smartShuffle)
-                        }
-                        chain.proceed(arrayOf(chain.getArg(0), isShuffleEnabled(), smartShuffle ?: isSmartShuffleInModesEnabled(), chain.getArg(3)))
-                    } else {
-                        chain.proceed()
+        val setMethod = DexKitResolver.require<Method>(DexKitResolver.KEY_PLAYBACK_SETTINGS_SET_SHUFFLE)
+        module.deoptimize(setMethod)
+        module.hook(setMethod)
+            .setId("playback_settings_set_shuffle")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    val smartShuffle = chain.getArg(2) as? Boolean
+                    if (smartShuffle != null) {
+                        userSmartShuffleInModes = smartShuffle
+                        PreferencesManager.setBoolean(null, PrefKeys.KEY_SMART_SHUFFLE_IN_MODES, smartShuffle)
                     }
+                    chain.proceed(arrayOf(chain.getArg(0), isShuffleEnabled(), smartShuffle ?: isSmartShuffleInModesEnabled(), chain.getArg(3)))
+                } else {
+                    chain.proceed()
                 }
-        }
+            }
 
-        val parseMethod = DexKitResolver.get<Method>(DexKitResolver.KEY_SHUFFLE_STATE_PARSE)
-        if (parseMethod != null) {
-            module.deoptimize(parseMethod)
-            module.hook(parseMethod)
-                .setId("playback_settings_shuffle_state_parse")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept chain.proceed()
-                    }
-                    val smartShuffle = isSmartShuffleInModesEnabled()
-                    val payload = byteArrayOf(
-                        0x08, (if (isShuffleEnabled()) 1 else 0).toByte(),
-                        0x10, (if (smartShuffle) 1 else 0).toByte()
-                    )
-                    chain.proceed(arrayOf(payload))
+        val parseMethod = DexKitResolver.require<Method>(DexKitResolver.KEY_SHUFFLE_STATE_PARSE)
+        module.deoptimize(parseMethod)
+        module.hook(parseMethod)
+            .setId("playback_settings_shuffle_state_parse")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept chain.proceed()
                 }
-        }
+                val smartShuffle = isSmartShuffleInModesEnabled()
+                val payload = byteArrayOf(
+                    0x08, (if (isShuffleEnabled()) 1 else 0).toByte(),
+                    0x10, (if (smartShuffle) 1 else 0).toByte()
+                )
+                chain.proceed(arrayOf(payload))
+            }
     }
 
     private fun hookShuffleContext(module: XposedModule) {
-        val modesMethod = DexKitResolver.get<Method>(DexKitResolver.KEY_SHUFFLE_CONTEXT_MODES_GETTER)
-        if (modesMethod != null) {
-            module.deoptimize(modesMethod)
-            module.hook(modesMethod)
-                .setId("shuffle_context_modes_getter")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val original = chain.proceed()
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept original
-                    }
-                    val linear = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_LINEAR)
-                    val shuffle = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_SHUFFLE)
-                    val smartShuffle = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_SMART_SHUFFLE)
-                    if (linear != null && shuffle != null) {
-                        if (isSmartShuffleInModesEnabled() && smartShuffle != null) {
-                            setOf(linear, shuffle, smartShuffle)
-                        } else {
-                            setOf(linear, shuffle)
-                        }
+        val modesMethod = DexKitResolver.require<Method>(DexKitResolver.KEY_SHUFFLE_CONTEXT_MODES_GETTER)
+        module.deoptimize(modesMethod)
+        module.hook(modesMethod)
+            .setId("shuffle_context_modes_getter")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val original = chain.proceed()
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept original
+                }
+                val linear = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_LINEAR)
+                val shuffle = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_SHUFFLE)
+                val smartShuffle = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_SMART_SHUFFLE)
+                if (linear != null && shuffle != null) {
+                    if (isSmartShuffleInModesEnabled() && smartShuffle != null) {
+                        setOf(linear, shuffle, smartShuffle)
                     } else {
-                        original
+                        setOf(linear, shuffle)
                     }
+                } else {
+                    original
                 }
-        }
+            }
 
-        val defaultMethod = DexKitResolver.get<Method>(DexKitResolver.KEY_SHUFFLE_CONTEXT_DEFAULT_GETTER)
-        if (defaultMethod != null) {
-            module.deoptimize(defaultMethod)
-            module.hook(defaultMethod)
-                .setId("shuffle_context_default_getter")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val original = chain.proceed()
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept original
-                    }
-                    val linear = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_LINEAR)
-                    val shuffle = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_SHUFFLE)
-                    if (linear != null && shuffle != null) {
-                        if (isShuffleEnabled()) shuffle else linear
-                    } else {
-                        original
-                    }
+        val defaultMethod = DexKitResolver.require<Method>(DexKitResolver.KEY_SHUFFLE_CONTEXT_DEFAULT_GETTER)
+        module.deoptimize(defaultMethod)
+        module.hook(defaultMethod)
+            .setId("shuffle_context_default_getter")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                val original = chain.proceed()
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept original
                 }
-        }
+                val linear = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_LINEAR)
+                val shuffle = DexKitResolver.get<Any>(DexKitResolver.KEY_SHUFFLE_ENUM_SHUFFLE)
+                if (linear != null && shuffle != null) {
+                    if (isShuffleEnabled()) shuffle else linear
+                } else {
+                    original
+                }
+            }
 
-        val enabledMethod = DexKitResolver.get<Method>(DexKitResolver.KEY_SHUFFLE_CONTEXT_ENABLED_GETTER)
-        if (enabledMethod != null) {
-            module.deoptimize(enabledMethod)
-            module.hook(enabledMethod)
-                .setId("shuffle_context_enabled_getter")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        return@intercept chain.proceed()
-                    }
-                    true
+        val enabledMethod = DexKitResolver.require<Method>(DexKitResolver.KEY_SHUFFLE_CONTEXT_ENABLED_GETTER)
+        module.deoptimize(enabledMethod)
+        module.hook(enabledMethod)
+            .setId("shuffle_context_enabled_getter")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (!PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    return@intercept chain.proceed()
                 }
-        }
+                true
+            }
     }
 
     private fun hookContextCapability(module: XposedModule) {
-        val ctor = DexKitResolver.get<Constructor<*>>(DexKitResolver.KEY_CONTEXT_CAPABILITY_INIT)
-        if (ctor != null) {
-            module.deoptimize(ctor)
-            module.hook(ctor)
-                .setId("context_capability_init")
-                .setExceptionMode(ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
-                        val newArgs = arrayOf(
-                            chain.getArg(0),
-                            chain.getArg(1),
-                            chain.getArg(2),
-                            5,
-                            chain.getArg(4),
-                            chain.getArg(5)
-                        )
-                        chain.proceed(newArgs)
-                    } else {
-                        chain.proceed()
-                    }
-                    null
+        val ctor = DexKitResolver.require<Constructor<*>>(DexKitResolver.KEY_CONTEXT_CAPABILITY_INIT)
+        module.deoptimize(ctor)
+        module.hook(ctor)
+            .setId("context_capability_init")
+            .setExceptionMode(ExceptionMode.PROTECTIVE)
+            .intercept { chain ->
+                if (PreferencesManager.isEnabled(PrefKeys.KEY_ENABLE_PREMIUM, true)) {
+                    val newArgs = arrayOf(
+                        chain.getArg(0),
+                        chain.getArg(1),
+                        chain.getArg(2),
+                        5,
+                        chain.getArg(4),
+                        chain.getArg(5)
+                    )
+                    chain.proceed(newArgs)
+                } else {
+                    chain.proceed()
                 }
-        }
+                null
+            }
     }
 
     private fun hookClientBase(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_CLIENT_BASE_CALL_SINGLE) ?: return
+        val method = DexKitResolver.require<Method>(DexKitResolver.KEY_CLIENT_BASE_CALL_SINGLE)
         module.deoptimize(method)
         module.hook(method)
             .setId("client_base_call_single")
@@ -558,7 +526,7 @@ object PlayerShuffleHook {
     }
 
     private fun hookCoroutineClientBase(module: XposedModule) {
-        val method = DexKitResolver.get<Method>(DexKitResolver.KEY_COROUTINE_CLIENT_BASE_CALL_SINGLE) ?: return
+        val method = DexKitResolver.require<Method>(DexKitResolver.KEY_COROUTINE_CLIENT_BASE_CALL_SINGLE)
         module.deoptimize(method)
         module.hook(method)
             .setId("coroutine_client_base_call_single")

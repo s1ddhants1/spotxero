@@ -14,10 +14,8 @@ object DisableSmartShuffleHook {
             return
         }
 
-        val methods = DexKitResolver.get<List<Method>>(DexKitResolver.KEY_SMART_SHUFFLE_FLAGS)
-        if (methods.isNullOrEmpty()) {
-            return
-        }
+        val methods = DexKitResolver.require<List<Method>>(DexKitResolver.KEY_SMART_SHUFFLE_FLAGS)
+            .ifEmpty { error("Empty smart shuffle flags") }
 
         for ((index, method) in methods.withIndex()) {
             if (method.parameterCount != 0 || method.returnType != Boolean::class.javaPrimitiveType) {

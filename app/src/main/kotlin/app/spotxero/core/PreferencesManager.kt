@@ -113,12 +113,18 @@ object PreferencesManager {
     fun initTarget(context: Context) {
         val target = context.applicationContext ?: context
         targetContext = target
+        var changed = false
         runCatching {
             val tp = target.getSharedPreferences(TARGET_PREFS_NAME, Context.MODE_PRIVATE)
             targetPrefs = tp
-            if (tp.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
-                inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = tp.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
+            for (key in tp.all.keys) {
+                if (updateMemoryCache(tp, key)) {
+                    changed = true
+                }
             }
+        }
+        if (changed) {
+            notifyPreferenceChanged()
         }
     }
 
@@ -155,8 +161,8 @@ object PreferencesManager {
         return runCatching {
             val target = ctx.getSharedPreferences(TARGET_PREFS_NAME, Context.MODE_PRIVATE)
             targetPrefs = target
-            if (target.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
-                inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = target.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
+            for (key in target.all.keys) {
+                updateMemoryCache(target, key)
             }
             target
         }.getOrNull()
@@ -168,7 +174,7 @@ object PreferencesManager {
     )
 
     private val changeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
-        if (key != null && key != "pref_force_stop") {
+        if (key != null) {
             if (!updateMemoryCache(prefs, key)) return@OnSharedPreferenceChangeListener
             val lp = localPrefs
             if (lp != null && prefs != lp) {
@@ -182,10 +188,22 @@ object PreferencesManager {
                     }
                 }
             }
-            onPreferenceChangedListener?.invoke()
-            for (listener in preferenceChangeCallbacks) {
-                runCatching { listener.invoke() }
+            val tp = targetPrefs
+            if (tp != null && prefs == remotePrefs && key !in SECRET_KEYS && prefs.contains(key)) {
+                when (val value = prefs.all[key]) {
+                    is Boolean -> tp.edit().putBoolean(key, value).apply()
+                    is String -> tp.edit().putString(key, value).apply()
+                    is Int -> tp.edit().putInt(key, value).apply()
+                }
             }
+            notifyPreferenceChanged()
+        }
+    }
+
+    private fun notifyPreferenceChanged() {
+        onPreferenceChangedListener?.invoke()
+        for (listener in preferenceChangeCallbacks) {
+            runCatching { listener.invoke() }
         }
     }
 
@@ -272,16 +290,9 @@ object PreferencesManager {
                 ?.getSharedPreferences(PrefKeys.PREFS_NAME, Context.MODE_PRIVATE)
             if (lp != null) {
                 localPrefs = lp
-                if (lp.contains("pref_force_stop")) {
-                    lp.edit().remove("pref_force_stop").apply()
-                }
-                if (rp.contains("pref_force_stop")) {
-                    rp.edit().remove("pref_force_stop").apply()
-                }
                 if (rp.all.isEmpty()) {
                     val remoteEditor = rp.edit()
                     for ((k, v) in lp.all) {
-                        if (k == "pref_force_stop") continue
                         when (v) {
                             is Boolean -> remoteEditor.putBoolean(k, v)
                             is String -> remoteEditor.putString(k, v)
@@ -390,8 +401,10 @@ object PreferencesManager {
         isLauncherIconHidden = prefs.getBoolean(KEY_HIDE_LAUNCHER_ICON, false)
         inMemoryBooleans[KEY_HIDE_LAUNCHER_ICON] = isLauncherIconHidden
         val tp = getTargetPrefs()
-        if (tp != null && tp.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
-            inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = tp.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
+        if (tp != null) {
+            for (key in tp.all.keys) {
+                updateMemoryCache(tp, key)
+            }
         } else if (prefs.contains(PrefKeys.KEY_SHUFFLE_STATE)) {
             inMemoryBooleans[PrefKeys.KEY_SHUFFLE_STATE] = prefs.getBoolean(PrefKeys.KEY_SHUFFLE_STATE, false)
         }
@@ -411,14 +424,16 @@ object PreferencesManager {
         return isEnabledDirect(key, default)
     }
 
+    fun isStoredEnabled(key: String, default: Boolean): Boolean = isEnabledDirect(key, default)
+
     private fun isEnabledDirect(key: String, default: Boolean): Boolean {
-        inMemoryBooleans[key]?.let { return it }
         val tp = getTargetPrefs()
         if (tp != null && tp.contains(key)) {
             val v = tp.getBoolean(key, default)
             inMemoryBooleans[key] = v
             return v
         }
+        inMemoryBooleans[key]?.let { return it }
         val rp = remotePrefs
         if (rp != null && rp.contains(key)) {
             val v = rp.getBoolean(key, default)
@@ -435,12 +450,12 @@ object PreferencesManager {
     }
 
     fun setBoolean(context: Context? = null, key: String, value: Boolean) {
-        inMemoryBooleans[key] = value
+        val changed = inMemoryBooleans.put(key, value) != value
         updateFieldDirectly(key, value)
         val tp = getTargetPrefs()
         if (tp != null) {
             runCatching {
-                tp.edit().putBoolean(key, value).apply()
+                tp.edit().putBoolean(key, value).commit()
             }
         }
         val rp = remotePrefs
@@ -455,16 +470,19 @@ object PreferencesManager {
                 prefs.edit().putBoolean(key, value).apply()
             }
         }
+        if (changed) {
+            notifyPreferenceChanged()
+        }
     }
 
     fun getString(key: String, default: String): String {
-        inMemoryStrings[key]?.let { return it }
         val tp = getTargetPrefs()
         if (tp != null && tp.contains(key)) {
             val v = tp.getString(key, default) ?: default
             inMemoryStrings[key] = v
             return v
         }
+        inMemoryStrings[key]?.let { return it }
         val rp = remotePrefs
         if (rp != null && rp.contains(key)) {
             val v = rp.getString(key, default) ?: default
@@ -481,15 +499,15 @@ object PreferencesManager {
     }
 
     fun setString(context: Context? = null, key: String, value: String) {
-        inMemoryStrings[key] = value
+        val changed = inMemoryStrings.put(key, value) != value
         updateStringFieldDirectly(key, value)
         val tp = getTargetPrefs()
-        if (tp != null && key !in SECRET_KEYS) {
+        val rp = remotePrefs
+        if (tp != null && (key !in SECRET_KEYS || rp == null)) {
             runCatching {
-                tp.edit().putString(key, value).apply()
+                tp.edit().putString(key, value).commit()
             }
         }
-        val rp = remotePrefs
         if (rp != null) {
             runCatching {
                 rp.edit().putString(key, value).apply()
@@ -501,16 +519,19 @@ object PreferencesManager {
                 prefs.edit().putString(key, value).apply()
             }
         }
+        if (changed) {
+            notifyPreferenceChanged()
+        }
     }
 
     fun getInt(key: String, default: Int): Int {
-        inMemoryInts[key]?.let { return it }
         val tp = getTargetPrefs()
         if (tp != null && tp.contains(key)) {
             val v = tp.getInt(key, default)
             inMemoryInts[key] = v
             return v
         }
+        inMemoryInts[key]?.let { return it }
         val rp = remotePrefs
         if (rp != null && rp.contains(key)) {
             val v = rp.getInt(key, default)
@@ -527,12 +548,12 @@ object PreferencesManager {
     }
 
     fun setInt(context: Context? = null, key: String, value: Int) {
-        inMemoryInts[key] = value
+        val changed = inMemoryInts.put(key, value) != value
         updateIntFieldDirectly(key, value)
         val tp = getTargetPrefs()
         if (tp != null) {
             runCatching {
-                tp.edit().putInt(key, value).apply()
+                tp.edit().putInt(key, value).commit()
             }
         }
         val rp = remotePrefs
@@ -546,6 +567,9 @@ object PreferencesManager {
             runCatching {
                 prefs.edit().putInt(key, value).apply()
             }
+        }
+        if (changed) {
+            notifyPreferenceChanged()
         }
     }
 
@@ -581,6 +605,7 @@ object PreferencesManager {
             PrefKeys.KEY_LYRICS_TRANSLATIONS -> isLyricsTranslationsEnabled = value
             PrefKeys.KEY_AI_LYRICS_TRANSLATION_ENABLED -> isAiLyricsTranslationEnabled = value
             PrefKeys.KEY_AI_TRANSLATION_DUAL_LINE -> isAiTranslationDualLine = value
+            PrefKeys.KEY_LYRICS_PROVIDER_SPICYLYRICS -> isSpicylyricsEnabled = value
             PrefKeys.KEY_LYRICS_PROVIDER_BETTERLYRICS -> isBetterlyricsEnabled = value
             PrefKeys.KEY_LYRICS_PROVIDER_LRCRED -> isLrcredEnabled = value
             PrefKeys.KEY_LYRICS_PROVIDER_LRCLIB -> isLrclibEnabled = value

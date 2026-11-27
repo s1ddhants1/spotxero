@@ -18,12 +18,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.spotxero.R
-import app.spotxero.ui.theme.AppIcons
 import app.spotxero.ui.theme.AppSpacing
 
 @Composable
@@ -57,7 +57,7 @@ fun AppQuickControls(
                     .heightIn(min = 48.dp),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
             ) {
-                Icon(AppIcons.PowerSettingsNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(painter = painterResource(id = R.drawable.ic_power_settings_new), contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.size(6.dp))
                 Text(stringResource(R.string.btn_force_stop), fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
             }
@@ -73,7 +73,7 @@ fun AppQuickControls(
                     .heightIn(min = 48.dp),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
             ) {
-                Icon(AppIcons.Launch, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(painter = painterResource(id = R.drawable.ic_launch), contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.size(6.dp))
                 Text(stringResource(R.string.btn_open_spotify), fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
             }

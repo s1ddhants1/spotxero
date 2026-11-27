@@ -178,7 +178,7 @@ object SpotifyRoundyUIHook {
     }
 
     private fun applyRoundingIfTarget(view: View) {
-        val resName = runCatching { view.resources.getResourceEntryName(view.id).lowercase() }.getOrDefault("")
+        val resName = if (view.id > 0) runCatching { view.resources.getResourceEntryName(view.id).lowercase() }.getOrDefault("") else ""
         val className = view.javaClass.name.lowercase()
 
         val isAvatar = className.contains("faceview") || resName.contains("face")

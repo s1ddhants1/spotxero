@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import app.spotxero.ui.theme.AppIcons
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -40,23 +39,24 @@ fun SettingsIndexPage(
             .fillMaxSize()
             .padding(horizontal = AppSpacing.md)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Spacer(Modifier.height(AppSpacing.xxs))
 
-        SettingsCategoryCard(
-            icon = AppIcons.Palette,
-            title = stringResource(R.string.title_appearance),
-            description = stringResource(R.string.appearance_category_desc),
-            onClick = { onNavigateToSubpage(SettingsSubpage.APPEARANCE) }
-        )
-
-        SettingsCategoryCard(
-            icon = AppIcons.Info,
-            title = stringResource(R.string.title_about),
-            description = stringResource(R.string.about_category_desc),
-            onClick = { onNavigateToSubpage(SettingsSubpage.ABOUT) }
-        )
+        SettingsGroup {
+            SettingsItem(
+                painter = painterResource(id = R.drawable.ic_palette),
+                title = stringResource(R.string.title_appearance),
+                subtitle = stringResource(R.string.appearance_category_desc),
+                onClick = { onNavigateToSubpage(SettingsSubpage.APPEARANCE) }
+            )
+            SettingsItem(
+                painter = painterResource(id = R.drawable.ic_info),
+                title = stringResource(R.string.title_about),
+                subtitle = stringResource(R.string.about_category_desc),
+                onClick = { onNavigateToSubpage(SettingsSubpage.ABOUT) }
+            )
+        }
 
         Spacer(Modifier.height(AppSpacing.xs))
 
