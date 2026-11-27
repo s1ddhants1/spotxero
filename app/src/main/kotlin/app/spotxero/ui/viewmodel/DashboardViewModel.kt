@@ -91,6 +91,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 installedVariants to inspected
             }
             cachedTargetStatus = targetStatus
+            SpotXeroApplication.updatePreferLSPatch(
+                getApplication(),
+                targetStatus.isInstalled && targetStatus.isPatched && !targetStatus.isModuleEmbedded && targetStatus.useManager != false
+            )
             val active = targetStatus.packageName?.let { pkg ->
                 installed.firstOrNull { it.packageName == pkg }
             } ?: installed.firstOrNull { it.packageName == CommonUtils.SPOTIFY_PACKAGE_NAME }

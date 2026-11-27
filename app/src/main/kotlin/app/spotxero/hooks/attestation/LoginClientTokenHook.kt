@@ -92,9 +92,11 @@ object LoginClientTokenHook {
         val responseClass = interceptMethod.returnType
         val chainClass = interceptMethod.parameterTypes[0]
 
-        val chainRequestField = chainClass.declaredFields.singleOrNull {
-            it.type == requestClass
-        }?.apply { isAccessible = true } ?: error("Missing OkHttp chain request field")
+        val chainRequestMethod = chainClass.declaredMethods.singleOrNull {
+            !Modifier.isStatic(it.modifiers) &&
+                it.parameterCount == 0 &&
+                it.returnType == requestClass
+        }?.apply { isAccessible = true } ?: error("Missing OkHttp chain request method")
         val chainProceedMethod = chainClass.declaredMethods.singleOrNull {
             !Modifier.isStatic(it.modifiers) &&
                 it.parameterCount == 1 &&
@@ -129,7 +131,7 @@ object LoginClientTokenHook {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val chainObj = chain.getArg(0) ?: return@intercept chain.proceed()
-                val request = chainRequestField.get(chainObj) ?: return@intercept chain.proceed()
+                val request = chainRequestMethod.invoke(chainObj) ?: return@intercept chain.proceed()
                 val urlStr = urlField.get(request)?.toString()
                 if (isLogin5Url(urlStr)) {
                     val values = headersField.get(request)?.let { headersValuesField.get(it) as? Array<*> }

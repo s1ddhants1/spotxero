@@ -1056,7 +1056,11 @@ object DexKitResolver {
         }
         val chainClass = method.parameterTypes[0]
         return !chainClass.isPrimitive &&
-            chainClass.declaredFields.any { it.type == requestClass } &&
+            chainClass.declaredMethods.any {
+                !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
+                    it.parameterCount == 0 &&
+                    it.returnType == requestClass
+            } &&
             chainClass.declaredMethods.any {
                 !java.lang.reflect.Modifier.isStatic(it.modifiers) &&
                     it.parameterCount == 1 &&

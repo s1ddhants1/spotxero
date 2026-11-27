@@ -90,6 +90,47 @@ object LSPatchHelper {
         }
     }
 
+    private fun getApplicationInfoCompat(pm: PackageManager, pkg: String): android.content.pm.ApplicationInfo? =
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getApplicationInfo(
+                    pkg,
+                    PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getApplicationInfo(pkg, PackageManager.GET_META_DATA)
+            }
+        }.getOrNull()
+
+    private fun decodeUseManager(appInfo: android.content.pm.ApplicationInfo): Boolean? =
+        runCatching {
+            val b64 = appInfo.metaData?.getString("lspatch")
+            if (b64.isNullOrBlank()) return@runCatching null
+            val jsonStr = String(Base64.decode(b64, Base64.DEFAULT), StandardCharsets.UTF_8)
+            JSONObject(jsonStr).optBoolean("useManager", true)
+        }.getOrNull()
+
+    fun hasManagerPatchedTarget(
+        context: Context,
+        packageNames: List<String> = CommonUtils.SUPPORTED_PACKAGES
+    ): Boolean {
+        val pm = context.packageManager
+        for (pkg in packageNames) {
+            val appInfo = getApplicationInfoCompat(pm, pkg) ?: continue
+            val hasMeta = appInfo.metaData?.containsKey("lspatch") == true
+            if (hasMeta && decodeUseManager(appInfo) != false) {
+                return true
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+                appInfo.appComponentFactory?.contains("lspatch", ignoreCase = true) == true
+            ) {
+                return true
+            }
+        }
+        return false
+    }
+
     fun inspectTargetApp(
         context: Context,
         packageNames: List<String> = CommonUtils.SUPPORTED_PACKAGES
@@ -98,17 +139,7 @@ object LSPatchHelper {
         val results = mutableListOf<TargetStatus>()
 
         for (pkg in packageNames) {
-            val appInfo = runCatching {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    pm.getApplicationInfo(
-                        pkg,
-                        PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    pm.getApplicationInfo(pkg, PackageManager.GET_META_DATA)
-                }
-            }.getOrNull() ?: continue
+            val appInfo = getApplicationInfoCompat(pm, pkg) ?: continue
 
             val hasMeta = appInfo.metaData?.containsKey("lspatch") == true
             val hasFactory = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -156,14 +187,7 @@ object LSPatchHelper {
             }
 
             if (useManager == null && hasMeta) {
-                runCatching {
-                    val b64 = appInfo.metaData?.getString("lspatch")
-                    if (!b64.isNullOrBlank()) {
-                        val jsonStr = String(Base64.decode(b64, Base64.DEFAULT), StandardCharsets.UTF_8)
-                        val json = JSONObject(jsonStr)
-                        useManager = json.optBoolean("useManager", true)
-                    }
-                }
+                useManager = decodeUseManager(appInfo)
             }
 
             val isPatched = hasMeta || hasFactory || hasLspAsset
